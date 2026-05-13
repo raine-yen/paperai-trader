@@ -3,10 +3,6 @@ const nextConfig = {
   experimental: {
     serverActions: { allowedOrigins: ["*"] },
   },
-  // yahoo-finance2's package ships test files that import deno/std modules;
-  // keep it external (Node will resolve the package at runtime, webpack
-  // won't try to bundle the test paths).
-  serverExternalPackages: ["yahoo-finance2"],
   async headers() {
     return [
       {

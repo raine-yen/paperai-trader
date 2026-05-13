@@ -1,33 +1,7 @@
-import yahooFinanceTyped from "yahoo-finance2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-// The package's public types only cover quote/autoc, but the runtime exports
-// chart/historical/etc. Cast once here and use the looser shape internally.
-interface YahooQuote {
-  symbol: string;
-  regularMarketPrice?: number;
-  regularMarketPreviousClose?: number;
-  postMarketPrice?: number;
-  preMarketPrice?: number;
-}
-interface YahooChartQuote {
-  date: Date;
-  open: number | null;
-  high: number | null;
-  low: number | null;
-  close: number | null;
-  volume: number | null;
-}
-interface YahooFinance {
-  quote(symbol: string | string[]): Promise<YahooQuote | YahooQuote[]>;
-  chart(
-    symbol: string,
-    opts: { period1: Date | string | number; period2?: Date | string | number; interval?: string }
-  ): Promise<{ quotes: YahooChartQuote[] }>;
-  suppressNotices?(notices: string[]): void;
-}
-const yahooFinance = yahooFinanceTyped as unknown as YahooFinance;
-yahooFinance.suppressNotices?.(["yahooSurvey", "ripHistorical"]);
+// Direct Yahoo Finance HTTP fetch — no package, no crumb issues on serverless.
+// Uses the v8 chart endpoint which is the most reliable for single-symbol quotes.
 
 export interface PriceQuote {
   symbol: string;
@@ -39,27 +13,44 @@ export interface PriceQuote {
 const CACHE_TTL_MS = 30_000;
 const memCache = new Map<string, { price: number; prevClose: number | null; ts: number }>();
 
+const YAHOO_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+  Accept: "application/json",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+async function yahooQuote(symbol: string): Promise<{ price: number; prevClose: number | null } | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+  try {
+    const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 0 } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const meta = json?.chart?.result?.[0]?.meta;
+    if (!meta) return null;
+    const price =
+      meta.regularMarketPrice ??
+      meta.postMarketPrice ??
+      meta.preMarketPrice ??
+      null;
+    if (typeof price !== "number") return null;
+    const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? null;
+    return { price, prevClose };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchYahooPrice(symbol: string): Promise<PriceQuote | null> {
   const upper = symbol.toUpperCase();
   const cached = memCache.get(upper);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return {
-      symbol: upper,
-      price: cached.price,
-      prevClose: cached.prevClose,
-      updatedAt: new Date(cached.ts).toISOString(),
-    };
+    return { symbol: upper, price: cached.price, prevClose: cached.prevClose, updatedAt: new Date(cached.ts).toISOString() };
   }
-  try {
-    const q = (await yahooFinance.quote(upper)) as YahooQuote;
-    const price = q.regularMarketPrice ?? q.postMarketPrice ?? q.preMarketPrice;
-    if (typeof price !== "number") return null;
-    const prevClose = q.regularMarketPreviousClose ?? null;
-    memCache.set(upper, { price, prevClose, ts: Date.now() });
-    return { symbol: upper, price, prevClose, updatedAt: new Date().toISOString() };
-  } catch {
-    return null;
-  }
+  const q = await yahooQuote(upper);
+  if (!q) return null;
+  memCache.set(upper, { price: q.price, prevClose: q.prevClose, ts: Date.now() });
+  return { symbol: upper, price: q.price, prevClose: q.prevClose, updatedAt: new Date().toISOString() };
 }
 
 export async function fetchYahooPrices(symbols: string[]): Promise<Map<string, PriceQuote>> {
@@ -67,36 +58,19 @@ export async function fetchYahooPrices(symbols: string[]): Promise<Map<string, P
   if (symbols.length === 0) return out;
   const upper = Array.from(new Set(symbols.map((s) => s.toUpperCase())));
 
-  const toFetch: string[] = [];
-  for (const s of upper) {
-    const cached = memCache.get(s);
-    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-      out.set(s, {
-        symbol: s,
-        price: cached.price,
-        prevClose: cached.prevClose,
-        updatedAt: new Date(cached.ts).toISOString(),
-      });
-    } else {
-      toFetch.push(s);
-    }
-  }
-  if (toFetch.length === 0) return out;
-
-  try {
-    const results = await yahooFinance.quote(toFetch);
-    const arr = Array.isArray(results) ? results : [results];
-    for (const q of arr) {
-      const sym = q.symbol?.toUpperCase();
-      const price = q.regularMarketPrice ?? q.postMarketPrice ?? q.preMarketPrice;
-      if (typeof price !== "number" || !sym) continue;
-      const prevClose = q.regularMarketPreviousClose ?? null;
-      memCache.set(sym, { price, prevClose, ts: Date.now() });
-      out.set(sym, { symbol: sym, price, prevClose, updatedAt: new Date().toISOString() });
-    }
-  } catch (e) {
-    console.error("yahoo batch fetch failed", e);
-  }
+  await Promise.all(
+    upper.map(async (s) => {
+      const cached = memCache.get(s);
+      if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+        out.set(s, { symbol: s, price: cached.price, prevClose: cached.prevClose, updatedAt: new Date(cached.ts).toISOString() });
+        return;
+      }
+      const q = await yahooQuote(s);
+      if (!q) return;
+      memCache.set(s, { price: q.price, prevClose: q.prevClose, ts: Date.now() });
+      out.set(s, { symbol: s, price: q.price, prevClose: q.prevClose, updatedAt: new Date().toISOString() });
+    })
+  );
   return out;
 }
 
@@ -111,12 +85,12 @@ export async function getPrice(symbol: string): Promise<number | null> {
     .maybeSingle();
 
   if (cached) {
-    const age = Date.now() - new Date(cached.updated_at).getTime();
-    if (age < 120_000) return Number(cached.price);
+    const age = Date.now() - new Date((cached as { updated_at: string }).updated_at).getTime();
+    if (age < 120_000) return Number((cached as { price: number }).price);
   }
 
   const live = await fetchYahooPrice(upper);
-  if (!live) return cached ? Number(cached.price) : null;
+  if (!live) return cached ? Number((cached as { price: number }).price) : null;
 
   await db.from("prices").upsert({
     symbol: upper,
@@ -133,44 +107,28 @@ export async function getHistoricalBars(
   range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" = "1mo"
 ): Promise<Array<{ t: string; o: number; h: number; l: number; c: number; v: number }>> {
   const upper = symbol.toUpperCase();
-  const now = new Date();
-  const period2 = now;
-  const period1 = new Date(now);
-  switch (range) {
-    case "1d":
-      period1.setDate(period1.getDate() - 1);
-      break;
-    case "5d":
-      period1.setDate(period1.getDate() - 5);
-      break;
-    case "1mo":
-      period1.setMonth(period1.getMonth() - 1);
-      break;
-    case "3mo":
-      period1.setMonth(period1.getMonth() - 3);
-      break;
-    case "6mo":
-      period1.setMonth(period1.getMonth() - 6);
-      break;
-    case "1y":
-      period1.setFullYear(period1.getFullYear() - 1);
-      break;
-  }
+  const intervalMap: Record<string, string> = { "1d": "1d", "1h": "1h", "5m": "5m", "15m": "15m" };
+  const yInterval = intervalMap[interval] ?? "1d";
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?interval=${yInterval}&range=${range}`;
   try {
-    const result = await yahooFinance.chart(upper, { period1, period2, interval });
-    const quotes = result.quotes ?? [];
-    return quotes
-      .filter((q) => q.close != null)
-      .map((q) => ({
-        t: q.date.toISOString(),
-        o: Number(q.open ?? q.close),
-        h: Number(q.high ?? q.close),
-        l: Number(q.low ?? q.close),
-        c: Number(q.close),
-        v: Number(q.volume ?? 0),
-      }));
-  } catch (e) {
-    console.error("yahoo chart fetch failed", e);
+    const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 0 } });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if (!result) return [];
+    const timestamps: number[] = result.timestamp ?? [];
+    const ohlcv = result.indicators?.quote?.[0] ?? {};
+    return timestamps
+      .map((t: number, i: number) => ({
+        t: new Date(t * 1000).toISOString(),
+        o: Number(ohlcv.open?.[i] ?? ohlcv.close?.[i] ?? 0),
+        h: Number(ohlcv.high?.[i] ?? ohlcv.close?.[i] ?? 0),
+        l: Number(ohlcv.low?.[i] ?? ohlcv.close?.[i] ?? 0),
+        c: Number(ohlcv.close?.[i] ?? 0),
+        v: Number(ohlcv.volume?.[i] ?? 0),
+      }))
+      .filter((b) => b.c > 0);
+  } catch {
     return [];
   }
 }
