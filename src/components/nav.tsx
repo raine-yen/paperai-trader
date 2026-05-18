@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LineChart, Trophy, KeyRound, BookOpen, LogOut, TrendingUp } from "lucide-react";
+import { LineChart, Trophy, KeyRound, BookOpen, LogOut, TrendingUp, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: LineChart },
+  { href: "/market", label: "Market", icon: BarChart2 },
   { href: "/trade", label: "Trade", icon: TrendingUp },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/api-keys", label: "API Keys", icon: KeyRound },
