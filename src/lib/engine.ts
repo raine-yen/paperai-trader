@@ -11,6 +11,7 @@ export interface PlaceOrderInput {
   limit_price?: number;
   time_in_force?: "gtc" | "day" | "ioc";
   client_order_id?: string;
+  scheduled_at?: string;
 }
 
 export interface PlaceOrderResult {
@@ -34,6 +35,14 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   if (input.type === "limit" && (!Number.isFinite(input.limit_price!) || input.limit_price! <= 0)) {
     return { ok: false, error: "limit_price required for limit orders" };
   }
+  const scheduledAt = input.scheduled_at ? new Date(input.scheduled_at) : null;
+  if (scheduledAt && Number.isNaN(scheduledAt.getTime())) {
+    return { ok: false, error: "scheduled_at must be a valid date" };
+  }
+  if (scheduledAt && input.type !== "limit") {
+    return { ok: false, error: "scheduled orders must include a target limit price" };
+  }
+  const isFutureScheduled = scheduledAt ? scheduledAt.getTime() > Date.now() : false;
 
   const price = await getPrice(symbol);
   if (price == null) {
@@ -72,6 +81,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
       time_in_force: input.time_in_force ?? "gtc",
       status: "new",
       client_order_id: input.client_order_id ?? null,
+      scheduled_at: scheduledAt ? scheduledAt.toISOString() : null,
     })
     .select("*")
     .single();
@@ -83,6 +93,10 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   let final: Order = orderRow as Order;
 
   // Market orders fill immediately
+  if (isFutureScheduled) {
+    return { ok: true, order: final };
+  }
+
   if (input.type === "market") {
     const filled = await fillOrder(final, price);
     if (filled) final = filled;
@@ -216,7 +230,8 @@ export async function tick(): Promise<{ filled: number; symbolsRefreshed: number
     .from("orders")
     .select("*")
     .eq("status", "new")
-    .eq("type", "limit");
+    .eq("type", "limit")
+    .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()}`);
   const orders = (openOrders as Order[] | null) ?? [];
 
   const { data: positions } = await db.from("positions").select("symbol");

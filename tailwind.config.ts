@@ -6,18 +6,21 @@ const config: Config = {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#0a0b0d",
-          card: "#111317",
-          elevated: "#16191f",
-          border: "#1f242c",
+          DEFAULT: "#050607",
+          card: "#0c0f12",
+          elevated: "#131820",
+          border: "#20262d",
+          soft: "#0f1419",
         },
         accent: {
-          DEFAULT: "#22d3ee",
-          green: "#22c55e",
-          red: "#ef4444",
-          yellow: "#eab308",
+          DEFAULT: "#6ee7b7",
+          green: "#00c853",
+          red: "#ff5252",
+          yellow: "#f4c430",
+          blue: "#38bdf8",
+          violet: "#a78bfa",
         },
-        muted: "#6b7280",
+        muted: "#7b8794",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
@@ -25,7 +28,7 @@ const config: Config = {
       },
       animation: {
         "pulse-soft": "pulse 3s ease-in-out infinite",
-        "fade-in": "fade-in 0.3s ease-out",
+        "fade-in": "fade-in 0.28s ease-out",
       },
       keyframes: {
         "fade-in": {

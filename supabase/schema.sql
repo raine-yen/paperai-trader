@@ -76,14 +76,18 @@ create table if not exists orders (
   filled_avg_price numeric,
   client_order_id text,
   reject_reason text,
+  scheduled_at timestamptz,
   created_at timestamptz not null default now(),
   filled_at timestamptz,
   canceled_at timestamptz
 );
 
+alter table orders add column if not exists scheduled_at timestamptz;
+
 create index if not exists idx_orders_account on orders(account_id);
 create index if not exists idx_orders_status on orders(status);
 create index if not exists idx_orders_symbol on orders(symbol);
+create index if not exists idx_orders_scheduled on orders(scheduled_at);
 
 -- =====================================================================
 -- POSITIONS

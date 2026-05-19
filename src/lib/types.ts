@@ -49,6 +49,7 @@ export interface Order {
   filled_avg_price: number | null;
   client_order_id: string | null;
   reject_reason: string | null;
+  scheduled_at: string | null;
   created_at: string;
   filled_at: string | null;
   canceled_at: string | null;

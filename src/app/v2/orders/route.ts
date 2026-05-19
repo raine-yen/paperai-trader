@@ -14,6 +14,7 @@ const orderSchema = z.object({
   time_in_force: z.enum(["gtc", "day", "ioc"]).optional(),
   limit_price: z.union([z.number(), z.string()]).optional().transform((v) => (v == null ? undefined : Number(v))),
   client_order_id: z.string().optional(),
+  scheduled_at: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
     limit_price: parsed.data.limit_price,
     time_in_force: parsed.data.time_in_force,
     client_order_id: parsed.data.client_order_id,
+    scheduled_at: parsed.data.scheduled_at,
   });
 
   if (!order.ok) {

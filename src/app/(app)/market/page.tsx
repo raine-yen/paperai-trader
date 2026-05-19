@@ -1,409 +1,447 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { Search, ArrowUpRight, ArrowDownRight, X, Loader2, TrendingUp, ChevronRight } from "lucide-react";
-import { formatUSD, formatPct, cn } from "@/lib/utils";
-
-// Popular watchlist categories
-const WATCHLIST: Record<string, string[]> = {
-  "Most Popular": ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "SPY"],
-  "Tech": ["AAPL", "MSFT", "NVDA", "AMD", "INTC", "ORCL", "CRM", "SNOW"],
-  "Finance": ["JPM", "BAC", "GS", "MS", "V", "MA", "BRK-B", "WFC"],
-  "ETFs": ["SPY", "QQQ", "VTI", "IWM", "GLD", "TLT", "ARKK", "DIA"],
-  "Energy": ["XOM", "CVX", "COP", "SLB", "OXY", "MPC", "PSX", "VLO"],
-};
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { ArrowDownRight, ArrowUpRight, ChevronLeft, Loader2, Search, X } from "lucide-react";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { COMPANY_NAMES, getCompanyName, MARKET_GROUPS } from "@/lib/market-data";
+import { cn, formatPct, formatUSD } from "@/lib/utils";
 
 interface Quote {
   price: number;
   prevClose: number | null;
 }
 
-interface TradeState {
+interface Position {
   symbol: string;
-  price: number;
-  prevClose: number | null;
-  side: "buy" | "sell";
+  qty: number;
+  avg_entry_price: number;
+  current_price: number;
+  market_value: number;
+  unrealized_pl: number;
+  unrealized_plpc: number;
 }
 
-interface AccountInfo {
-  cash: number;
-  equity: number;
+interface Bar {
+  t: string;
+  c: number;
 }
+
+type Side = "buy" | "sell";
+
+const CHART_RANGES = [
+  { label: "1D", range: "1d" },
+  { label: "1W", range: "5d" },
+  { label: "1M", range: "1mo" },
+  { label: "3M", range: "3mo" },
+  { label: "1Y", range: "1y" },
+] as const;
 
 export default function MarketPage() {
-  const [activeCategory, setActiveCategory] = useState("Most Popular");
+  const searchParams = useSearchParams();
+  const [activeCategory, setActiveCategory] = useState("Popular");
   const [quotes, setQuotes] = useState<Map<string, Quote>>(new Map());
   const [loadingSymbols, setLoadingSymbols] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResult, setSearchResult] = useState<{ symbol: string; quote: Quote } | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const [tradePanel, setTradePanel] = useState<TradeState | null>(null);
-  const [account, setAccount] = useState<AccountInfo | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [initialSide, setInitialSide] = useState<Side>("buy");
+  const [cash, setCash] = useState(0);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const symbols = WATCHLIST[activeCategory] ?? [];
+  const positionBySymbol = useMemo(() => new Map(positions.map((p) => [p.symbol, p])), [positions]);
+  const categories = useMemo(() => ["Owned", ...Object.keys(MARKET_GROUPS)], []);
+  const symbols = useMemo(() => {
+    if (activeCategory === "Owned") return positions.map((p) => p.symbol).sort();
+    return MARKET_GROUPS[activeCategory] ?? [];
+  }, [activeCategory, positions]);
 
-  // Fetch account info
-  useEffect(() => {
-    fetch("/api/me", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.account) setAccount({ cash: j.account.cash, equity: j.account.equity });
-      })
-      .catch(() => {});
+  const fetchAccount = useCallback(async () => {
+    const r = await fetch("/api/me", { cache: "no-store" });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j.account) setCash(Number(j.account.cash));
+    if (j.positions) setPositions(j.positions);
+    setLastUpdated(new Date());
   }, []);
 
-  // Fetch quotes for a set of symbols (skips already cached)
-  async function fetchQuotesForSymbols(syms: string[], forceRefresh = false) {
-    const toFetch = forceRefresh ? syms : syms.filter((s) => !quotes.has(s));
+  const fetchQuotesForSymbols = useCallback(async (syms: string[], forceRefresh = false) => {
+    const unique = Array.from(new Set(syms.filter(Boolean).map((s) => s.toUpperCase())));
+    const toFetch = forceRefresh ? unique : unique.filter((s) => !quotes.has(s));
     if (toFetch.length === 0) return;
     setLoadingSymbols(new Set(toFetch));
     await Promise.all(
       toFetch.map(async (sym) => {
-        const r = await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`);
-        if (!r.ok) return;
-        const j = await r.json();
-        setQuotes((prev) => new Map(prev).set(sym, { price: j.price, prevClose: j.prevClose }));
-        setLoadingSymbols((prev) => { const s = new Set(prev); s.delete(sym); return s; });
+        try {
+          const r = await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`, { cache: "no-store" });
+          if (!r.ok) return;
+          const j = await r.json();
+          setQuotes((prev) => new Map(prev).set(sym, { price: Number(j.price), prevClose: j.prevClose == null ? null : Number(j.prevClose) }));
+        } finally {
+          setLoadingSymbols((prev) => {
+            const next = new Set(prev);
+            next.delete(sym);
+            return next;
+          });
+        }
       })
     );
-  }
+  }, [quotes]);
+
+  useEffect(() => {
+    fetchAccount();
+    const id = setInterval(fetchAccount, 12_000);
+    return () => clearInterval(id);
+  }, [fetchAccount]);
 
   useEffect(() => {
     fetchQuotesForSymbols(symbols);
-    // Refresh every 30s
-    const id = setInterval(() => fetchQuotesForSymbols(symbols, true), 30_000);
+    const id = setInterval(() => fetchQuotesForSymbols(symbols, true), 20_000);
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory]);
+  }, [fetchQuotesForSymbols, symbols]);
 
-  // Live search with debounce
+  useEffect(() => {
+    const symbol = searchParams.get("symbol")?.toUpperCase();
+    const side = searchParams.get("side") === "sell" ? "sell" : "buy";
+    if (symbol) {
+      setInitialSide(side);
+      setSelectedSymbol(symbol);
+      fetchQuotesForSymbols([symbol], true);
+    }
+  }, [fetchQuotesForSymbols, searchParams]);
+
   useEffect(() => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
-    if (!searchQuery.trim()) {
+    const sym = searchQuery.trim().toUpperCase();
+    if (!sym) {
       setSearchResult(null);
       setSearchError("");
       return;
     }
-    const sym = searchQuery.trim().toUpperCase();
     searchDebounce.current = setTimeout(async () => {
       setSearchLoading(true);
       setSearchError("");
       setSearchResult(null);
-      const r = await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`);
+      const r = await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`, { cache: "no-store" });
       setSearchLoading(false);
       if (!r.ok) {
-        setSearchError(`No results for "${sym}"`);
+        setSearchError(`No quote found for ${sym}`);
         return;
       }
       const j = await r.json();
-      setSearchResult({ symbol: sym, quote: { price: j.price, prevClose: j.prevClose } });
-    }, 400);
+      const quote = { price: Number(j.price), prevClose: j.prevClose == null ? null : Number(j.prevClose) };
+      setQuotes((prev) => new Map(prev).set(sym, quote));
+      setSearchResult({ symbol: sym, quote });
+    }, 350);
   }, [searchQuery]);
 
-  function openTrade(symbol: string, side: "buy" | "sell" = "buy") {
-    const quote = quotes.get(symbol) ?? searchResult?.quote ?? null;
-    if (!quote) return;
-    setTradePanel({ symbol, price: quote.price, prevClose: quote.prevClose, side });
+  function openSymbol(symbol: string, side: Side = "buy") {
+    setInitialSide(side);
+    setSelectedSymbol(symbol);
+    setSearchQuery("");
+    setSearchResult(null);
+    setSearchError("");
+    fetchQuotesForSymbols([symbol], true);
   }
 
-  function openSearchTrade(side: "buy" | "sell") {
-    if (!searchResult) return;
-    setTradePanel({ symbol: searchResult.symbol, price: searchResult.quote.price, prevClose: searchResult.quote.prevClose, side });
-    setSearchQuery("");
-  }
+  const selectedPosition = selectedSymbol ? positionBySymbol.get(selectedSymbol) ?? null : null;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="animate-fade-in space-y-5">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Market</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Browse stocks and trade instantly</p>
-        </div>
-        {account && (
-          <div className="text-right">
-            <div className="text-xs text-gray-500">Buying Power</div>
-            <div className="font-semibold tabular-nums text-accent-green">{formatUSD(account.cash)}</div>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+            <span className="h-2 w-2 rounded-full bg-accent-green" />
+            Market scanner
           </div>
-        )}
-      </div>
-
-      {/* Search bar */}
-      <div className="relative">
-        <div className="flex items-center gap-3 bg-bg-card border border-bg-border rounded-xl px-4 py-3 focus-within:border-accent transition-colors">
-          <Search className="w-4 h-4 text-gray-500 shrink-0" />
-          <input
-            className="bg-transparent flex-1 outline-none text-sm placeholder-gray-500 font-mono uppercase"
-            placeholder="Search symbol (e.g. AAPL, TSLA)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
-          />
-          {searchLoading && <Loader2 className="w-4 h-4 animate-spin text-gray-500 shrink-0" />}
-          {searchQuery && !searchLoading && (
-            <button onClick={() => { setSearchQuery(""); setSearchResult(null); setSearchError(""); }}>
-              <X className="w-4 h-4 text-gray-500 hover:text-white" />
-            </button>
-          )}
+          <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">Browse, filter, trade.</h1>
+          <p className="mt-2 max-w-2xl text-sm text-gray-400">Scan club-friendly watchlists, filter to what you own, and open a safe trade ticket without leaving the market.</p>
         </div>
+        <div className="grid grid-cols-2 gap-3 sm:min-w-[360px]">
+          <MiniMetric label="Buying power" value={formatUSD(cash)} tone="text-accent-green" />
+          <MiniMetric label="Holdings" value={String(positions.length)} caption={lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : undefined} />
+        </div>
+      </header>
 
-        {/* Search result dropdown */}
-        {(searchResult || searchError) && searchQuery && (
-          <div className="absolute z-20 top-full mt-2 left-0 right-0 bg-bg-card border border-bg-border rounded-xl shadow-2xl overflow-hidden">
-            {searchError ? (
-              <div className="px-4 py-5 text-sm text-gray-500 text-center">{searchError}</div>
-            ) : searchResult ? (
-              <div className="p-4">
-                <SearchResultRow
-                  symbol={searchResult.symbol}
-                  quote={searchResult.quote}
-                  onBuy={() => openSearchTrade("buy")}
-                  onSell={() => openSearchTrade("sell")}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_460px]">
+        <section className="card overflow-hidden">
+          <div className="border-b border-bg-border p-4">
+            <div className="relative">
+              <div className="flex items-center gap-3 rounded-lg border border-bg-border bg-bg-elevated px-4 py-3 focus-within:border-accent-green">
+                <Search className="h-4 w-4 shrink-0 text-gray-500" />
+                <input
+                  className="flex-1 bg-transparent font-mono text-sm uppercase outline-none placeholder:font-sans placeholder:normal-case placeholder:text-gray-500"
+                  placeholder="Search any symbol, like AAPL or BRK-B"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
                 />
+                {searchLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-500" />}
+                {searchQuery && !searchLoading && (
+                  <button onClick={() => { setSearchQuery(""); setSearchResult(null); setSearchError(""); }} aria-label="Clear search">
+                    <X className="h-4 w-4 text-gray-500 hover:text-white" />
+                  </button>
+                )}
               </div>
-            ) : null}
+              {searchQuery && (searchResult || searchError) && (
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-lg border border-bg-border bg-bg-card shadow-2xl">
+                  {searchError ? (
+                    <div className="p-5 text-center text-sm text-gray-500">{searchError}</div>
+                  ) : searchResult ? (
+                    <button className="w-full p-4 text-left hover:bg-bg-elevated" onClick={() => openSymbol(searchResult.symbol)}>
+                      <QuoteLine symbol={searchResult.symbol} quote={searchResult.quote} ownedQty={positionBySymbol.get(searchResult.symbol)?.qty} />
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={cn(
+                    "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+                    activeCategory === cat ? "bg-white text-black" : "bg-bg-elevated text-gray-400 hover:text-white"
+                  )}
+                >
+                  {cat}
+                  {cat === "Owned" && positions.length > 0 ? <span className="ml-2 text-xs opacity-70">{positions.length}</span> : null}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {symbols.length === 0 ? (
+            <div className="p-12 text-center text-sm text-gray-500">No owned positions yet. Switch to Popular to find a trade.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[780px] text-sm">
+                <thead className="bg-bg-soft text-xs uppercase tracking-wider text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Asset</th>
+                    <th className="px-4 py-3 text-right font-semibold">Price</th>
+                    <th className="px-4 py-3 text-right font-semibold">Today</th>
+                    <th className="px-4 py-3 text-right font-semibold">Owned</th>
+                    <th className="px-4 py-3 text-right font-semibold">Value</th>
+                    <th className="px-4 py-3 text-right font-semibold">Trade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {symbols.map((sym) => {
+                    const quote = quotes.get(sym) ?? null;
+                    const pos = positionBySymbol.get(sym) ?? null;
+                    return (
+                      <MarketRow
+                        key={sym}
+                        symbol={sym}
+                        quote={quote}
+                        position={pos}
+                        loading={loadingSymbols.has(sym)}
+                        selected={selectedSymbol === sym}
+                        onOpen={() => openSymbol(sym)}
+                        onBuy={() => openSymbol(sym, "buy")}
+                        onSell={() => openSymbol(sym, "sell")}
+                      />
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {selectedSymbol ? (
+          <StockTicket
+            key={selectedSymbol}
+            symbol={selectedSymbol}
+            initialSide={initialSide}
+            quote={quotes.get(selectedSymbol) ?? null}
+            position={selectedPosition}
+            cash={cash}
+            onClose={() => setSelectedSymbol(null)}
+            onTraded={() => {
+              fetchAccount();
+              fetchQuotesForSymbols([selectedSymbol], true);
+            }}
+          />
+        ) : (
+          <aside className="card flex min-h-[520px] items-center justify-center p-8 text-center">
+            <div>
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-bg-elevated font-mono font-bold text-accent-green">PT</div>
+              <h2 className="text-xl font-semibold">Select a stock</h2>
+              <p className="mt-2 max-w-xs text-sm leading-6 text-gray-500">Open any row to see a chart, owned shares, order preview, and safe buy/sell controls.</p>
+            </div>
+          </aside>
         )}
       </div>
-
-      {/* Category tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-        {Object.keys(WATCHLIST).map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={cn(
-              "px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors shrink-0",
-              activeCategory === cat
-                ? "bg-accent text-black"
-                : "bg-bg-elevated text-gray-400 hover:text-white"
-            )}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Stock list */}
-      <div className="card overflow-hidden divide-y divide-bg-border">
-        {symbols.map((sym) => {
-          const quote = quotes.get(sym);
-          const isLoading = loadingSymbols.has(sym);
-          return (
-            <StockRow
-              key={sym}
-              symbol={sym}
-              quote={quote ?? null}
-              loading={isLoading}
-              onBuy={() => openTrade(sym, "buy")}
-              onSell={() => openTrade(sym, "sell")}
-            />
-          );
-        })}
-      </div>
-
-      {/* Trade panel overlay */}
-      {tradePanel && (
-        <TradePanel
-          symbol={tradePanel.symbol}
-          price={tradePanel.price}
-          prevClose={tradePanel.prevClose}
-          initialSide={tradePanel.side}
-          cash={account?.cash ?? 0}
-          onClose={() => setTradePanel(null)}
-          onTraded={() => {
-            setTradePanel(null);
-            // Refresh account
-            fetch("/api/me", { cache: "no-store" })
-              .then((r) => r.json())
-              .then((j) => { if (j.account) setAccount({ cash: j.account.cash, equity: j.account.equity }); });
-          }}
-        />
-      )}
     </div>
   );
 }
 
-// ── Stock row in watchlist ─────────────────────────────────────────────────
+function MiniMetric({ label, value, caption, tone }: { label: string; value: string; caption?: string; tone?: string }) {
+  return (
+    <div className="surface p-4">
+      <div className="stat-label">{label}</div>
+      <div className={cn("mt-2 text-xl font-bold tabular-nums", tone)}>{value}</div>
+      {caption && <div className="mt-1 text-[11px] text-gray-500">{caption}</div>}
+    </div>
+  );
+}
 
-function StockRow({
-  symbol,
-  quote,
-  loading,
-  onBuy,
-  onSell,
-}: {
+function MarketRow({ symbol, quote, position, loading, selected, onOpen, onBuy, onSell }: {
   symbol: string;
   quote: Quote | null;
+  position: Position | null;
   loading: boolean;
+  selected: boolean;
+  onOpen: () => void;
   onBuy: () => void;
   onSell: () => void;
 }) {
-  const change = quote && quote.prevClose ? quote.price - quote.prevClose : null;
-  const changePct = quote && quote.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null;
-  const up = change !== null ? change >= 0 : null;
-
+  const changePct = quote?.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null;
+  const change = quote?.prevClose ? quote.price - quote.prevClose : null;
+  const up = change == null || change >= 0;
   return (
-    <div className="flex items-center gap-4 px-4 py-4 hover:bg-bg-elevated/40 transition-colors group">
-      {/* Symbol + sparkline placeholder */}
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div className="w-9 h-9 rounded-xl bg-bg-elevated flex items-center justify-center shrink-0">
-          <span className="text-xs font-bold text-gray-300">{symbol.slice(0, 2)}</span>
-        </div>
-        <div className="min-w-0">
-          <div className="font-semibold font-mono text-sm">{symbol}</div>
-          <div className="text-xs text-gray-500 truncate">{COMPANY_NAMES[symbol] ?? symbol}</div>
-        </div>
-      </div>
-
-      {/* Price & change */}
-      <div className="text-right min-w-[100px]">
-        {loading ? (
-          <div className="space-y-1.5">
-            <div className="h-4 bg-bg-elevated rounded animate-pulse w-16 ml-auto" />
-            <div className="h-3 bg-bg-elevated rounded animate-pulse w-10 ml-auto" />
+    <tr className={cn("ticker-row group cursor-pointer", selected && "bg-bg-elevated")} onClick={onOpen}>
+      <td className="px-4 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bg-elevated font-mono text-xs font-black text-gray-300 group-hover:bg-accent-green group-hover:text-black">
+            {symbol.slice(0, 2)}
           </div>
-        ) : quote ? (
-          <>
-            <div className="font-semibold tabular-nums text-sm">{formatUSD(quote.price)}</div>
-            {changePct !== null && (
-              <div className={cn("text-xs flex items-center justify-end gap-0.5 tabular-nums", up ? "text-accent-green" : "text-accent-red")}>
-                {up ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                {formatPct(changePct)}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="text-xs text-gray-600">–</div>
-        )}
-      </div>
-
-      {/* Trade buttons — appear on hover */}
-      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        <button
-          onClick={onBuy}
-          disabled={!quote}
-          className="px-3 py-1.5 rounded-lg bg-accent-green/20 text-accent-green hover:bg-accent-green hover:text-black text-xs font-semibold transition-colors disabled:opacity-30"
-        >
-          Buy
-        </button>
-        <button
-          onClick={onSell}
-          disabled={!quote}
-          className="px-3 py-1.5 rounded-lg bg-accent-red/20 text-accent-red hover:bg-accent-red hover:text-white text-xs font-semibold transition-colors disabled:opacity-30"
-        >
-          Sell
-        </button>
-      </div>
-      <ChevronRight className="w-3.5 h-3.5 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-    </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold">{symbol}</span>
+              {position && <span className="badge bg-accent-green/15 text-accent-green">Owned</span>}
+            </div>
+            <div className="truncate text-xs text-gray-500">{getCompanyName(symbol)}</div>
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-4 text-right font-semibold tabular-nums">{loading ? "..." : quote ? formatUSD(quote.price) : "-"}</td>
+      <td className={cn("px-4 py-4 text-right font-semibold tabular-nums", up ? "text-accent-green" : "text-accent-red")}>
+        {changePct == null ? "-" : formatPct(changePct)}
+      </td>
+      <td className="px-4 py-4 text-right tabular-nums text-gray-300">{position ? Number(position.qty).toFixed(4) : "-"}</td>
+      <td className="px-4 py-4 text-right tabular-nums text-gray-300">{position ? formatUSD(Number(position.market_value)) : "-"}</td>
+      <td className="px-4 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+          <button className="rounded-md bg-accent-green px-3 py-1.5 text-xs font-bold text-black hover:bg-green-300" onClick={onBuy}>Buy</button>
+          <button
+            className="rounded-md border border-bg-border px-3 py-1.5 text-xs font-bold text-gray-300 hover:border-accent-red hover:text-accent-red disabled:cursor-not-allowed disabled:opacity-35"
+            disabled={!position}
+            onClick={onSell}
+          >
+            Sell
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 
-function SearchResultRow({
-  symbol,
-  quote,
-  onBuy,
-  onSell,
-}: {
-  symbol: string;
-  quote: Quote;
-  onBuy: () => void;
-  onSell: () => void;
-}) {
-  const change = quote.prevClose ? quote.price - quote.prevClose : null;
+function QuoteLine({ symbol, quote, ownedQty }: { symbol: string; quote: Quote; ownedQty?: number }) {
   const changePct = quote.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null;
-  const up = change !== null ? change >= 0 : null;
-
   return (
-    <div className="flex items-center gap-4">
-      <div className="w-10 h-10 rounded-xl bg-bg-elevated flex items-center justify-center shrink-0">
-        <TrendingUp className="w-4 h-4 text-accent" />
-      </div>
-      <div className="flex-1">
-        <div className="font-semibold font-mono">{symbol}</div>
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <div className="font-mono font-bold">{symbol}</div>
         <div className="text-xs text-gray-500">{COMPANY_NAMES[symbol] ?? "Stock"}</div>
       </div>
-      <div className="text-right mr-4">
+      <div className="text-right">
         <div className="font-semibold tabular-nums">{formatUSD(quote.price)}</div>
-        {changePct !== null && (
-          <div className={cn("text-xs tabular-nums", up ? "text-accent-green" : "text-accent-red")}>
-            {formatPct(changePct)}
-          </div>
-        )}
-      </div>
-      <div className="flex gap-2">
-        <button
-          onClick={onBuy}
-          className="px-4 py-2 rounded-lg bg-accent-green text-black text-sm font-semibold hover:bg-green-400 transition-colors"
-        >
-          Buy
-        </button>
-        <button
-          onClick={onSell}
-          className="px-4 py-2 rounded-lg bg-accent-red text-white text-sm font-semibold hover:bg-red-500 transition-colors"
-        >
-          Sell
-        </button>
+        <div className="text-xs text-gray-500">{ownedQty ? `${Number(ownedQty).toFixed(4)} owned` : "Not owned"}</div>
+        {changePct != null && <div className={cn("text-xs font-semibold", changePct >= 0 ? "text-accent-green" : "text-accent-red")}>{formatPct(changePct)}</div>}
       </div>
     </div>
   );
 }
 
-// ── Trade panel (slide-in modal) ───────────────────────────────────────────
-
-function TradePanel({
-  symbol,
-  price,
-  prevClose,
-  initialSide,
-  cash,
-  onClose,
-  onTraded,
-}: {
+function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash, onClose, onTraded }: {
   symbol: string;
-  price: number;
-  prevClose: number | null;
-  initialSide: "buy" | "sell";
+  initialSide: Side;
+  quote: Quote | null;
+  position: Position | null;
   cash: number;
   onClose: () => void;
   onTraded: () => void;
 }) {
-  const [side, setSide] = useState<"buy" | "sell">(initialSide);
-  const [mode, setMode] = useState<"dollars" | "shares">("dollars");
+  const [quote, setQuote] = useState<Quote | null>(initialQuote);
+  const [bars, setBars] = useState<Bar[]>([]);
+  const [chartRange, setChartRange] = useState("1mo");
+  const [chartLoading, setChartLoading] = useState(false);
+  const [side, setSide] = useState<Side>(initialSide);
+  const [mode, setMode] = useState<"dollars" | "shares">("shares");
   const [amount, setAmount] = useState("");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
-  const [limitPrice, setLimitPrice] = useState(price.toFixed(2));
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [limitPrice, setLimitPrice] = useState(initialQuote ? initialQuote.price.toFixed(2) : "");
+  const [submitting, setSubmitting] = useState(false);
+  const [tradeResult, setTradeResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  useEffect(() => {
+    setSide(initialSide);
+    setAmount("");
+    setTradeResult(null);
+  }, [initialSide, symbol]);
+
+  useEffect(() => {
+    fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const next = { price: Number(j.price), prevClose: j.prevClose == null ? null : Number(j.prevClose) };
+        setQuote(next);
+        setLimitPrice(next.price.toFixed(2));
+      })
+      .catch(() => {});
+  }, [symbol]);
+
+  useEffect(() => {
+    setChartLoading(true);
+    setBars([]);
+    fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&range=${chartRange}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setBars(j.bars ?? []))
+      .catch(() => {})
+      .finally(() => setChartLoading(false));
+  }, [symbol, chartRange]);
+
+  const price = quote?.price ?? 0;
+  const ownedQty = Number(position?.qty ?? 0);
+  const ownedValue = ownedQty * price;
   const numAmount = Number(amount) || 0;
-  const shares = mode === "dollars" ? numAmount / price : numAmount;
-  const totalCost = mode === "dollars" ? numAmount : numAmount * price;
-  const maxBuyShares = price > 0 ? Math.floor((cash / price) * 100) / 100 : 0;
+  const desiredShares = mode === "dollars" ? (price > 0 ? numAmount / price : 0) : numAmount;
+  const notional = desiredShares * price;
+  const change = quote?.prevClose ? price - quote.prevClose : null;
+  const changePct = quote?.prevClose ? (change! / quote.prevClose) * 100 : null;
+  const isUp = change == null || change >= 0;
+  const sellTooMuch = side === "sell" && desiredShares > ownedQty + 0.00001;
+  const cannotSell = side === "sell" && ownedQty <= 0;
+  const buyTooMuch = side === "buy" && notional > cash + 0.01;
+  const canSubmit = !!quote && desiredShares > 0 && !submitting && !sellTooMuch && !cannotSell && !buyTooMuch;
 
   function setMax() {
-    if (side === "buy") {
-      if (mode === "dollars") setAmount(cash.toFixed(2));
-      else setAmount(maxBuyShares.toFixed(2));
+    if (side === "sell") {
+      setAmount(mode === "shares" ? ownedQty.toFixed(4) : ownedValue.toFixed(2));
+    } else {
+      setAmount(mode === "shares" && price > 0 ? (Math.floor((cash / price) * 10000) / 10000).toFixed(4) : cash.toFixed(2));
     }
   }
 
-  const change = prevClose ? price - prevClose : null;
-  const changePct = prevClose ? ((price - prevClose) / prevClose) * 100 : null;
-  const isUp = change !== null ? change >= 0 : true;
-
   async function submit() {
-    if (!numAmount || numAmount <= 0) return;
-    setLoading(true);
-    setResult(null);
-    const qty = mode === "dollars" ? shares : numAmount;
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setTradeResult(null);
+    const qty = Math.floor(desiredShares * 10000) / 10000;
     const res = await fetch("/api/trade", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         symbol,
-        qty: Math.floor(qty * 10000) / 10000,
+        qty,
         side,
         type: orderType,
         limit_price: orderType === "limit" ? Number(limitPrice) : undefined,
@@ -411,237 +449,196 @@ function TradePanel({
     });
     const j = await res.json();
     if (res.ok) {
-      setResult({
-        ok: true,
-        msg: `${side.toUpperCase()} order ${j.status === "filled" ? `filled at ${formatUSD(Number(j.filled_avg_price))}` : "submitted"}`,
-      });
-      setTimeout(onTraded, 1500);
+      setTradeResult({ ok: true, msg: `${side.toUpperCase()} order ${j.status === "filled" ? `filled at ${formatUSD(Number(j.filled_avg_price))}` : "submitted"}` });
+      setAmount("");
+      onTraded();
     } else {
-      setResult({ ok: false, msg: j.error ?? "Order failed" });
-      setLoading(false);
+      setTradeResult({ ok: false, msg: j.error ?? "Order failed" });
     }
+    setSubmitting(false);
   }
 
-  // Preset amounts for quick fill
-  const presets = side === "buy"
-    ? [25, 50, 100, 250].filter((v) => v <= cash)
-    : [];
-
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Panel */}
-      <div className="fixed bottom-0 left-0 right-0 md:right-auto md:top-0 md:left-auto md:right-0 md:w-[420px] z-50 bg-bg-card border-t md:border-t-0 md:border-l border-bg-border shadow-2xl flex flex-col max-h-[90vh] md:max-h-screen overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-bg-border shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-lg font-mono">{symbol}</span>
-              <span className="text-xs text-gray-500">{COMPANY_NAMES[symbol] ?? ""}</span>
-            </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="font-semibold tabular-nums">{formatUSD(price)}</span>
-              {changePct !== null && (
-                <span className={cn("text-xs tabular-nums flex items-center gap-0.5", isUp ? "text-accent-green" : "text-accent-red")}>
-                  {isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                  {formatPct(changePct)}
-                </span>
-              )}
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-bg-elevated transition-colors">
-            <X className="w-5 h-5" />
+    <aside className="card overflow-hidden xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
+      <div className="sticky top-0 z-10 border-b border-bg-border bg-bg-card p-5">
+        <div className="flex items-center gap-3">
+          <button className="rounded-md p-2 text-gray-400 hover:bg-bg-elevated hover:text-white" onClick={onClose} aria-label="Close ticket">
+            <ChevronLeft className="h-4 w-4" />
           </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="font-mono text-xl font-black">{symbol}</h2>
+              {position && <span className="badge bg-accent-green/15 text-accent-green">{ownedQty.toFixed(4)} owned</span>}
+            </div>
+            <div className="truncate text-sm text-gray-500">{getCompanyName(symbol)}</div>
+          </div>
+        </div>
+        <div className="mt-5">
+          <div className="text-4xl font-black tabular-nums">{quote ? formatUSD(price) : "--"}</div>
+          {changePct != null && (
+            <div className={cn("mt-1 flex items-center gap-1 text-sm font-semibold", isUp ? "text-accent-green" : "text-accent-red")}>
+              {isUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              {formatUSD(Math.abs(change!))} ({formatPct(Math.abs(changePct))}) today
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-5 p-5">
+        <div>
+          <div className="mb-3 flex gap-1">
+            {CHART_RANGES.map(({ label, range }) => (
+              <button
+                key={range}
+                onClick={() => setChartRange(range)}
+                className={cn("flex-1 rounded-md py-1.5 text-xs font-bold transition-colors", chartRange === range ? "bg-white text-black" : "text-gray-500 hover:bg-bg-elevated hover:text-white")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="h-44 rounded-lg bg-bg-soft p-2">
+            {chartLoading ? (
+              <div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-gray-500" /></div>
+            ) : bars.length < 2 ? (
+              <div className="flex h-full items-center justify-center text-xs text-gray-600">Chart data unavailable</div>
+            ) : (
+              <PriceChart bars={bars} isUp={isUp} range={chartRange} />
+            )}
+          </div>
         </div>
 
-        <div className="px-6 py-5 space-y-5 flex-1">
-          {/* Buy/Sell toggle */}
-          <div className="grid grid-cols-2 gap-2 bg-bg-elevated rounded-xl p-1">
-            <button
-              onClick={() => setSide("buy")}
-              className={cn(
-                "py-2.5 rounded-lg font-semibold text-sm transition-all",
-                side === "buy" ? "bg-accent-green text-black shadow-sm" : "text-gray-400 hover:text-white"
-              )}
-            >
-              Buy {symbol}
-            </button>
-            <button
-              onClick={() => setSide("sell")}
-              className={cn(
-                "py-2.5 rounded-lg font-semibold text-sm transition-all",
-                side === "sell" ? "bg-accent-red text-white shadow-sm" : "text-gray-400 hover:text-white"
-              )}
-            >
-              Sell {symbol}
-            </button>
-          </div>
+        <div className="grid grid-cols-2 gap-3">
+          <MiniMetric label="Buying power" value={formatUSD(cash)} tone="text-accent-green" />
+          <MiniMetric label="Owned value" value={formatUSD(ownedValue)} />
+        </div>
 
-          {/* Order type */}
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500 shrink-0">Order type</span>
-            <div className="flex gap-2">
-              {(["market", "limit"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setOrderType(t)}
-                  className={cn(
-                    "px-3 py-1 rounded-lg text-xs font-medium transition-colors capitalize",
-                    orderType === t ? "bg-accent/20 text-accent" : "text-gray-500 hover:text-white hover:bg-bg-elevated"
-                  )}
-                >
-                  {t}
-                </button>
+        {position && (
+          <div className="surface p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="stat-label">Your position</span>
+              <button onClick={() => { setSide("sell"); setMode("shares"); setAmount(ownedQty.toFixed(4)); }} className="text-xs font-bold text-accent-red hover:text-white">Sell all</button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <SummaryRow label="Shares" value={ownedQty.toFixed(4)} />
+              <SummaryRow label="Avg cost" value={formatUSD(Number(position.avg_entry_price))} />
+              <SummaryRow label="Market value" value={formatUSD(Number(position.market_value))} />
+              <SummaryRow label="P/L" value={`${formatUSD(Number(position.unrealized_pl))} (${formatPct(Number(position.unrealized_plpc))})`} tone={Number(position.unrealized_pl) >= 0 ? "text-accent-green" : "text-accent-red"} />
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 rounded-lg bg-bg-elevated p-1">
+          <button onClick={() => { setSide("buy"); setTradeResult(null); }} className={cn("rounded-md py-2.5 text-sm font-black transition-colors", side === "buy" ? "bg-accent-green text-black" : "text-gray-400 hover:text-white")}>Buy</button>
+          <button onClick={() => { setSide("sell"); setTradeResult(null); }} className={cn("rounded-md py-2.5 text-sm font-black transition-colors", side === "sell" ? "bg-accent-red text-white" : "text-gray-400 hover:text-white")}>Sell</button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Order type</span>
+          <div className="flex gap-2">
+            {(["market", "limit"] as const).map((t) => (
+              <button key={t} onClick={() => setOrderType(t)} className={cn("rounded-md px-3 py-1 text-xs font-bold capitalize", orderType === t ? "bg-white text-black" : "bg-bg-elevated text-gray-400 hover:text-white")}>{t}</button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="stat-label">Amount</span>
+            <div className="flex gap-1">
+              {(["shares", "dollars"] as const).map((m) => (
+                <button key={m} onClick={() => { setMode(m); setAmount(""); }} className={cn("rounded px-2 py-0.5 text-xs font-semibold capitalize", mode === m ? "bg-bg-elevated text-white" : "text-gray-500 hover:text-white")}>{m}</button>
               ))}
             </div>
           </div>
-
-          {/* Amount input */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-500">Amount</span>
-              <div className="flex gap-2 items-center">
-                <button
-                  onClick={() => setMode("dollars")}
-                  className={cn("text-xs px-2 py-0.5 rounded transition-colors", mode === "dollars" ? "text-white bg-bg-elevated" : "text-gray-600 hover:text-gray-400")}
-                >
-                  $ Dollars
-                </button>
-                <button
-                  onClick={() => setMode("shares")}
-                  className={cn("text-xs px-2 py-0.5 rounded transition-colors", mode === "shares" ? "text-white bg-bg-elevated" : "text-gray-600 hover:text-gray-400")}
-                >
-                  Shares
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center bg-bg-elevated rounded-xl border border-bg-border focus-within:border-accent transition-colors">
-              <span className="pl-4 text-gray-500 text-lg font-semibold">{mode === "dollars" ? "$" : "#"}</span>
-              <input
-                type="number"
-                min="0"
-                step={mode === "dollars" ? "0.01" : "0.0001"}
-                className="bg-transparent flex-1 px-3 py-4 outline-none text-2xl font-bold tabular-nums"
-                placeholder="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                autoFocus
-              />
-              {side === "buy" && (
-                <button onClick={setMax} className="px-4 text-xs text-accent hover:text-white font-medium transition-colors">
-                  Max
-                </button>
-              )}
-            </div>
-
-            {/* Quick presets */}
-            {presets.length > 0 && mode === "dollars" && (
-              <div className="flex gap-2 mt-2">
-                {presets.map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setAmount(v.toString())}
-                    className="px-3 py-1 rounded-lg bg-bg-elevated text-xs font-medium text-gray-400 hover:text-white transition-colors"
-                  >
-                    ${v}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="flex items-center rounded-lg border border-bg-border bg-bg-elevated focus-within:border-accent-green">
+            <span className="pl-4 text-lg font-bold text-gray-500">{mode === "dollars" ? "$" : "#"}</span>
+            <input
+              type="number"
+              min="0"
+              step={mode === "dollars" ? "0.01" : "0.0001"}
+              max={side === "sell" ? (mode === "shares" ? ownedQty : ownedValue) : undefined}
+              className="w-full bg-transparent px-3 py-4 text-2xl font-black tabular-nums outline-none"
+              placeholder="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <button onClick={setMax} className="px-4 text-xs font-bold text-accent-green hover:text-white">Max</button>
           </div>
-
-          {/* Limit price */}
-          {orderType === "limit" && (
-            <div>
-              <label className="text-xs text-gray-500 block mb-2">Limit Price</label>
-              <div className="flex items-center bg-bg-elevated rounded-xl border border-bg-border focus-within:border-accent transition-colors">
-                <span className="pl-4 text-gray-500 font-semibold">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="bg-transparent flex-1 px-3 py-3 outline-none font-semibold tabular-nums"
-                  value={limitPrice}
-                  onChange={(e) => setLimitPrice(e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Order summary */}
-          {numAmount > 0 && (
-            <div className="bg-bg-elevated rounded-xl p-4 space-y-2 text-sm">
-              <SummaryRow label="Shares" value={shares > 0 ? shares.toFixed(4) : "—"} />
-              <SummaryRow label="Market price" value={formatUSD(price)} />
-              {orderType === "limit" && <SummaryRow label="Limit price" value={formatUSD(Number(limitPrice))} />}
-              <div className="border-t border-bg-border pt-2 mt-2">
-                <SummaryRow
-                  label={side === "buy" ? "Estimated cost" : "Estimated proceeds"}
-                  value={formatUSD(totalCost)}
-                  bold
-                />
-                {side === "buy" && (
-                  <SummaryRow label="Buying power after" value={formatUSD(Math.max(0, cash - totalCost))} />
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Result message */}
-          {result && (
-            <div className={cn("p-4 rounded-xl text-sm font-medium text-center", result.ok ? "bg-accent-green/10 text-accent-green" : "bg-accent-red/10 text-accent-red")}>
-              {result.msg}
-            </div>
-          )}
+          {side === "sell" && <div className="mt-2 text-xs text-gray-500">Available to sell: {ownedQty.toFixed(4)} shares ({formatUSD(ownedValue)}).</div>}
         </div>
 
-        {/* Submit button */}
-        <div className="px-6 pb-6 shrink-0">
-          <button
-            onClick={submit}
-            disabled={loading || !numAmount || numAmount <= 0 || !!result?.ok}
-            className={cn(
-              "w-full py-4 rounded-xl font-bold text-base transition-all",
-              side === "buy"
-                ? "bg-accent-green text-black hover:bg-green-400"
-                : "bg-accent-red text-white hover:bg-red-500",
-              "disabled:opacity-40"
-            )}
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-            ) : (
-              `Review ${side === "buy" ? "Buy" : "Sell"} Order`
-            )}
-          </button>
-        </div>
+        {orderType === "limit" && (
+          <div>
+            <label className="label">Limit price</label>
+            <input className="input font-mono" type="number" min="0" step="0.01" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} />
+          </div>
+        )}
+
+        {numAmount > 0 && (
+          <div className="surface space-y-2 p-4 text-sm">
+            <SummaryRow label="Shares" value={desiredShares > 0 ? desiredShares.toFixed(4) : "-"} />
+            <SummaryRow label="Market price" value={formatUSD(price)} />
+            <SummaryRow label={side === "buy" ? "Estimated cost" : "Estimated proceeds"} value={formatUSD(notional)} bold />
+            {side === "sell" && <SummaryRow label="Shares left" value={`${Math.max(0, ownedQty - desiredShares).toFixed(4)}`} />}
+          </div>
+        )}
+
+        {(sellTooMuch || cannotSell || buyTooMuch) && (
+          <div className="rounded-lg bg-accent-red/10 p-3 text-sm font-semibold text-accent-red">
+            {cannotSell ? `You do not own ${symbol}, so selling is disabled.` : sellTooMuch ? `You can sell up to ${ownedQty.toFixed(4)} shares.` : `Not enough buying power for this order.`}
+          </div>
+        )}
+
+        {tradeResult && <div className={cn("rounded-lg p-3 text-center text-sm font-semibold", tradeResult.ok ? "bg-accent-green/10 text-accent-green" : "bg-accent-red/10 text-accent-red")}>{tradeResult.msg}</div>}
+
+        <button onClick={submit} disabled={!canSubmit} className={cn("w-full rounded-lg py-4 text-base font-black transition-colors disabled:opacity-40", side === "buy" ? "bg-accent-green text-black hover:bg-green-300" : "bg-accent-red text-white hover:bg-red-500")}>
+          {submitting ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : `${side === "buy" ? "Buy" : "Sell"} ${symbol}`}
+        </button>
       </div>
-    </>
+    </aside>
   );
 }
 
-function SummaryRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function PriceChart({ bars, isUp, range }: { bars: Bar[]; isUp: boolean; range: string }) {
+  const data = bars.map((b) => ({ t: new Date(b.t).getTime(), price: b.c }));
+  const prices = data.map((d) => d.price).filter(Boolean);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const pad = (max - min) * 0.08 || 1;
+  const color = isUp ? "#00c853" : "#ff5252";
+  const gradId = `market-grad-${isUp ? "up" : "down"}`;
+
   return (
-    <div className="flex items-center justify-between">
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+            <stop offset="95%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <XAxis dataKey="t" hide />
+        <YAxis domain={[min - pad, max + pad]} hide />
+        <Tooltip
+          contentStyle={{ background: "#0c0f12", border: "1px solid #20262d", borderRadius: 8, fontSize: 12 }}
+          labelFormatter={(t) => {
+            const d = new Date(Number(t));
+            return range === "1d" ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString([], { month: "short", day: "numeric" });
+          }}
+          formatter={(v: number) => [formatUSD(v), "Price"]}
+        />
+        <Area type="monotone" dataKey="price" stroke={color} strokeWidth={2} fill={`url(#${gradId})`} dot={false} activeDot={{ r: 4, fill: color, strokeWidth: 0 }} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+function SummaryRow({ label, value, bold, tone }: { label: string; value: string; bold?: boolean; tone?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
       <span className="text-gray-500">{label}</span>
-      <span className={cn("tabular-nums", bold ? "font-bold text-white" : "text-gray-300")}>{value}</span>
+      <span className={cn("text-right tabular-nums", bold ? "font-bold text-white" : "text-gray-300", tone)}>{value}</span>
     </div>
   );
 }
-
-// Company names lookup
-const COMPANY_NAMES: Record<string, string> = {
-  AAPL: "Apple Inc.", TSLA: "Tesla Inc.", NVDA: "NVIDIA Corp.", MSFT: "Microsoft Corp.",
-  AMZN: "Amazon.com Inc.", GOOGL: "Alphabet Inc.", META: "Meta Platforms", SPY: "S&P 500 ETF",
-  AMD: "Advanced Micro Devices", INTC: "Intel Corp.", ORCL: "Oracle Corp.", CRM: "Salesforce Inc.",
-  SNOW: "Snowflake Inc.", JPM: "JPMorgan Chase", BAC: "Bank of America", GS: "Goldman Sachs",
-  MS: "Morgan Stanley", V: "Visa Inc.", MA: "Mastercard Inc.", "BRK-B": "Berkshire Hathaway",
-  WFC: "Wells Fargo", QQQ: "Nasdaq 100 ETF", VTI: "Vanguard Total Market", IWM: "Russell 2000 ETF",
-  GLD: "SPDR Gold Shares", TLT: "iShares 20+ Year Treasury", ARKK: "ARK Innovation ETF",
-  DIA: "Dow Jones ETF", XOM: "ExxonMobil Corp.", CVX: "Chevron Corp.", COP: "ConocoPhillips",
-  SLB: "SLB (Schlumberger)", OXY: "Occidental Petroleum", MPC: "Marathon Petroleum",
-  PSX: "Phillips 66", VLO: "Valero Energy",
-};
