@@ -32,7 +32,7 @@
       "expo-secure-store"
     ],
     "extra": {
-      "apiUrl": "https://paper-trader-raine-yens-projects.vercel.app",
+      "apiUrl": "https://paper-trader-lac.vercel.app",
       "eas": {
         "projectId": "0c09d383-ef50-4df0-b7ab-5a77cd306f6d"
       }
