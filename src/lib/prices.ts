@@ -223,6 +223,14 @@ export async function fetchYahooDetailedQuotes(symbols: string[]): Promise<Map<s
     out.set(symbol, quote);
   }
 
+  const unresolved = missing.filter((symbol) => !out.has(symbol));
+  await Promise.all(
+    unresolved.map(async (symbol) => {
+      const fallback = await fetchYahooDetailedQuote(symbol);
+      if (fallback) out.set(symbol, fallback);
+    })
+  );
+
   return out;
 }
 
