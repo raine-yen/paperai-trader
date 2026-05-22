@@ -2,3 +2,9 @@
 .vercel/output
 node_modules
 ios
+mobile/node_modules
+mobile/.expo
+mobile/.vercel
+mobile/.claude
+mobile/.env
+mobile/dist

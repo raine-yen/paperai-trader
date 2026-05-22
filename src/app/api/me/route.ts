@@ -1,20 +1,19 @@
-import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fetchYahooPrices } from "@/lib/prices";
+import { getSessionUser } from "@/lib/session-user";
 
 // Authenticated dashboard endpoint — returns the current user's account, positions, recent orders.
-export async function GET() {
-  const sb = await supabaseServer();
-  const { data: ud } = await sb.auth.getUser();
-  if (!ud.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+export async function GET(req: NextRequest) {
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const db = supabaseAdmin();
 
   const { data: account } = await db
     .from("accounts")
     .select("*")
-    .eq("user_id", ud.user.id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -65,7 +64,7 @@ export async function GET() {
   const equity = Number(account.cash) + positionsValue;
 
   return NextResponse.json({
-    user: { id: ud.user.id, email: ud.user.email },
+    user: { id: user.id, email: user.email },
     account: { ...account, equity, positions_value: positionsValue },
     positions: positionsWithMarket,
     orders: orders ?? [],

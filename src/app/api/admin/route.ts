@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminEmail } from "@/lib/admin";
 import { fetchYahooPrices } from "@/lib/prices";
-import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getSessionUser } from "@/lib/session-user";
 
-async function verifyAdmin() {
-  const sb = await supabaseServer();
-  const { data } = await sb.auth.getUser();
-  if (!data.user || !isAdminEmail(data.user.email)) return null;
-  return data.user;
+async function verifyAdmin(req: NextRequest) {
+  const user = await getSessionUser(req);
+  if (!user || !isAdminEmail(user.email)) return null;
+  return user;
 }
 
-export async function GET() {
-  const user = await verifyAdmin();
+export async function GET(req: NextRequest) {
+  const user = await verifyAdmin(req);
   if (!user) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const db = supabaseAdmin();
@@ -113,7 +112,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await verifyAdmin();
+  const user = await verifyAdmin(req);
   if (!user) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const db = supabaseAdmin();
