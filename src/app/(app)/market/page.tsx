@@ -47,6 +47,7 @@ interface Bar {
 type Side = "buy" | "sell";
 
 const CHART_RANGES = [
+  { label: "1H", range: "1h" },
   { label: "1D", range: "1d" },
   { label: "1W", range: "5d" },
   { label: "1M", range: "1mo" },
@@ -256,13 +257,11 @@ export default function MarketPage() {
                 <thead className="bg-bg-soft text-xs uppercase tracking-wider text-gray-500">
                   <tr>
                     <th className="w-[34%] px-3 py-3 text-left font-semibold sm:px-4">Asset</th>
-                    <th className="w-[18%] px-3 py-3 text-right font-semibold sm:px-4">Price</th>
+                    <th className="w-[20%] px-3 py-3 text-right font-semibold sm:px-4">Price</th>
                     <th className="w-[16%] px-3 py-3 text-right font-semibold sm:px-4">Today</th>
-                    <th className="hidden w-[16%] px-3 py-3 text-right font-semibold xl:table-cell sm:px-4">Mkt Cap</th>
-                    <th className="hidden w-[10%] px-3 py-3 text-right font-semibold 2xl:table-cell sm:px-4">P/E</th>
                     <th className="hidden w-[14%] px-3 py-3 text-right font-semibold lg:table-cell sm:px-4">Owned</th>
-                    <th className="hidden w-[14%] px-3 py-3 text-right font-semibold xl:table-cell sm:px-4">Value</th>
-                    <th className="w-[32%] px-3 py-3 text-right font-semibold sm:w-[18%] sm:px-4">Trade</th>
+                    <th className="hidden w-[16%] px-3 py-3 text-right font-semibold xl:table-cell sm:px-4">Value</th>
+                    <th className="w-[30%] px-3 py-3 text-right font-semibold sm:w-[18%] sm:px-4">Trade</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -360,8 +359,6 @@ function MarketRow({ symbol, quote, position, loading, selected, onOpen, onBuy, 
       <td className={cn("px-3 py-4 text-right font-semibold tabular-nums sm:px-4", up ? "text-accent-green" : "text-accent-red")}>
         {changePct == null ? "-" : formatPct(changePct)}
       </td>
-      <td className="hidden px-3 py-4 text-right tabular-nums text-gray-300 xl:table-cell sm:px-4">{compactMoney(quote?.marketCap)}</td>
-      <td className="hidden px-3 py-4 text-right tabular-nums text-gray-300 2xl:table-cell sm:px-4">{metric(quote?.trailingPE)}</td>
       <td className="hidden px-3 py-4 text-right tabular-nums text-gray-300 lg:table-cell sm:px-4">{position ? Number(position.qty).toFixed(4) : "-"}</td>
       <td className="hidden px-3 py-4 text-right tabular-nums text-gray-300 xl:table-cell sm:px-4">{position ? formatUSD(Number(position.market_value)) : "-"}</td>
       <td className="px-3 py-4 text-right sm:px-4" onClick={(e) => e.stopPropagation()}>
@@ -411,7 +408,7 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
 }) {
   const [quote, setQuote] = useState<Quote | null>(initialQuote);
   const [bars, setBars] = useState<Bar[]>([]);
-  const [chartRange, setChartRange] = useState("1mo");
+  const [chartRange, setChartRange] = useState("1h");
   const [chartLoading, setChartLoading] = useState(false);
   const [side, setSide] = useState<Side>(initialSide);
   const [mode, setMode] = useState<"dollars" | "shares">("shares");
@@ -670,7 +667,7 @@ function PriceChart({ bars, isUp, range }: { bars: Bar[]; isUp: boolean; range: 
           contentStyle={{ background: "#0c0f12", border: "1px solid #20262d", borderRadius: 8, fontSize: 12 }}
           labelFormatter={(t) => {
             const d = new Date(Number(t));
-            return range === "1d" ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString([], { month: "short", day: "numeric" });
+            return range === "1h" || range === "1d" ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString([], { month: "short", day: "numeric" });
           }}
           formatter={(v: number) => [formatUSD(v), "Price"]}
         />

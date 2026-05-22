@@ -37,7 +37,7 @@ const colors = {
 
 type Session = { access_token: string; refresh_token: string; expires_at?: number };
 type Tab = "dashboard" | "market" | "trade" | "leaders" | "keys";
-type ChartRange = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y";
+type ChartRange = "1h" | "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y";
 type Account = { display_name: string; cash: number; equity: number; starting_cash: number; positions_value: number };
 type Position = { symbol: string; qty: number; avg_entry_price: number; current_price: number; market_value: number; unrealized_pl: number; unrealized_plpc: number };
 type Order = { id: string; symbol: string; qty: number; side: string; type: string; status: string; filled_avg_price?: number };
@@ -69,7 +69,7 @@ type Leader = { account_id: string; display_name: string; equity: number; starti
 type ApiKey = { id: string; key_id: string; label?: string; revoked_at?: string | null; created_at: string };
 
 const watchlist = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL", "META", "SPY"];
-const chartRanges: ChartRange[] = ["1d", "5d", "1mo", "3mo", "6mo", "1y"];
+const chartRanges: ChartRange[] = ["1h", "1d", "5d", "1mo", "3mo", "6mo", "1y"];
 const refreshMsByTab: Record<Tab, number> = {
   dashboard: 12_000,
   market: 6_000,

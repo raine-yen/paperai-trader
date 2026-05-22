@@ -263,13 +263,14 @@ export async function getPrice(symbol: string): Promise<number | null> {
 
 export async function getHistoricalBars(
   symbol: string,
-  interval: "1d" | "1h" | "5m" | "15m" = "1d",
-  range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" = "1mo"
+  interval: "1d" | "1h" | "5m" | "15m" | "1m" = "1d",
+  range: "1h" | "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" = "1mo"
 ): Promise<Array<{ t: string; o: number; h: number; l: number; c: number; v: number }>> {
   const upper = symbol.toUpperCase();
-  const intervalMap: Record<string, string> = { "1d": "1d", "1h": "1h", "5m": "5m", "15m": "15m" };
+  const intervalMap: Record<string, string> = { "1d": "1d", "1h": "1h", "5m": "5m", "15m": "15m", "1m": "1m" };
   const yInterval = intervalMap[interval] ?? "1d";
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?interval=${yInterval}&range=${range}`;
+  const yahooRange = range === "1h" ? "1d" : range;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?interval=${yInterval}&range=${yahooRange}`;
   try {
     const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 0 } });
     if (!res.ok) return [];
@@ -278,6 +279,7 @@ export async function getHistoricalBars(
     if (!result) return [];
     const timestamps: number[] = result.timestamp ?? [];
     const ohlcv = result.indicators?.quote?.[0] ?? {};
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
     return timestamps
       .map((t: number, i: number) => ({
         t: new Date(t * 1000).toISOString(),
@@ -287,6 +289,7 @@ export async function getHistoricalBars(
         c: Number(ohlcv.close?.[i] ?? 0),
         v: Number(ohlcv.volume?.[i] ?? 0),
       }))
+      .filter((b) => range !== "1h" || new Date(b.t).getTime() >= oneHourAgo)
       .filter((b) => b.c > 0);
   } catch {
     return [];

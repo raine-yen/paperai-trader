@@ -147,6 +147,21 @@ create table if not exists equity_snapshots (
 create index if not exists idx_snapshots_account on equity_snapshots(account_id, created_at desc);
 
 -- =====================================================================
+-- REWARD CLAIMS — one cash reward per account, quest, and two-week cycle
+-- =====================================================================
+create table if not exists reward_claims (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references accounts(id) on delete cascade,
+  quest_id text not null,
+  cycle_id text not null,
+  amount numeric not null default 200,
+  claimed_at timestamptz not null default now(),
+  unique(account_id, quest_id, cycle_id)
+);
+
+create index if not exists idx_reward_claims_account on reward_claims(account_id, cycle_id);
+
+-- =====================================================================
 -- ROW LEVEL SECURITY — users only see their own data via UI
 -- (API key auth bypasses RLS via service-role key)
 -- =====================================================================
@@ -157,6 +172,7 @@ alter table positions enable row level security;
 alter table fills enable row level security;
 alter table equity_snapshots enable row level security;
 alter table competitions enable row level security;
+alter table reward_claims enable row level security;
 
 drop policy if exists "users see own accounts" on accounts;
 create policy "users see own accounts" on accounts for select using (user_id = auth.uid());
@@ -191,6 +207,11 @@ create policy "users see own fills" on fills for select using (
 drop policy if exists "users see own snapshots" on equity_snapshots;
 create policy "users see own snapshots" on equity_snapshots for select using (
   exists (select 1 from accounts a where a.id = equity_snapshots.account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users see own reward claims" on reward_claims;
+create policy "users see own reward claims" on reward_claims for select using (
+  exists (select 1 from accounts a where a.id = reward_claims.account_id and a.user_id = auth.uid())
 );
 
 drop policy if exists "anyone sees competitions" on competitions;

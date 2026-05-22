@@ -8,16 +8,16 @@ export async function GET(req: NextRequest) {
 
   if (!symbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
 
-  const validRanges = ["1d", "5d", "1mo", "3mo", "6mo", "1y"];
+  const validRanges = ["1h", "1d", "5d", "1mo", "3mo", "6mo", "1y"];
   if (!validRanges.includes(range)) {
     return NextResponse.json({ error: "invalid range" }, { status: 400 });
   }
 
-  const interval: "1d" | "5m" = range === "1d" ? "5m" : "1d";
+  const interval: "1d" | "1m" = range === "1h" || range === "1d" ? "1m" : "1d";
   const bars = await getHistoricalBars(
     symbol,
     interval,
-    range as "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y"
+    range as "1h" | "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y"
   );
 
   return NextResponse.json({ symbol, range, bars });

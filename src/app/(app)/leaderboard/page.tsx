@@ -146,10 +146,10 @@ export default function LeaderboardPage() {
                             onClick={() => revealAssets(entry.account_id)}
                             disabled={peekLoading === entry.account_id}
                             className="btn-ghost border border-bg-border px-3 py-1.5 text-xs"
-                            title="Spend $1,000 to reveal this trader's assets"
+                            title="Spend $10,000 to reveal this trader's assets"
                           >
                             {peekLoading === entry.account_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
-                            {revealed[entry.account_id] ? "Viewed" : "$1,000"}
+                            {revealed[entry.account_id] ? "Viewed" : "$10,000"}
                           </button>
                         </td>
                       </tr>

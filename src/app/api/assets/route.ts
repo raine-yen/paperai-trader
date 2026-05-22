@@ -3,7 +3,7 @@ import { fetchYahooPrices } from "@/lib/prices";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 
-const PEEK_FEE = 1000;
+const PEEK_FEE = 10000;
 
 export async function POST(req: NextRequest) {
   const sb = await supabaseServer();
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "you already own those assets" }, { status: 400 });
   }
   if (Number(viewer.cash) < PEEK_FEE) {
-    return NextResponse.json({ error: "not enough cash to spend $1,000" }, { status: 422 });
+    return NextResponse.json({ error: "not enough cash to spend $10,000" }, { status: 422 });
   }
 
   const { data: target } = await db

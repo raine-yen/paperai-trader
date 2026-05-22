@@ -39,10 +39,22 @@ interface MeData {
   snapshots: Array<{ equity: number; created_at: string }>;
 }
 
+type Quest = {
+  id: string;
+  title: string;
+  description: string;
+  progress: number;
+  goal: number;
+  reward: string;
+  decimals?: number;
+};
+
 export default function Dashboard() {
   const [data, setData] = useState<MeData | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [claimedRewards, setClaimedRewards] = useState<string[]>([]);
+  const [claimingReward, setClaimingReward] = useState<string | null>(null);
+  const [rewardMessage, setRewardMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -74,6 +86,22 @@ export default function Dashboard() {
     setClaimedRewards(raw ? JSON.parse(raw) : []);
   }, [data?.account?.id]);
 
+  useEffect(() => {
+    let active = true;
+    async function fetchRewards() {
+      const r = await fetch("/api/rewards", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (active && Array.isArray(j.claims)) {
+        setClaimedRewards((prev) => Array.from(new Set([...prev, ...j.claims])));
+      }
+    }
+    fetchRewards();
+    return () => {
+      active = false;
+    };
+  }, [data?.account?.id]);
+
   if (!data) return <DashboardSkeleton />;
   if (!data.account) {
     return (
@@ -89,19 +117,44 @@ export default function Dashboard() {
   const totalReturnPct = account.starting_cash > 0 ? (totalReturn / account.starting_cash) * 100 : 0;
   const isUp = totalReturn >= 0;
   const allocationBase = Math.max(account.equity, 1);
+  const rewardCycle = getRewardCycle();
   const quests = getQuests({
     totalReturnPct,
     holdings: positions.length,
     orders: orders.length,
     scheduledOrders: orders.filter((o) => !!o.scheduled_at).length,
     cash: account.cash,
-  });
+  }, rewardCycle.week);
 
-  function claimReward(id: string) {
-    if (claimedRewards.includes(id)) return;
-    const next = [...claimedRewards, id];
+  async function claimReward(quest: { id: string }) {
+    const claimKey = `${rewardCycle.id}:${quest.id}`;
+    if (claimedRewards.includes(claimKey)) return;
+    setClaimingReward(claimKey);
+    setRewardMessage("");
+    const r = await fetch("/api/rewards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quest_id: quest.id, cycle_id: rewardCycle.id }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      setRewardMessage(j.error ?? "Could not claim reward");
+      setClaimingReward(null);
+      return;
+    }
+    const next = [...claimedRewards, claimKey];
     setClaimedRewards(next);
     window.localStorage.setItem(`paper-trader:rewards:${account.id}`, JSON.stringify(next));
+    setData((prev) => prev?.account ? {
+      ...prev,
+      account: {
+        ...prev.account,
+        cash: Number(j.cash ?? prev.account.cash + 200),
+        equity: Number(prev.account.equity) + Number(j.amount ?? 200),
+      },
+    } : prev);
+    setRewardMessage(`Claimed ${formatUSD(Number(j.amount ?? 200))}.`);
+    setClaimingReward(null);
   }
 
   return (
@@ -173,13 +226,15 @@ export default function Dashboard() {
             </div>
             <h2 className="mt-2 font-semibold">Goals and claimable rewards</h2>
           </div>
-          <div className="text-sm text-gray-400">{claimedRewards.length}/{quests.length} rewards claimed</div>
+          <div className="text-sm text-gray-400">Week {rewardCycle.week} cycle - {quests.filter((q) => claimedRewards.includes(`${rewardCycle.id}:${q.id}`)).length}/{quests.length} claimed</div>
         </div>
+        {rewardMessage && <div className="border-b border-bg-border bg-bg-elevated px-5 py-3 text-sm font-semibold text-gray-300">{rewardMessage}</div>}
         <div className="grid gap-4 p-5 lg:grid-cols-3">
           {quests.map((quest) => {
             const pct = Math.min(100, (quest.progress / quest.goal) * 100);
             const complete = quest.progress >= quest.goal;
-            const claimed = claimedRewards.includes(quest.id);
+            const claimKey = `${rewardCycle.id}:${quest.id}`;
+            const claimed = claimedRewards.includes(claimKey);
             return (
               <div key={quest.id} className="surface p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -206,8 +261,8 @@ export default function Dashboard() {
                     <Gift className="mr-1 inline h-3.5 w-3.5" />
                     {quest.reward}
                   </div>
-                  <button type="button" onClick={() => claimReward(quest.id)} disabled={!complete || claimed} className="btn-primary px-3 py-1.5 text-xs">
-                    {claimed ? "Claimed" : "Claim"}
+                  <button type="button" onClick={() => claimReward(quest)} disabled={!complete || claimed || claimingReward === claimKey} className="btn-primary px-3 py-1.5 text-xs">
+                    {claimingReward === claimKey ? "Claiming" : claimed ? "Claimed" : "Claim"}
                   </button>
                 </div>
               </div>
@@ -306,15 +361,23 @@ export default function Dashboard() {
   );
 }
 
-function getQuests(stats: { totalReturnPct: number; holdings: number; orders: number; scheduledOrders: number; cash: number }) {
-  return [
+function getRewardCycle(now = new Date()) {
+  const start = Date.UTC(2026, 0, 5);
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const weekIndex = Math.max(0, Math.floor((today - start) / (7 * 24 * 60 * 60 * 1000)));
+  const week = (weekIndex % 2) + 1;
+  return { id: `2026-w${weekIndex + 1}-set${week}`, week };
+}
+
+function getQuests(stats: { totalReturnPct: number; holdings: number; orders: number; scheduledOrders: number; cash: number }, week: number): Quest[] {
+  const weekOne: Quest[] = [
     {
       id: "first-order",
       title: "First Bell",
       description: "Place your first trade.",
       progress: stats.orders,
       goal: 1,
-      reward: "Rookie Trader badge",
+      reward: "$200 cash bonus",
     },
     {
       id: "three-holdings",
@@ -322,7 +385,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Hold three different symbols at once.",
       progress: stats.holdings,
       goal: 3,
-      reward: "Sector Scout badge",
+      reward: "$200 cash bonus",
     },
     {
       id: "green-portfolio",
@@ -331,15 +394,17 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       progress: Math.max(0, stats.totalReturnPct),
       goal: 2,
       decimals: 1,
-      reward: "Momentum ribbon",
+      reward: "$200 cash bonus",
     },
+  ];
+  const weekTwo: Quest[] = [
     {
-      id: "timekeeper",
-      title: "Timekeeper",
-      description: "Create one scheduled price order.",
-      progress: stats.scheduledOrders,
-      goal: 1,
-      reward: "Clockwork Strategist badge",
+      id: "active-trader",
+      title: "Active Trader",
+      description: "Submit five total orders.",
+      progress: stats.orders,
+      goal: 5,
+      reward: "$200 cash bonus",
     },
     {
       id: "cash-buffer",
@@ -347,17 +412,18 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Keep at least $10,000 in cash.",
       progress: Math.min(stats.cash, 10000),
       goal: 10000,
-      reward: "$10K Discipline medal",
+      reward: "$200 cash bonus",
     },
     {
-      id: "active-trader",
-      title: "Active Trader",
-      description: "Submit five total orders.",
-      progress: stats.orders,
-      goal: 5,
-      reward: "Order Flow badge",
+      id: "timekeeper",
+      title: "Timekeeper",
+      description: "Create one scheduled price order.",
+      progress: stats.scheduledOrders,
+      goal: 1,
+      reward: "$200 cash bonus",
     },
   ];
+  return week === 1 ? weekOne : weekTwo;
 }
 
 function Metric({ label, value, caption, icon: Icon }: { label: string; value: string; caption?: string; icon: React.ComponentType<{ className?: string }> }) {
