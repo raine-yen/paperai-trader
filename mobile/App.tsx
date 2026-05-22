@@ -2,10 +2,11 @@ import Constants from "expo-constants";
 import { fetch } from "expo/fetch";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -29,6 +30,7 @@ import {
   KeyRound,
   LockKeyhole,
   LogOut,
+  Maximize2,
   Moon,
   Plus,
   RefreshCw,
@@ -55,22 +57,22 @@ const SESSION_REFRESH_WINDOW_SECONDS = 5 * 60;
 const darkPalette = {
   scheme: "dark",
   bg: "#050607",
-  card: "#0b0f12",
-  elevated: "#12171c",
-  soft: "#171d23",
-  border: "#222a31",
+  card: "#07090b",
+  elevated: "#0c0f12",
+  soft: "#101417",
+  border: "#171d22",
   text: "#f2f5f4",
-  muted: "#89939d",
-  faint: "#5d6872",
+  muted: "#8a9299",
+  faint: "#4d565e",
   inverse: "#050607",
   green: "#00d563",
-  greenSoft: "#072513",
+  greenSoft: "rgba(0,213,99,0.13)",
   red: "#ff5252",
-  redSoft: "#2a1012",
+  redSoft: "rgba(255,82,82,0.14)",
   blue: "#4aa3ff",
   yellow: "#f4c430",
   white: "#ffffff",
-  shadow: "rgba(0,0,0,0.35)",
+  shadow: "rgba(0,0,0,0.55)",
 } as const;
 
 const lightPalette = {
@@ -289,6 +291,10 @@ export default function App() {
   const [adminExpanded, setAdminExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const navAnim = useRef(new Animated.Value(1)).current;
+  const lastScrollY = useRef(0);
+  const expandedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedQuote = quotes[selectedSymbol];
   const ownedPosition = useMemo(
@@ -311,6 +317,15 @@ export default function App() {
       loadAdmin(false);
     }
   }, [tab, session?.access_token, adminChecked, adminLoading]);
+
+  useEffect(() => {
+    Animated.spring(navAnim, {
+      toValue: navCollapsed ? 0 : 1,
+      useNativeDriver: false,
+      friction: 9,
+      tension: 95,
+    }).start();
+  }, [navAnim, navCollapsed]);
 
   async function restoreTheme() {
     const stored = await SecureStore.getItemAsync(THEME_KEY).catch(() => null);
@@ -585,6 +600,24 @@ export default function App() {
     setTab("portfolio");
   }
 
+  function handleAppScroll(y: number) {
+    const delta = y - lastScrollY.current;
+    lastScrollY.current = y;
+    if (y < 40 || delta < -8) {
+      setNavCollapsed(false);
+      return;
+    }
+    if (delta > 10 && y > 120) setNavCollapsed(true);
+  }
+
+  function temporarilyExpandNav() {
+    setNavCollapsed(false);
+    if (expandedTimer.current) clearTimeout(expandedTimer.current);
+    expandedTimer.current = setTimeout(() => {
+      if (lastScrollY.current > 160) setNavCollapsed(true);
+    }, 2600);
+  }
+
   if (checking) {
     return (
       <CenterShell theme={theme} themeMode={themeMode}>
@@ -619,6 +652,8 @@ export default function App() {
       <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
+        scrollEventThrottle={16}
+        onScroll={(event) => handleAppScroll(event.nativeEvent.contentOffset.y)}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refreshAll} tintColor={theme.green} />}
         contentContainerStyle={{ padding: 18, gap: 18, paddingTop: 58, paddingBottom: 112 }}
       >
@@ -679,7 +714,7 @@ export default function App() {
           />
         )}
       </ScrollView>
-      <BottomNav theme={theme} active={tab} setActive={setTab} />
+      <BottomNav theme={theme} active={tab} setActive={setTab} collapsed={navCollapsed} animation={navAnim} expand={temporarilyExpandNav} />
     </View>
   );
 }
@@ -845,6 +880,8 @@ function PortfolioScreen({
         />
       </View>
 
+      <PortfolioPulse theme={theme} account={account} positions={positions} />
+
       {topHolding && (
         <Panel theme={theme} padded>
           <View style={{ gap: 12 }}>
@@ -958,6 +995,8 @@ function SearchScreen(props: {
         </View>
       </Panel>
 
+      <DiscoveryModules theme={theme} ownedSymbols={ownedSymbols} openStock={props.openStock} />
+
       <Panel theme={theme} padded>
         <View style={{ gap: 18 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
@@ -1064,6 +1103,132 @@ function SearchScreen(props: {
   );
 }
 
+function PortfolioPulse({ theme, account, positions }: { theme: Palette; account: Account; positions: Position[] }) {
+  const equity = Math.max(Number(account.equity) || 0, 1);
+  const cashPct = (Number(account.cash) / equity) * 100;
+  const largest = [...positions].sort((a, b) => Number(b.market_value) - Number(a.market_value))[0];
+  const concentrationPct = largest ? (Number(largest.market_value) / equity) * 100 : 0;
+  const biggestMover = [...positions].sort((a, b) => Math.abs(Number(b.unrealized_pl)) - Math.abs(Number(a.unrealized_pl)))[0];
+  const diversificationScore = Math.max(0, Math.min(100, positions.length * 14 - Math.max(0, concentrationPct - 28)));
+
+  return (
+    <Panel theme={theme} padded>
+      <View style={{ gap: 14 }}>
+        <SectionHeader theme={theme} title="Account pulse" action="Live scan" />
+        <PulseLine
+          theme={theme}
+          icon={Wallet}
+          title="Cash buffer"
+          value={`${cashPct.toFixed(1)}%`}
+          text={cashPct > 20 ? "Plenty of buying power for new ideas." : "Most capital is deployed in positions."}
+        />
+        <PulseLine
+          theme={theme}
+          icon={Maximize2}
+          title="Concentration"
+          value={largest ? `${largest.symbol} ${concentrationPct.toFixed(1)}%` : "No positions"}
+          text={concentrationPct > 35 ? "Largest holding is driving a lot of account movement." : "Exposure is reasonably spread out."}
+          tone={concentrationPct > 35 ? theme.yellow : theme.green}
+        />
+        <PulseLine
+          theme={theme}
+          icon={Activity}
+          title="Diversification"
+          value={`${Math.round(diversificationScore)}/100`}
+          text={positions.length >= 4 ? "Multiple names are balancing portfolio swings." : "Add more ideas to reduce single-stock noise."}
+        />
+        {biggestMover && (
+          <PulseLine
+            theme={theme}
+            icon={biggestMover.unrealized_pl >= 0 ? ArrowUpRight : ArrowDownRight}
+            title="Biggest mover"
+            value={`${biggestMover.symbol} ${pct(biggestMover.unrealized_plpc)}`}
+            text={`${usd(biggestMover.unrealized_pl)} unrealized P/L.`}
+            tone={biggestMover.unrealized_pl >= 0 ? theme.green : theme.red}
+          />
+        )}
+      </View>
+    </Panel>
+  );
+}
+
+function DiscoveryModules({ theme, ownedSymbols, openStock }: { theme: Palette; ownedSymbols: string[]; openStock: (symbol: string) => void }) {
+  const watchlist = unique(["NVDA", "AAPL", "MSFT", "TSLA", "SPY", ...ownedSymbols]).slice(0, 8);
+  const themes = [
+    { title: "AI leaders", symbols: ["NVDA", "MSFT", "GOOGL", "META"] },
+    { title: "Broad market", symbols: ["SPY", "QQQ", "VTI", "IWM"] },
+    { title: "Volatile names", symbols: ["TSLA", "AMD", "PLTR", "NFLX"] },
+  ];
+
+  return (
+    <Panel theme={theme} padded>
+      <View style={{ gap: 15 }}>
+        <SectionHeader theme={theme} title="Discovery desk" action="Quick access" />
+        <View style={{ gap: 8 }}>
+          <Text style={labelStyle(theme)}>Watchlist</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {watchlist.map((symbol) => (
+              <TickerChip key={symbol} theme={theme} symbol={symbol} owned={ownedSymbols.includes(symbol)} selected={false} onPress={() => openStock(symbol)} />
+            ))}
+          </View>
+        </View>
+        <View style={{ gap: 10 }}>
+          {themes.map((item) => (
+            <View key={item.title} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 2 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.text, fontSize: 15, fontWeight: "900" }}>{item.title}</Text>
+                <Text style={{ color: theme.muted, fontSize: 12 }}>{item.symbols.join(" · ")}</Text>
+              </View>
+              <Pressable onPress={() => openStock(item.symbols[0])} style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, backgroundColor: theme.greenSoft }}>
+                <Text style={{ color: theme.green, fontSize: 12, fontWeight: "900" }}>Open</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+        <View style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
+          <PulseLine
+            theme={theme}
+            icon={Eye}
+            title="Price alerts"
+            value="Ready"
+            text="Alert rules are staged here; push notifications can plug in next."
+            tone={theme.blue}
+          />
+        </View>
+      </View>
+    </Panel>
+  );
+}
+
+function PulseLine({
+  theme,
+  icon: Icon,
+  title,
+  value,
+  text,
+  tone,
+}: {
+  theme: Palette;
+  icon: IconComponent;
+  title: string;
+  value: string;
+  text: string;
+  tone?: string;
+}) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 2 }}>
+      <View style={{ width: 36, height: 36, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: theme.greenSoft }}>
+        <Icon color={tone ?? theme.green} size={18} strokeWidth={2.5} />
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={{ color: theme.text, fontSize: 15, fontWeight: "900" }}>{title}</Text>
+        <Text style={{ color: theme.muted, fontSize: 12, lineHeight: 17 }}>{text}</Text>
+      </View>
+      <Text style={{ color: tone ?? theme.text, fontSize: 14, fontWeight: "900", fontVariant: ["tabular-nums"], textAlign: "right" }}>{value}</Text>
+    </View>
+  );
+}
+
 function CompetitionsScreen({ theme, leaders, loading }: { theme: Palette; leaders: Leader[]; loading: boolean }) {
   const top = leaders.slice(0, 3);
   const avgReturn = leaders.length ? leaders.reduce((sum, entry) => sum + Number(entry.return_pct), 0) / leaders.length : 0;
@@ -1095,6 +1260,15 @@ function CompetitionsScreen({ theme, leaders, loading }: { theme: Palette; leade
           ))}
         </View>
       )}
+
+      <Panel theme={theme} padded>
+        <View style={{ gap: 14 }}>
+          <SectionHeader theme={theme} title="Competition hub" action="Next-ready" />
+          <PulseLine theme={theme} icon={Trophy} title="Season format" value="Global" text="Current standings use live equity and can split into club seasons later." />
+          <PulseLine theme={theme} icon={Eye} title="Trader detail" value="Tap rows" text="Rankings are structured for deeper trader profile and holdings views." tone={theme.blue} />
+          <PulseLine theme={theme} icon={Sparkles} title="Achievements" value="Planned" text="Badges for first trade, positive return, diversification, and activity fit here." tone={theme.yellow} />
+        </View>
+      </Panel>
 
       <Panel theme={theme} padded={false}>
         <SectionHeader theme={theme} title="Rankings" padded action={loading ? "Updating" : "Live"} />
@@ -1289,16 +1463,37 @@ function AdminPanelMobile({
   );
 }
 
-function BottomNav({ theme, active, setActive }: { theme: Palette; active: Tab; setActive: (tab: Tab) => void }) {
+function BottomNav({
+  theme,
+  active,
+  setActive,
+  collapsed,
+  animation,
+  expand,
+}: {
+  theme: Palette;
+  active: Tab;
+  setActive: (tab: Tab) => void;
+  collapsed: boolean;
+  animation: Animated.Value;
+  expand: () => void;
+}) {
   const items: Array<{ tab: Tab; label: string; icon: IconComponent }> = [
     { tab: "portfolio", label: "Portfolio", icon: BriefcaseBusiness },
     { tab: "search", label: "Search", icon: Search },
     { tab: "competitions", label: "Compete", icon: Trophy },
     { tab: "settings", label: "Settings", icon: Settings },
   ];
+  const activeItem = items.find((item) => item.tab === active) ?? items[0];
+  const ActiveIcon = activeItem.icon;
+  const expandedOpacity = animation;
+  const collapsedOpacity = animation.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  const expandedScale = animation.interpolate({ inputRange: [0, 1], outputRange: [0.84, 1] });
+  const collapsedScale = animation.interpolate({ inputRange: [0, 1], outputRange: [1, 0.7] });
 
   return (
-    <View
+    <>
+    <Animated.View
       style={{
         position: "absolute",
         left: 14,
@@ -1312,7 +1507,10 @@ function BottomNav({ theme, active, setActive }: { theme: Palette; active: Tab; 
         borderWidth: 1,
         borderColor: theme.border,
         boxShadow: `0 16px 42px ${theme.shadow}`,
+        opacity: expandedOpacity,
+        transform: [{ scale: expandedScale }],
       }}
+      pointerEvents={collapsed ? "none" : "auto"}
     >
       {items.map((item) => {
         const selected = item.tab === active;
@@ -1320,7 +1518,10 @@ function BottomNav({ theme, active, setActive }: { theme: Palette; active: Tab; 
         return (
           <Pressable
             key={item.tab}
-            onPress={() => setActive(item.tab)}
+            onPress={() => {
+              expand();
+              setActive(item.tab);
+            }}
             style={{
               flex: 1,
               minHeight: 54,
@@ -1336,7 +1537,33 @@ function BottomNav({ theme, active, setActive }: { theme: Palette; active: Tab; 
           </Pressable>
         );
       })}
-    </View>
+    </Animated.View>
+
+    <Animated.View
+      style={{
+        position: "absolute",
+        right: 18,
+        bottom: 24,
+        width: 58,
+        height: 58,
+        borderRadius: 22,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: theme.scheme === "dark" ? "rgba(7,9,11,0.92)" : "rgba(255,255,255,0.95)",
+        borderWidth: 1,
+        borderColor: theme.scheme === "dark" ? "rgba(255,255,255,0.08)" : theme.border,
+        boxShadow: `0 14px 36px ${theme.shadow}`,
+        opacity: collapsedOpacity,
+        transform: [{ scale: collapsedScale }],
+      }}
+      pointerEvents={collapsed ? "auto" : "none"}
+    >
+      <Pressable onPress={expand} style={{ width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }}>
+        <View style={{ position: "absolute", left: 7, right: 7, top: 7, bottom: 7, borderRadius: 18, backgroundColor: theme.greenSoft }} />
+        <ActiveIcon color={theme.green} size={24} strokeWidth={2.8} />
+      </Pressable>
+    </Animated.View>
+    </>
   );
 }
 
@@ -1365,16 +1592,17 @@ function SectionHeader({ theme, title, action, padded }: { theme: Palette; title
 }
 
 function Panel({ theme, children, padded }: { theme: Palette; children: React.ReactNode; padded?: boolean }) {
+  const dark = theme.scheme === "dark";
   return (
     <View
       style={{
-        backgroundColor: theme.card,
+        backgroundColor: dark ? "transparent" : theme.card,
         borderColor: theme.border,
-        borderWidth: 1,
-        borderRadius: 18,
+        borderWidth: dark ? 0 : 1,
+        borderRadius: dark ? 0 : 18,
         padding: padded ? 16 : 0,
         overflow: "hidden",
-        boxShadow: `0 8px 28px ${theme.shadow}`,
+        boxShadow: dark ? "none" : `0 8px 28px ${theme.shadow}`,
       }}
     >
       {children}
@@ -1383,8 +1611,9 @@ function Panel({ theme, children, padded }: { theme: Palette; children: React.Re
 }
 
 function MetricTile({ theme, label, value, icon: Icon, tone }: { theme: Palette; label: string; value: string; icon: IconComponent; tone?: string }) {
+  const dark = theme.scheme === "dark";
   return (
-    <View style={{ flex: 1, minHeight: 82, borderRadius: 15, backgroundColor: theme.elevated, borderWidth: 1, borderColor: theme.border, padding: 13, gap: 9 }}>
+    <View style={{ flex: 1, minHeight: 82, borderRadius: dark ? 0 : 15, backgroundColor: dark ? "transparent" : theme.elevated, borderWidth: dark ? 0 : 1, borderColor: theme.border, padding: 13, gap: 9 }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Text style={labelStyle(theme)}>{label}</Text>
         <Icon color={theme.faint} size={16} strokeWidth={2.4} />
