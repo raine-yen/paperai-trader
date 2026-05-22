@@ -793,7 +793,7 @@ function PortfolioScreen({
   if (!account) {
     return (
       <>
-        <ScreenTitle theme={theme} label="Portfolio" title="Your account" subtitle="Once your trading account is active, holdings and activity appear here." />
+        <ScreenTitle theme={theme} label="Portfolio" title={timeGreeting()} subtitle="Once your trading account is active, holdings and activity appear here." />
         <Panel theme={theme} padded>
           <EmptyState theme={theme} title="No trading account found" text="Ask your club admin to activate your paper account." />
         </Panel>
@@ -812,8 +812,8 @@ function PortfolioScreen({
       <ScreenTitle
         theme={theme}
         label="Portfolio"
-        title="Account home"
-        subtitle={account.display_name}
+        title={timeGreeting(account.display_name)}
+        subtitle="Account home"
         right={
           <IconButton theme={theme} icon={RefreshCw} onPress={refresh} disabled={loading} />
         }
@@ -1857,4 +1857,14 @@ function pct(n: number | string | undefined | null) {
 
 function shares(n: number | string | undefined | null) {
   return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function timeGreeting(name?: string | null) {
+  const hour = new Date().getHours();
+  const period = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  const firstSpace = trimmed.indexOf(" ");
+  const cleanName = firstSpace === -1 ? trimmed : trimmed.slice(0, firstSpace);
+  if (!cleanName) return `Good ${period}`;
+  return `Good ${period}, ${cleanName}`;
 }
