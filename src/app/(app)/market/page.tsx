@@ -8,8 +8,25 @@ import { COMPANY_NAMES, getCompanyName, MARKET_GROUPS } from "@/lib/market-data"
 import { cn, formatPct, formatUSD } from "@/lib/utils";
 
 interface Quote {
+  symbol?: string;
   price: number;
   prevClose: number | null;
+  name?: string | null;
+  exchange?: string | null;
+  marketCap?: number | null;
+  trailingPE?: number | null;
+  forwardPE?: number | null;
+  epsTrailingTwelveMonths?: number | null;
+  volume?: number | null;
+  averageVolume?: number | null;
+  open?: number | null;
+  dayHigh?: number | null;
+  dayLow?: number | null;
+  yearHigh?: number | null;
+  yearLow?: number | null;
+  change?: number | null;
+  changePercent?: number | null;
+  updatedAt?: string;
 }
 
 interface Position {
@@ -53,7 +70,7 @@ export default function MarketPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const positionBySymbol = useMemo(() => new Map(positions.map((p) => [p.symbol, p])), [positions]);
+  const positionBySymbol = useMemo(() => new Map(positions.map((p) => [p.symbol.toUpperCase(), p])), [positions]);
   const categories = useMemo(() => ["Owned", ...Object.keys(MARKET_GROUPS)], []);
   const symbols = useMemo(() => {
     if (activeCategory === "Owned") return positions.map((p) => p.symbol).sort();
@@ -74,22 +91,37 @@ export default function MarketPage() {
     const toFetch = forceRefresh ? unique : unique.filter((s) => !quotes.has(s));
     if (toFetch.length === 0) return;
     setLoadingSymbols(new Set(toFetch));
-    await Promise.all(
-      toFetch.map(async (sym) => {
-        try {
+    try {
+      const r = await fetch(`/api/quotes?symbols=${encodeURIComponent(toFetch.join(","))}`, { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      const returned = new Set<string>();
+      setQuotes((prev) => {
+        const next = new Map(prev);
+        for (const raw of j.quotes ?? []) {
+          const quote = parseQuote(raw);
+          if (!quote.symbol) continue;
+          returned.add(quote.symbol);
+          next.set(quote.symbol, quote);
+        }
+        return next;
+      });
+      const missing = toFetch.filter((sym) => !returned.has(sym));
+      await Promise.all(
+        missing.map(async (sym) => {
           const r = await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`, { cache: "no-store" });
           if (!r.ok) return;
-          const j = await r.json();
-          setQuotes((prev) => new Map(prev).set(sym, { price: Number(j.price), prevClose: j.prevClose == null ? null : Number(j.prevClose) }));
-        } finally {
-          setLoadingSymbols((prev) => {
-            const next = new Set(prev);
-            next.delete(sym);
-            return next;
-          });
-        }
-      })
-    );
+          const quote = parseQuote(await r.json(), sym);
+          setQuotes((prev) => new Map(prev).set(sym, quote));
+        })
+      );
+    } finally {
+      setLoadingSymbols((prev) => {
+        const next = new Set(prev);
+        toFetch.forEach((sym) => next.delete(sym));
+        return next;
+      });
+    }
   }, [quotes]);
 
   useEffect(() => {
@@ -133,7 +165,7 @@ export default function MarketPage() {
         return;
       }
       const j = await r.json();
-      const quote = { price: Number(j.price), prevClose: j.prevClose == null ? null : Number(j.prevClose) };
+      const quote = parseQuote(j, sym);
       setQuotes((prev) => new Map(prev).set(sym, quote));
       setSearchResult({ symbol: sym, quote });
     }, 350);
@@ -220,12 +252,14 @@ export default function MarketPage() {
             <div className="p-12 text-center text-sm text-gray-500">No owned positions yet. Switch to Popular to find a trade.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[780px] text-sm">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-bg-soft text-xs uppercase tracking-wider text-gray-500">
                   <tr>
                     <th className="px-4 py-3 text-left font-semibold">Asset</th>
                     <th className="px-4 py-3 text-right font-semibold">Price</th>
                     <th className="px-4 py-3 text-right font-semibold">Today</th>
+                    <th className="px-4 py-3 text-right font-semibold">Mkt Cap</th>
+                    <th className="px-4 py-3 text-right font-semibold">P/E</th>
                     <th className="px-4 py-3 text-right font-semibold">Owned</th>
                     <th className="px-4 py-3 text-right font-semibold">Value</th>
                     <th className="px-4 py-3 text-right font-semibold">Trade</th>
@@ -303,8 +337,8 @@ function MarketRow({ symbol, quote, position, loading, selected, onOpen, onBuy, 
   onBuy: () => void;
   onSell: () => void;
 }) {
-  const changePct = quote?.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null;
-  const change = quote?.prevClose ? quote.price - quote.prevClose : null;
+  const changePct = quote?.changePercent ?? (quote?.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null);
+  const change = quote?.change ?? (quote?.prevClose ? quote.price - quote.prevClose : null);
   const up = change == null || change >= 0;
   return (
     <tr className={cn("ticker-row group cursor-pointer", selected && "bg-bg-elevated")} onClick={onOpen}>
@@ -326,14 +360,19 @@ function MarketRow({ symbol, quote, position, loading, selected, onOpen, onBuy, 
       <td className={cn("px-4 py-4 text-right font-semibold tabular-nums", up ? "text-accent-green" : "text-accent-red")}>
         {changePct == null ? "-" : formatPct(changePct)}
       </td>
+      <td className="px-4 py-4 text-right tabular-nums text-gray-300">{compactMoney(quote?.marketCap)}</td>
+      <td className="px-4 py-4 text-right tabular-nums text-gray-300">{metric(quote?.trailingPE)}</td>
       <td className="px-4 py-4 text-right tabular-nums text-gray-300">{position ? Number(position.qty).toFixed(4) : "-"}</td>
       <td className="px-4 py-4 text-right tabular-nums text-gray-300">{position ? formatUSD(Number(position.market_value)) : "-"}</td>
       <td className="px-4 py-4 text-right" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
           <button className="rounded-md bg-accent-green px-3 py-1.5 text-xs font-bold text-black hover:bg-green-300" onClick={onBuy}>Buy</button>
           <button
-            className="rounded-md border border-bg-border px-3 py-1.5 text-xs font-bold text-gray-300 hover:border-accent-red hover:text-accent-red disabled:cursor-not-allowed disabled:opacity-35"
-            disabled={!position}
+            className={cn(
+              "rounded-md border border-bg-border px-3 py-1.5 text-xs font-bold transition-colors hover:border-accent-red hover:text-accent-red",
+              position ? "text-gray-300" : "text-gray-500"
+            )}
+            title={position ? `Sell ${symbol}` : `Open ${symbol} sell ticket`}
             onClick={onSell}
           >
             Sell
@@ -345,7 +384,7 @@ function MarketRow({ symbol, quote, position, loading, selected, onOpen, onBuy, 
 }
 
 function QuoteLine({ symbol, quote, ownedQty }: { symbol: string; quote: Quote; ownedQty?: number }) {
-  const changePct = quote.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null;
+  const changePct = quote.changePercent ?? (quote.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null);
   return (
     <div className="flex items-center justify-between gap-4">
       <div>
@@ -392,7 +431,7 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
     fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
-        const next = { price: Number(j.price), prevClose: j.prevClose == null ? null : Number(j.prevClose) };
+        const next = parseQuote(j, symbol);
         setQuote(next);
         setLimitPrice(next.price.toFixed(2));
       })
@@ -415,8 +454,8 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
   const numAmount = Number(amount) || 0;
   const desiredShares = mode === "dollars" ? (price > 0 ? numAmount / price : 0) : numAmount;
   const notional = desiredShares * price;
-  const change = quote?.prevClose ? price - quote.prevClose : null;
-  const changePct = quote?.prevClose ? (change! / quote.prevClose) * 100 : null;
+  const change = quote?.change ?? (quote?.prevClose ? price - quote.prevClose : null);
+  const changePct = quote?.changePercent ?? (quote?.prevClose ? (change! / quote.prevClose) * 100 : null);
   const isUp = change == null || change >= 0;
   const sellTooMuch = side === "sell" && desiredShares > ownedQty + 0.00001;
   const cannotSell = side === "sell" && ownedQty <= 0;
@@ -511,6 +550,13 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
         <div className="grid grid-cols-2 gap-3">
           <MiniMetric label="Buying power" value={formatUSD(cash)} tone="text-accent-green" />
           <MiniMetric label="Owned value" value={formatUSD(ownedValue)} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <MiniMetric label="Market cap" value={compactMoney(quote?.marketCap)} />
+          <MiniMetric label="P/E ratio" value={metric(quote?.trailingPE)} />
+          <MiniMetric label="Volume" value={compactNumber(quote?.volume)} />
+          <MiniMetric label="52W range" value={rangeLabel(quote?.yearLow, quote?.yearHigh)} />
         </div>
 
         {position && (
@@ -641,4 +687,48 @@ function SummaryRow({ label, value, bold, tone }: { label: string; value: string
       <span className={cn("text-right tabular-nums", bold ? "font-bold text-white" : "text-gray-300", tone)}>{value}</span>
     </div>
   );
+}
+
+function parseQuote(raw: Partial<Quote>, fallbackSymbol?: string): Quote {
+  return {
+    symbol: (raw.symbol ?? fallbackSymbol)?.toUpperCase(),
+    price: Number(raw.price),
+    prevClose: raw.prevClose == null ? null : Number(raw.prevClose),
+    name: raw.name ?? null,
+    exchange: raw.exchange ?? null,
+    marketCap: raw.marketCap == null ? null : Number(raw.marketCap),
+    trailingPE: raw.trailingPE == null ? null : Number(raw.trailingPE),
+    forwardPE: raw.forwardPE == null ? null : Number(raw.forwardPE),
+    epsTrailingTwelveMonths: raw.epsTrailingTwelveMonths == null ? null : Number(raw.epsTrailingTwelveMonths),
+    volume: raw.volume == null ? null : Number(raw.volume),
+    averageVolume: raw.averageVolume == null ? null : Number(raw.averageVolume),
+    open: raw.open == null ? null : Number(raw.open),
+    dayHigh: raw.dayHigh == null ? null : Number(raw.dayHigh),
+    dayLow: raw.dayLow == null ? null : Number(raw.dayLow),
+    yearHigh: raw.yearHigh == null ? null : Number(raw.yearHigh),
+    yearLow: raw.yearLow == null ? null : Number(raw.yearLow),
+    change: raw.change == null ? null : Number(raw.change),
+    changePercent: raw.changePercent == null ? null : Number(raw.changePercent),
+    updatedAt: raw.updatedAt,
+  };
+}
+
+function compactNumber(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 2 }).format(value);
+}
+
+function compactMoney(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return `$${compactNumber(value)}`;
+}
+
+function metric(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return value.toFixed(2);
+}
+
+function rangeLabel(low: number | null | undefined, high: number | null | undefined) {
+  if (low == null || high == null || !Number.isFinite(low) || !Number.isFinite(high)) return "-";
+  return `${formatUSD(low)} - ${formatUSD(high)}`;
 }
