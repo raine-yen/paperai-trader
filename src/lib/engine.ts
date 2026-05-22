@@ -69,22 +69,39 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     }
   }
 
-  const { data: orderRow, error: orderErr } = await db
+  const baseOrderInsert = {
+    account_id: input.account.id,
+    symbol,
+    qty,
+    side: input.side,
+    type: input.type,
+    limit_price: input.type === "limit" ? input.limit_price : null,
+    time_in_force: input.time_in_force ?? "gtc",
+    status: "new",
+    client_order_id: input.client_order_id ?? null,
+  };
+
+  let { data: orderRow, error: orderErr } = await db
     .from("orders")
     .insert({
-      account_id: input.account.id,
-      symbol,
-      qty,
-      side: input.side,
-      type: input.type,
-      limit_price: input.type === "limit" ? input.limit_price : null,
-      time_in_force: input.time_in_force ?? "gtc",
-      status: "new",
-      client_order_id: input.client_order_id ?? null,
+      ...baseOrderInsert,
       scheduled_at: scheduledAt ? scheduledAt.toISOString() : null,
     })
     .select("*")
     .single();
+
+  if (orderErr && isMissingScheduledAtError(orderErr.message)) {
+    if (scheduledAt) {
+      return { ok: false, error: "scheduled orders are unavailable until the database migration finishes" };
+    }
+    const retry = await db
+      .from("orders")
+      .insert(baseOrderInsert)
+      .select("*")
+      .single();
+    orderRow = retry.data;
+    orderErr = retry.error;
+  }
 
   if (orderErr || !orderRow) {
     return { ok: false, error: orderErr?.message ?? "failed to create order" };
@@ -226,12 +243,27 @@ export async function fillOrder(order: Order, price: number): Promise<Order | nu
 export async function tick(): Promise<{ filled: number; symbolsRefreshed: number; accountsUpdated: number }> {
   const db = supabaseAdmin();
 
-  const { data: openOrders } = await db
+  let { data: openOrders, error: openOrdersError } = await db
     .from("orders")
     .select("*")
     .eq("status", "new")
     .eq("type", "limit")
     .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()}`);
+
+  if (openOrdersError && isMissingScheduledAtError(openOrdersError.message)) {
+    const retry = await db
+      .from("orders")
+      .select("*")
+      .eq("status", "new")
+      .eq("type", "limit");
+    openOrders = retry.data;
+    openOrdersError = retry.error;
+  }
+
+  if (openOrdersError) {
+    return { filled: 0, symbolsRefreshed: 0, accountsUpdated: 0 };
+  }
+
   const orders = (openOrders as Order[] | null) ?? [];
 
   const { data: positions } = await db.from("positions").select("symbol");
@@ -350,4 +382,8 @@ export async function cancelOrder(orderId: string, accountId: string): Promise<b
     .update({ status: "canceled", canceled_at: new Date().toISOString() })
     .eq("id", orderId);
   return !error;
+}
+
+function isMissingScheduledAtError(message?: string | null) {
+  return Boolean(message?.toLowerCase().includes("scheduled_at"));
 }
