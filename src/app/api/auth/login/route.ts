@@ -26,5 +26,10 @@ export async function POST(req: NextRequest) {
   if (error || !data.session) {
     return NextResponse.json({ error: error?.message ?? "login failed" }, { status: 401 });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+    expires_at: data.session.expires_at,
+  });
 }

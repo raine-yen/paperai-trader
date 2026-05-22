@@ -1,10 +1,10 @@
 // Browser-facing trade endpoint — uses session, not API key
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { placeOrder } from "@/lib/engine";
 import { toAlpacaOrder } from "@/lib/alpaca-format";
+import { getSessionUser } from "@/lib/session-user";
 
 const tradeSchema = z.object({
   symbol: z.string().min(1),
@@ -16,9 +16,8 @@ const tradeSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const sb = await supabaseServer();
-  const { data: ud } = await sb.auth.getUser();
-  if (!ud.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
   const parsed = tradeSchema.safeParse(body);
@@ -30,7 +29,7 @@ export async function POST(req: NextRequest) {
   const { data: account } = await db
     .from("accounts")
     .select("*")
-    .eq("user_id", ud.user.id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();

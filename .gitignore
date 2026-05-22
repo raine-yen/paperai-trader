@@ -9,3 +9,6 @@ next-env.d.ts
 .DS_Store
 
 .vercel
+mobile/.expo
+mobile/dist
+mobile/node_modules

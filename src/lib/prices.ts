@@ -10,6 +10,25 @@ export interface PriceQuote {
   updatedAt: string;
 }
 
+export interface DetailedQuote extends PriceQuote {
+  name: string | null;
+  currency: string | null;
+  exchange: string | null;
+  marketCap: number | null;
+  trailingPE: number | null;
+  forwardPE: number | null;
+  epsTrailingTwelveMonths: number | null;
+  volume: number | null;
+  averageVolume: number | null;
+  open: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  yearHigh: number | null;
+  yearLow: number | null;
+  change: number | null;
+  changePercent: number | null;
+}
+
 const CACHE_TTL_MS = 30_000;
 const memCache = new Map<string, { price: number; prevClose: number | null; ts: number }>();
 
@@ -41,6 +60,61 @@ async function yahooQuote(symbol: string): Promise<{ price: number; prevClose: n
   }
 }
 
+async function yahooSnapshot(symbols: string[]): Promise<Map<string, DetailedQuote>> {
+  const out = new Map<string, DetailedQuote>();
+  if (symbols.length === 0) return out;
+  const deduped = Array.from(new Set(symbols.map((symbol) => symbol.toUpperCase())));
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(deduped.join(","))}`;
+
+  try {
+    const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 0 } });
+    if (!res.ok) return out;
+    const json = await res.json();
+    const results = json?.quoteResponse?.result;
+    if (!Array.isArray(results)) return out;
+
+    for (const row of results) {
+      const symbol = typeof row?.symbol === "string" ? row.symbol.toUpperCase() : null;
+      const price = typeof row?.regularMarketPrice === "number" ? row.regularMarketPrice : null;
+      if (!symbol || price == null) continue;
+
+      const prevClose =
+        typeof row?.regularMarketPreviousClose === "number"
+          ? row.regularMarketPreviousClose
+          : typeof row?.regularMarketDayPreviousClose === "number"
+            ? row.regularMarketDayPreviousClose
+            : null;
+
+      out.set(symbol, {
+        symbol,
+        price,
+        prevClose,
+        updatedAt: new Date().toISOString(),
+        name: typeof row?.longName === "string" ? row.longName : typeof row?.shortName === "string" ? row.shortName : null,
+        currency: typeof row?.currency === "string" ? row.currency : null,
+        exchange: typeof row?.fullExchangeName === "string" ? row.fullExchangeName : typeof row?.exchange === "string" ? row.exchange : null,
+        marketCap: typeof row?.marketCap === "number" ? row.marketCap : null,
+        trailingPE: typeof row?.trailingPE === "number" ? row.trailingPE : null,
+        forwardPE: typeof row?.forwardPE === "number" ? row.forwardPE : null,
+        epsTrailingTwelveMonths: typeof row?.epsTrailingTwelveMonths === "number" ? row.epsTrailingTwelveMonths : null,
+        volume: typeof row?.regularMarketVolume === "number" ? row.regularMarketVolume : null,
+        averageVolume: typeof row?.averageDailyVolume3Month === "number" ? row.averageDailyVolume3Month : null,
+        open: typeof row?.regularMarketOpen === "number" ? row.regularMarketOpen : null,
+        dayHigh: typeof row?.regularMarketDayHigh === "number" ? row.regularMarketDayHigh : null,
+        dayLow: typeof row?.regularMarketDayLow === "number" ? row.regularMarketDayLow : null,
+        yearHigh: typeof row?.fiftyTwoWeekHigh === "number" ? row.fiftyTwoWeekHigh : null,
+        yearLow: typeof row?.fiftyTwoWeekLow === "number" ? row.fiftyTwoWeekLow : null,
+        change: typeof row?.regularMarketChange === "number" ? row.regularMarketChange : null,
+        changePercent: typeof row?.regularMarketChangePercent === "number" ? row.regularMarketChangePercent : null,
+      });
+    }
+  } catch {
+    return out;
+  }
+
+  return out;
+}
+
 export async function fetchYahooPrice(symbol: string): Promise<PriceQuote | null> {
   const upper = symbol.toUpperCase();
   const cached = memCache.get(upper);
@@ -51,6 +125,38 @@ export async function fetchYahooPrice(symbol: string): Promise<PriceQuote | null
   if (!q) return null;
   memCache.set(upper, { price: q.price, prevClose: q.prevClose, ts: Date.now() });
   return { symbol: upper, price: q.price, prevClose: q.prevClose, updatedAt: new Date().toISOString() };
+}
+
+export async function fetchYahooDetailedQuote(symbol: string): Promise<DetailedQuote | null> {
+  const upper = symbol.toUpperCase();
+  const snapshot = await yahooSnapshot([upper]);
+  const detailed = snapshot.get(upper);
+  if (detailed) {
+    memCache.set(upper, { price: detailed.price, prevClose: detailed.prevClose, ts: Date.now() });
+    return detailed;
+  }
+
+  const fallback = await fetchYahooPrice(upper);
+  if (!fallback) return null;
+  return {
+    ...fallback,
+    name: null,
+    currency: null,
+    exchange: null,
+    marketCap: null,
+    trailingPE: null,
+    forwardPE: null,
+    epsTrailingTwelveMonths: null,
+    volume: null,
+    averageVolume: null,
+    open: null,
+    dayHigh: null,
+    dayLow: null,
+    yearHigh: null,
+    yearLow: null,
+    change: fallback.prevClose == null ? null : fallback.price - fallback.prevClose,
+    changePercent: fallback.prevClose == null || fallback.prevClose === 0 ? null : ((fallback.price - fallback.prevClose) / fallback.prevClose) * 100,
+  };
 }
 
 export async function fetchYahooPrices(symbols: string[]): Promise<Map<string, PriceQuote>> {
@@ -71,6 +177,52 @@ export async function fetchYahooPrices(symbols: string[]): Promise<Map<string, P
       out.set(s, { symbol: s, price: q.price, prevClose: q.prevClose, updatedAt: new Date().toISOString() });
     })
   );
+  return out;
+}
+
+export async function fetchYahooDetailedQuotes(symbols: string[]): Promise<Map<string, DetailedQuote>> {
+  const out = new Map<string, DetailedQuote>();
+  if (symbols.length === 0) return out;
+  const upper = Array.from(new Set(symbols.map((s) => s.toUpperCase())));
+  const cachedNow = Date.now();
+  const missing: string[] = [];
+
+  for (const symbol of upper) {
+    const cached = memCache.get(symbol);
+    if (cached && cachedNow - cached.ts < CACHE_TTL_MS) {
+      out.set(symbol, {
+        symbol,
+        price: cached.price,
+        prevClose: cached.prevClose,
+        updatedAt: new Date(cached.ts).toISOString(),
+        name: null,
+        currency: null,
+        exchange: null,
+        marketCap: null,
+        trailingPE: null,
+        forwardPE: null,
+        epsTrailingTwelveMonths: null,
+        volume: null,
+        averageVolume: null,
+        open: null,
+        dayHigh: null,
+        dayLow: null,
+        yearHigh: null,
+        yearLow: null,
+        change: cached.prevClose == null ? null : cached.price - cached.prevClose,
+        changePercent: cached.prevClose == null || cached.prevClose === 0 ? null : ((cached.price - cached.prevClose) / cached.prevClose) * 100,
+      });
+    } else {
+      missing.push(symbol);
+    }
+  }
+
+  const fresh = await yahooSnapshot(missing);
+  for (const [symbol, quote] of fresh.entries()) {
+    memCache.set(symbol, { price: quote.price, prevClose: quote.prevClose, ts: Date.now() });
+    out.set(symbol, quote);
+  }
+
   return out;
 }
 

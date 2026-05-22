@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Paper Trader",
+    "slug": "paper-trader-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050607"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.papertrader.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#050607"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "extra": {
+      "apiUrl": "https://paper-trader-raine-yens-projects.vercel.app",
+      "eas": {
+        "projectId": "0c09d383-ef50-4df0-b7ab-5a77cd306f6d"
+      }
+    },
+    "owner": "raine.ye",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0c09d383-ef50-4df0-b7ab-5a77cd306f6d"
+    }
+  }
+}

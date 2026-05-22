@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { generateKeyPair, hashSecret } from "@/lib/api-keys";
+import { getSessionUser } from "@/lib/session-user";
 
-async function requireUser() {
-  const sb = await supabaseServer();
-  const { data } = await sb.auth.getUser();
-  return data.user ?? null;
-}
-
-export async function GET() {
-  const user = await requireUser();
+export async function GET(req: NextRequest) {
+  const user = await getSessionUser(req);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const db = supabaseAdmin();
@@ -27,7 +21,7 @@ export async function GET() {
 const createSchema = z.object({ label: z.string().max(80).optional() });
 
 export async function POST(req: NextRequest) {
-  const user = await requireUser();
+  const user = await getSessionUser(req);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
