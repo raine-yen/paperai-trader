@@ -68,7 +68,7 @@ export default function Dashboard() {
       }
     }
     fetchMe();
-    const id = setInterval(fetchMe, 10_000);
+    const id = setInterval(fetchMe, 20_000);
     return () => {
       active = false;
       clearInterval(id);

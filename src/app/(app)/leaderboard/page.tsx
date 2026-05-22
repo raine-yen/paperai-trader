@@ -42,7 +42,7 @@ export default function LeaderboardPage() {
       }
     }
     load();
-    const id = setInterval(load, 8_000);
+    const id = setInterval(load, 30_000);
     return () => {
       active = false;
       clearInterval(id);

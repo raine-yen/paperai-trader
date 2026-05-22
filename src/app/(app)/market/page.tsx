@@ -118,13 +118,13 @@ export default function MarketPage() {
 
   useEffect(() => {
     fetchAccount();
-    const id = setInterval(fetchAccount, 8_000);
+    const id = setInterval(fetchAccount, 15_000);
     return () => clearInterval(id);
   }, [fetchAccount]);
 
   useEffect(() => {
     fetchQuotesForSymbols(symbols);
-    const id = setInterval(() => fetchQuotesForSymbols(symbols, true), 8_000);
+    const id = setInterval(() => fetchQuotesForSymbols(symbols, true), 15_000);
     return () => clearInterval(id);
   }, [fetchQuotesForSymbols, symbols]);
 
@@ -427,7 +427,7 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
       setLimitPrice((current) => current || next.price.toFixed(2));
     }
     refreshQuote();
-    const id = setInterval(refreshQuote, 6_000);
+    const id = setInterval(refreshQuote, 10_000);
     return () => {
       active = false;
       clearInterval(id);
