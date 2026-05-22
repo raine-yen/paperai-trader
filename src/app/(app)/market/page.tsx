@@ -107,15 +107,6 @@ export default function MarketPage() {
         }
         return next;
       });
-      const missing = toFetch.filter((sym) => !returned.has(sym));
-      await Promise.all(
-        missing.map(async (sym) => {
-          const r = await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`, { cache: "no-store" });
-          if (!r.ok) return;
-          const quote = parseQuote(await r.json(), sym);
-          setQuotes((prev) => new Map(prev).set(sym, quote));
-        })
-      );
     } finally {
       setLoadingSymbols((prev) => {
         const next = new Set(prev);
@@ -127,13 +118,13 @@ export default function MarketPage() {
 
   useEffect(() => {
     fetchAccount();
-    const id = setInterval(fetchAccount, 5_000);
+    const id = setInterval(fetchAccount, 8_000);
     return () => clearInterval(id);
   }, [fetchAccount]);
 
   useEffect(() => {
     fetchQuotesForSymbols(symbols);
-    const id = setInterval(() => fetchQuotesForSymbols(symbols, true), 5_000);
+    const id = setInterval(() => fetchQuotesForSymbols(symbols, true), 8_000);
     return () => clearInterval(id);
   }, [fetchQuotesForSymbols, symbols]);
 
@@ -436,7 +427,7 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
       setLimitPrice((current) => current || next.price.toFixed(2));
     }
     refreshQuote();
-    const id = setInterval(refreshQuote, 4_000);
+    const id = setInterval(refreshQuote, 6_000);
     return () => {
       active = false;
       clearInterval(id);
