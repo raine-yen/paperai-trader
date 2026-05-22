@@ -251,18 +251,18 @@ export default function MarketPage() {
           {symbols.length === 0 ? (
             <div className="p-12 text-center text-sm text-gray-500">No owned positions yet. Switch to Popular to find a trade.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-sm">
+            <div className="overflow-hidden">
+              <table className="w-full table-fixed text-sm">
                 <thead className="bg-bg-soft text-xs uppercase tracking-wider text-gray-500">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold">Asset</th>
-                    <th className="px-4 py-3 text-right font-semibold">Price</th>
-                    <th className="px-4 py-3 text-right font-semibold">Today</th>
-                    <th className="px-4 py-3 text-right font-semibold">Mkt Cap</th>
-                    <th className="px-4 py-3 text-right font-semibold">P/E</th>
-                    <th className="px-4 py-3 text-right font-semibold">Owned</th>
-                    <th className="px-4 py-3 text-right font-semibold">Value</th>
-                    <th className="px-4 py-3 text-right font-semibold">Trade</th>
+                    <th className="w-[34%] px-3 py-3 text-left font-semibold sm:px-4">Asset</th>
+                    <th className="w-[18%] px-3 py-3 text-right font-semibold sm:px-4">Price</th>
+                    <th className="w-[16%] px-3 py-3 text-right font-semibold sm:px-4">Today</th>
+                    <th className="hidden w-[16%] px-3 py-3 text-right font-semibold xl:table-cell sm:px-4">Mkt Cap</th>
+                    <th className="hidden w-[10%] px-3 py-3 text-right font-semibold 2xl:table-cell sm:px-4">P/E</th>
+                    <th className="hidden w-[14%] px-3 py-3 text-right font-semibold lg:table-cell sm:px-4">Owned</th>
+                    <th className="hidden w-[14%] px-3 py-3 text-right font-semibold xl:table-cell sm:px-4">Value</th>
+                    <th className="w-[32%] px-3 py-3 text-right font-semibold sm:w-[18%] sm:px-4">Trade</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -342,7 +342,7 @@ function MarketRow({ symbol, quote, position, loading, selected, onOpen, onBuy, 
   const up = change == null || change >= 0;
   return (
     <tr className={cn("ticker-row group cursor-pointer", selected && "bg-bg-elevated")} onClick={onOpen}>
-      <td className="px-4 py-4">
+      <td className="px-3 py-4 sm:px-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bg-elevated font-mono text-xs font-black text-gray-300 group-hover:bg-accent-green group-hover:text-black">
             {symbol.slice(0, 2)}
@@ -356,16 +356,16 @@ function MarketRow({ symbol, quote, position, loading, selected, onOpen, onBuy, 
           </div>
         </div>
       </td>
-      <td className="px-4 py-4 text-right font-semibold tabular-nums">{loading ? "..." : quote ? formatUSD(quote.price) : "-"}</td>
-      <td className={cn("px-4 py-4 text-right font-semibold tabular-nums", up ? "text-accent-green" : "text-accent-red")}>
+      <td className="px-3 py-4 text-right font-semibold tabular-nums sm:px-4">{loading ? "..." : quote ? formatUSD(quote.price) : "-"}</td>
+      <td className={cn("px-3 py-4 text-right font-semibold tabular-nums sm:px-4", up ? "text-accent-green" : "text-accent-red")}>
         {changePct == null ? "-" : formatPct(changePct)}
       </td>
-      <td className="px-4 py-4 text-right tabular-nums text-gray-300">{compactMoney(quote?.marketCap)}</td>
-      <td className="px-4 py-4 text-right tabular-nums text-gray-300">{metric(quote?.trailingPE)}</td>
-      <td className="px-4 py-4 text-right tabular-nums text-gray-300">{position ? Number(position.qty).toFixed(4) : "-"}</td>
-      <td className="px-4 py-4 text-right tabular-nums text-gray-300">{position ? formatUSD(Number(position.market_value)) : "-"}</td>
-      <td className="px-4 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+      <td className="hidden px-3 py-4 text-right tabular-nums text-gray-300 xl:table-cell sm:px-4">{compactMoney(quote?.marketCap)}</td>
+      <td className="hidden px-3 py-4 text-right tabular-nums text-gray-300 2xl:table-cell sm:px-4">{metric(quote?.trailingPE)}</td>
+      <td className="hidden px-3 py-4 text-right tabular-nums text-gray-300 lg:table-cell sm:px-4">{position ? Number(position.qty).toFixed(4) : "-"}</td>
+      <td className="hidden px-3 py-4 text-right tabular-nums text-gray-300 xl:table-cell sm:px-4">{position ? formatUSD(Number(position.market_value)) : "-"}</td>
+      <td className="px-3 py-4 text-right sm:px-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-nowrap justify-end gap-2 opacity-100 sm:transition-opacity">
           <button className="rounded-md bg-accent-green px-3 py-1.5 text-xs font-bold text-black hover:bg-green-300" onClick={onBuy}>Buy</button>
           <button
             className={cn(
