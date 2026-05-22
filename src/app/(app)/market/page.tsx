@@ -127,13 +127,13 @@ export default function MarketPage() {
 
   useEffect(() => {
     fetchAccount();
-    const id = setInterval(fetchAccount, 12_000);
+    const id = setInterval(fetchAccount, 5_000);
     return () => clearInterval(id);
   }, [fetchAccount]);
 
   useEffect(() => {
     fetchQuotesForSymbols(symbols);
-    const id = setInterval(() => fetchQuotesForSymbols(symbols, true), 20_000);
+    const id = setInterval(() => fetchQuotesForSymbols(symbols, true), 5_000);
     return () => clearInterval(id);
   }, [fetchQuotesForSymbols, symbols]);
 
@@ -425,14 +425,22 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
   }, [initialSide, symbol]);
 
   useEffect(() => {
-    fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        const next = parseQuote(j, symbol);
-        setQuote(next);
-        setLimitPrice(next.price.toFixed(2));
-      })
-      .catch(() => {});
+    let active = true;
+    async function refreshQuote() {
+      const r = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!active) return;
+      const next = parseQuote(j, symbol);
+      setQuote(next);
+      setLimitPrice((current) => current || next.price.toFixed(2));
+    }
+    refreshQuote();
+    const id = setInterval(refreshQuote, 4_000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
   }, [symbol]);
 
   useEffect(() => {

@@ -29,7 +29,7 @@ export interface DetailedQuote extends PriceQuote {
   changePercent: number | null;
 }
 
-const CACHE_TTL_MS = 30_000;
+const CACHE_TTL_MS = 5_000;
 const memCache = new Map<string, { price: number; prevClose: number | null; ts: number }>();
 
 const YAHOO_HEADERS = {
@@ -115,10 +115,10 @@ async function yahooSnapshot(symbols: string[]): Promise<Map<string, DetailedQuo
   return out;
 }
 
-export async function fetchYahooPrice(symbol: string): Promise<PriceQuote | null> {
+export async function fetchYahooPrice(symbol: string, options: { forceLive?: boolean } = {}): Promise<PriceQuote | null> {
   const upper = symbol.toUpperCase();
   const cached = memCache.get(upper);
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+  if (!options.forceLive && cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return { symbol: upper, price: cached.price, prevClose: cached.prevClose, updatedAt: new Date(cached.ts).toISOString() };
   }
   const q = await yahooQuote(upper);
@@ -234,11 +234,12 @@ export async function fetchYahooDetailedQuotes(symbols: string[]): Promise<Map<s
   return out;
 }
 
-export async function getPrice(symbol: string): Promise<number | null> {
+export async function getPrice(symbol: string, options: { forceLive?: boolean; maxCacheAgeMs?: number } = {}): Promise<number | null> {
   const upper = symbol.toUpperCase();
   const db = supabaseAdmin();
+  const maxCacheAgeMs = options.maxCacheAgeMs ?? 5_000;
 
-  const { data: cached } = await db
+  const { data: cached } = options.forceLive ? { data: null } : await db
     .from("prices")
     .select("price, updated_at")
     .eq("symbol", upper)
@@ -246,10 +247,10 @@ export async function getPrice(symbol: string): Promise<number | null> {
 
   if (cached) {
     const age = Date.now() - new Date((cached as { updated_at: string }).updated_at).getTime();
-    if (age < 120_000) return Number((cached as { price: number }).price);
+    if (age < maxCacheAgeMs) return Number((cached as { price: number }).price);
   }
 
-  const live = await fetchYahooPrice(upper);
+  const live = await fetchYahooPrice(upper, { forceLive: options.forceLive });
   if (!live) return cached ? Number((cached as { price: number }).price) : null;
 
   await db.from("prices").upsert({

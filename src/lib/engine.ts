@@ -44,7 +44,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   }
   const isFutureScheduled = scheduledAt ? scheduledAt.getTime() > Date.now() : false;
 
-  const price = await getPrice(symbol);
+  const price = await getPrice(symbol, { forceLive: true });
   if (price == null) {
     return { ok: false, error: `unknown or untradable symbol: ${symbol}` };
   }

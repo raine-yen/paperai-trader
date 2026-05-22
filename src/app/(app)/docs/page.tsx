@@ -154,7 +154,7 @@ export default function DocsPage() {
 
       <Section title="6. Tips for the competition">
         <ul className="space-y-2 text-sm text-gray-400 list-disc list-inside">
-          <li>Trades fill against real Yahoo Finance prices, refreshed every 60 seconds.</li>
+          <li>Market trades fetch a live Yahoo Finance price at the moment the order fills.</li>
           <li>Market orders fill immediately. Limit orders fill when the price crosses your limit.</li>
           <li>You can hold fractional shares (e.g. qty: 0.5).</li>
           <li>The leaderboard sorts by % return on your starting capital.</li>
