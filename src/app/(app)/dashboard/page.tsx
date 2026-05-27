@@ -37,6 +37,10 @@ interface MeData {
     scheduled_at: string | null;
   }>;
   snapshots: Array<{ equity: number; created_at: string }>;
+  watchlist?: Array<{ symbol: string; price?: number | null; changePct?: number | null }>;
+  alerts?: Array<{ id: string; symbol: string; direction: string; target_price?: number | null; move_pct?: number | null; status: string }>;
+  unread_messages?: number;
+  competition?: { rank: number | null; participants: number; return_pct: number };
 }
 
 type Quest = {
@@ -217,6 +221,31 @@ export default function Dashboard() {
         </aside>
       </section>
 
+      <section className="grid gap-5 lg:grid-cols-3">
+        <div className="card p-5">
+          <div className="stat-label">Competition pulse</div>
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <div>
+              <div className="text-3xl font-black">{competitionLabel(data.competition)}</div>
+              <p className="mt-1 text-sm text-gray-500">Current rank in the active club season.</p>
+            </div>
+            <Trophy className="h-8 w-8 text-accent-green" />
+          </div>
+        </div>
+        <div className="card p-5">
+          <div className="stat-label">Alert hub</div>
+          <div className="mt-3 text-3xl font-black">{data.alerts?.filter((a) => a.status === "active").length ?? 0}</div>
+          <p className="mt-1 text-sm text-gray-500">Active price alerts watching your market ideas.</p>
+          <Link href="/market" className="mt-4 inline-flex text-sm font-semibold text-accent-green">Create alert</Link>
+        </div>
+        <div className="card p-5">
+          <div className="stat-label">Social desk</div>
+          <div className="mt-3 text-3xl font-black">{data.unread_messages ?? 0}</div>
+          <p className="mt-1 text-sm text-gray-500">Unread direct messages from competition traders.</p>
+          <Link href="/messages" className="mt-4 inline-flex text-sm font-semibold text-accent-green">Open messages</Link>
+        </div>
+      </section>
+
       <section className="card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-bg-border p-5 md:flex-row md:items-center md:justify-between">
           <div>
@@ -359,6 +388,11 @@ export default function Dashboard() {
       </section>
     </div>
   );
+}
+
+function competitionLabel(competition?: { rank: number | null; participants: number }) {
+  if (!competition?.rank) return "Unranked";
+  return `#${competition.rank} of ${competition.participants}`;
 }
 
 function getRewardCycle(now = new Date()) {

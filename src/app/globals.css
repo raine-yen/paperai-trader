@@ -18,8 +18,9 @@
 
   body {
     background:
-      radial-gradient(circle at top left, rgba(0, 200, 83, 0.08), transparent 28rem),
-      linear-gradient(180deg, #090b0d 0%, #050607 45%, #050607 100%);
+      radial-gradient(circle at 72% -10%, rgba(0, 200, 83, 0.14), transparent 34rem),
+      radial-gradient(circle at 12% 18%, rgba(56, 189, 248, 0.05), transparent 24rem),
+      linear-gradient(180deg, #060809 0%, #050607 48%, #020303 100%);
   }
 
   * {
@@ -29,11 +30,19 @@
 
 @layer components {
   .card {
-    @apply rounded-lg border border-bg-border bg-bg-card shadow-sm shadow-black/20;
+    @apply rounded-lg border border-bg-border/80 bg-bg-card/80 shadow-sm shadow-black/20 backdrop-blur;
   }
 
   .surface {
-    @apply rounded-lg border border-bg-border bg-bg-elevated;
+    @apply rounded-lg border border-bg-border/70 bg-bg-elevated/70;
+  }
+
+  .glass {
+    @apply border border-white/10 bg-white/[0.045] shadow-sm shadow-black/30 backdrop-blur-xl;
+  }
+
+  .section-open {
+    @apply border-t border-bg-border/70 pt-5;
   }
 
   .btn {
@@ -57,7 +66,7 @@
   }
 
   .input {
-    @apply w-full rounded-md border border-bg-border bg-bg-elevated px-3 py-2 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-accent-green;
+    @apply w-full rounded-md border border-bg-border/80 bg-black/20 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-accent-green;
   }
 
   .label {

@@ -162,6 +162,111 @@ create table if not exists reward_claims (
 create index if not exists idx_reward_claims_account on reward_claims(account_id, cycle_id);
 
 -- =====================================================================
+-- SOCIAL, DISCOVERY, ALERTS, AND SIMULATED TRANSFERS
+-- =====================================================================
+create table if not exists trader_profiles (
+  account_id uuid primary key references accounts(id) on delete cascade,
+  bio text,
+  strategy text,
+  risk_style text not null default 'balanced' check (risk_style in ('conservative','balanced','aggressive')),
+  is_public boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists watchlists (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references accounts(id) on delete cascade,
+  symbol text not null,
+  note text,
+  created_at timestamptz not null default now(),
+  unique(account_id, symbol)
+);
+
+create index if not exists idx_watchlists_account on watchlists(account_id, created_at desc);
+
+create table if not exists price_alerts (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references accounts(id) on delete cascade,
+  symbol text not null,
+  direction text not null check (direction in ('above','below','move')),
+  target_price numeric,
+  move_pct numeric,
+  status text not null default 'active' check (status in ('active','triggered','paused','deleted')),
+  triggered_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_price_alerts_account on price_alerts(account_id, status, created_at desc);
+create index if not exists idx_price_alerts_symbol on price_alerts(symbol, status);
+
+create table if not exists achievements (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references accounts(id) on delete cascade,
+  code text not null,
+  label text not null,
+  description text,
+  earned_at timestamptz not null default now(),
+  unique(account_id, code)
+);
+
+create index if not exists idx_achievements_account on achievements(account_id, earned_at desc);
+
+create table if not exists blocked_users (
+  id uuid primary key default gen_random_uuid(),
+  blocker_account_id uuid not null references accounts(id) on delete cascade,
+  blocked_account_id uuid not null references accounts(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(blocker_account_id, blocked_account_id),
+  check (blocker_account_id <> blocked_account_id)
+);
+
+create index if not exists idx_blocked_users_blocker on blocked_users(blocker_account_id);
+create index if not exists idx_blocked_users_blocked on blocked_users(blocked_account_id);
+
+create table if not exists direct_messages (
+  id uuid primary key default gen_random_uuid(),
+  sender_account_id uuid not null references accounts(id) on delete cascade,
+  recipient_account_id uuid not null references accounts(id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 500),
+  hidden_by_admin boolean not null default false,
+  read_at timestamptz,
+  created_at timestamptz not null default now(),
+  check (sender_account_id <> recipient_account_id)
+);
+
+create index if not exists idx_direct_messages_sender on direct_messages(sender_account_id, created_at desc);
+create index if not exists idx_direct_messages_recipient on direct_messages(recipient_account_id, created_at desc);
+
+create table if not exists message_reports (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid references direct_messages(id) on delete cascade,
+  reporter_account_id uuid not null references accounts(id) on delete cascade,
+  reason text not null,
+  status text not null default 'open' check (status in ('open','reviewed','dismissed')),
+  created_at timestamptz not null default now(),
+  reviewed_at timestamptz
+);
+
+create index if not exists idx_message_reports_status on message_reports(status, created_at desc);
+
+create table if not exists paper_transfers (
+  id uuid primary key default gen_random_uuid(),
+  sender_account_id uuid not null references accounts(id) on delete cascade,
+  recipient_account_id uuid not null references accounts(id) on delete cascade,
+  amount numeric not null check (amount > 0),
+  note text,
+  status text not null default 'completed' check (status in ('completed','reversed')),
+  created_at timestamptz not null default now(),
+  reversed_at timestamptz,
+  check (sender_account_id <> recipient_account_id)
+);
+
+create index if not exists idx_paper_transfers_sender on paper_transfers(sender_account_id, created_at desc);
+create index if not exists idx_paper_transfers_recipient on paper_transfers(recipient_account_id, created_at desc);
+
+-- =====================================================================
 -- ROW LEVEL SECURITY — users only see their own data via UI
 -- (API key auth bypasses RLS via service-role key)
 -- =====================================================================
@@ -173,6 +278,14 @@ alter table fills enable row level security;
 alter table equity_snapshots enable row level security;
 alter table competitions enable row level security;
 alter table reward_claims enable row level security;
+alter table trader_profiles enable row level security;
+alter table watchlists enable row level security;
+alter table price_alerts enable row level security;
+alter table achievements enable row level security;
+alter table blocked_users enable row level security;
+alter table direct_messages enable row level security;
+alter table message_reports enable row level security;
+alter table paper_transfers enable row level security;
 
 drop policy if exists "users see own accounts" on accounts;
 create policy "users see own accounts" on accounts for select using (user_id = auth.uid());
@@ -216,6 +329,56 @@ create policy "users see own reward claims" on reward_claims for select using (
 
 drop policy if exists "anyone sees competitions" on competitions;
 create policy "anyone sees competitions" on competitions for select using (true);
+
+drop policy if exists "users see public trader profiles" on trader_profiles;
+create policy "users see public trader profiles" on trader_profiles for select using (
+  is_public = true or exists (select 1 from accounts a where a.id = trader_profiles.account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users manage own trader profile" on trader_profiles;
+create policy "users manage own trader profile" on trader_profiles for all using (
+  exists (select 1 from accounts a where a.id = trader_profiles.account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users manage own watchlists" on watchlists;
+create policy "users manage own watchlists" on watchlists for all using (
+  exists (select 1 from accounts a where a.id = watchlists.account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users manage own price alerts" on price_alerts;
+create policy "users manage own price alerts" on price_alerts for all using (
+  exists (select 1 from accounts a where a.id = price_alerts.account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users see own achievements" on achievements;
+create policy "users see own achievements" on achievements for select using (
+  exists (select 1 from accounts a where a.id = achievements.account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users manage own blocks" on blocked_users;
+create policy "users manage own blocks" on blocked_users for all using (
+  exists (select 1 from accounts a where a.id = blocked_users.blocker_account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users see own direct messages" on direct_messages;
+create policy "users see own direct messages" on direct_messages for select using (
+  exists (select 1 from accounts a where a.id in (direct_messages.sender_account_id, direct_messages.recipient_account_id) and a.user_id = auth.uid())
+);
+
+drop policy if exists "users send own direct messages" on direct_messages;
+create policy "users send own direct messages" on direct_messages for insert with check (
+  exists (select 1 from accounts a where a.id = direct_messages.sender_account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users report messages" on message_reports;
+create policy "users report messages" on message_reports for insert with check (
+  exists (select 1 from accounts a where a.id = message_reports.reporter_account_id and a.user_id = auth.uid())
+);
+
+drop policy if exists "users see own paper transfers" on paper_transfers;
+create policy "users see own paper transfers" on paper_transfers for select using (
+  exists (select 1 from accounts a where a.id in (paper_transfers.sender_account_id, paper_transfers.recipient_account_id) and a.user_id = auth.uid())
+);
 
 -- Public leaderboard view (no equity_snapshot data, just current standings)
 create or replace view leaderboard as

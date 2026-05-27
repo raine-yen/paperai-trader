@@ -36,11 +36,18 @@ interface AdminStats {
   total_orders: number;
   total_equity: number;
   avg_return_pct: number;
+  open_reports?: number;
+  transfers?: number;
 }
 
 interface AdminData {
   accounts: AdminAccount[];
   stats: AdminStats;
+  moderation?: {
+    reports: Array<{ id: string; status: string; reason: string; message_id: string; created_at: string; direct_messages?: { body?: string; sender_account_id?: string; recipient_account_id?: string } }>;
+    transfers: Array<{ id: string; sender_account_id: string; recipient_account_id: string; amount: number; status: string; created_at: string }>;
+    blocks: Array<{ id: string; blocker_account_id: string; blocked_account_id: string; created_at: string }>;
+  };
 }
 
 type ActionState = { accountId: string; type: string } | null;
@@ -179,6 +186,17 @@ export default function AdminPage() {
           value={formatPct(stats.avg_return_pct)}
           icon={TrendingUp}
           valueColor={stats.avg_return_pct >= 0 ? "text-accent-green" : "text-accent-red"}
+        />
+        <StatCard
+          label="Open Reports"
+          value={String(stats.open_reports ?? 0)}
+          icon={AlertTriangle}
+          valueColor={(stats.open_reports ?? 0) > 0 ? "text-accent-red" : "text-accent-green"}
+        />
+        <StatCard
+          label="Transfers"
+          value={String(stats.transfers ?? 0)}
+          icon={DollarSign}
         />
       </div>
 
@@ -346,6 +364,58 @@ export default function AdminPage() {
           {filtered.length === 0 && (
             <div className="py-12 text-center text-sm text-gray-500">No accounts found.</div>
           )}
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="card overflow-hidden">
+          <div className="border-b border-bg-border p-5">
+            <h2 className="font-semibold">Message Reports</h2>
+            <p className="mt-1 text-xs text-gray-500">Hide unsafe direct messages or dismiss reviewed reports.</p>
+          </div>
+          <div className="divide-y divide-bg-border">
+            {(data.moderation?.reports ?? []).length === 0 ? (
+              <div className="p-8 text-sm text-gray-500">No reports yet.</div>
+            ) : (
+              data.moderation!.reports.slice(0, 8).map((report) => (
+                <div key={report.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">{report.reason}</div>
+                      <p className="mt-1 text-sm text-gray-400">{report.direct_messages?.body ?? "Message unavailable"}</p>
+                      <div className="mt-1 text-xs text-gray-500">{report.status}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button className="btn-sell px-3 py-1.5 text-xs" onClick={() => runAction("", "hide_message", { message_id: report.message_id })}>Hide</button>
+                      <button className="btn-ghost border border-bg-border px-3 py-1.5 text-xs" onClick={() => runAction("", "dismiss_report", { report_id: report.id })}>Dismiss</button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="card overflow-hidden">
+          <div className="border-b border-bg-border p-5">
+            <h2 className="font-semibold">Paper-cash Transfers</h2>
+            <p className="mt-1 text-xs text-gray-500">Simulated-only transfer ledger. Reverse completed transfers when needed.</p>
+          </div>
+          <div className="divide-y divide-bg-border">
+            {(data.moderation?.transfers ?? []).length === 0 ? (
+              <div className="p-8 text-sm text-gray-500">No transfers yet.</div>
+            ) : (
+              data.moderation!.transfers.slice(0, 8).map((transfer) => (
+                <div key={transfer.id} className="flex items-center justify-between gap-3 p-4">
+                  <div>
+                    <div className="font-mono text-sm font-semibold">{formatUSD(Number(transfer.amount))}</div>
+                    <div className="mt-1 text-xs text-gray-500">{transfer.status} - {new Date(transfer.created_at).toLocaleString()}</div>
+                  </div>
+                  <button disabled={transfer.status !== "completed"} className="btn-ghost border border-bg-border px-3 py-1.5 text-xs" onClick={() => runAction("", "reverse_transfer", { transfer_id: transfer.id })}>Reverse</button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 

@@ -408,6 +408,7 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
   const [limitPrice, setLimitPrice] = useState(initialQuote ? initialQuote.price.toFixed(2) : "");
   const [submitting, setSubmitting] = useState(false);
   const [tradeResult, setTradeResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [deskMessage, setDeskMessage] = useState("");
 
   useEffect(() => {
     setSide(initialSide);
@@ -493,6 +494,25 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
     setSubmitting(false);
   }
 
+  async function addWatchlist() {
+    const res = await fetch("/api/watchlists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol }),
+    });
+    setDeskMessage(res.ok ? `${symbol} added to your watchlist.` : "Watchlist needs the new database migration.");
+  }
+
+  async function createAlert(direction: "above" | "below") {
+    const target = direction === "above" ? price * 1.03 : price * 0.97;
+    const res = await fetch("/api/alerts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, direction, target_price: target.toFixed(2) }),
+    });
+    setDeskMessage(res.ok ? `Alert created for ${symbol} ${direction} ${formatUSD(target)}.` : "Alerts need the new database migration.");
+  }
+
   return (
     <aside className="card overflow-hidden xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
       <div className="sticky top-0 z-10 border-b border-bg-border bg-bg-card p-5">
@@ -553,6 +573,18 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
           <MiniMetric label="P/E ratio" value={metric(quote?.trailingPE)} />
           <MiniMetric label="Volume" value={compactNumber(quote?.volume)} />
           <MiniMetric label="52W range" value={rangeLabel(quote?.yearLow, quote?.yearHigh)} />
+        </div>
+
+        <div className="surface p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="stat-label">Discovery desk</span>
+            <button onClick={addWatchlist} className="text-xs font-bold text-accent-green hover:text-white">Watch</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => createAlert("above")} disabled={!price} className="rounded-md border border-bg-border px-3 py-2 text-xs font-bold text-gray-300 hover:border-accent-green hover:text-accent-green">Alert +3%</button>
+            <button onClick={() => createAlert("below")} disabled={!price} className="rounded-md border border-bg-border px-3 py-2 text-xs font-bold text-gray-300 hover:border-accent-red hover:text-accent-red">Alert -3%</button>
+          </div>
+          {deskMessage && <p className="mt-3 text-xs text-gray-400">{deskMessage}</p>}
         </div>
 
         {position && (

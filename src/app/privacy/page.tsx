@@ -10,14 +10,14 @@ const sections = [
   {
     title: "Information We Collect",
     body: [
-      "Paper Trader collects the information needed to create and operate a paper trading account. This includes your email address, display name, authentication session data, simulated account balances, positions, orders, leaderboard performance, and API key metadata.",
+      "Paper Trader collects the information needed to create and operate a paper trading account. This includes your email address, display name, authentication session data, simulated account balances, positions, orders, leaderboard performance, watchlists, alerts, direct messages, simulated paper-cash transfers, reports, blocks, and API key metadata.",
       "If you contact us for support, we may also receive the information you include in your message.",
     ],
   },
   {
     title: "How We Use Information",
     body: [
-      "We use this information to authenticate users, maintain paper trading accounts, simulate trades, display leaderboards, provide API access for bots, and support the reliability and security of the service.",
+      "We use this information to authenticate users, maintain paper trading accounts, simulate trades, display leaderboards, provide API access for bots, support social competition features, review safety reports, and support the reliability and security of the service.",
       "Paper Trader does not support real-money trading, deposits, withdrawals, or live brokerage activity.",
     ],
   },
