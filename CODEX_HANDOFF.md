@@ -5,7 +5,7 @@ Last updated: 2026-05-27
 ## Current Branch
 - Repo path: `C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean`
 - Branch: `codex/trading-cockpit-redesign`
-- Latest pushed commit: `be9ecc9 Refine App Store safety copy`
+- Latest pushed commit: `fc97012 Configure iOS submit app id`
 - PR URL: `https://github.com/raine-yen/paperai-trader/pull/new/codex/trading-cockpit-redesign`
 
 ## What Was Implemented
@@ -22,7 +22,8 @@ Last updated: 2026-05-27
   - Added watchlist, alerts, trade ticket, leaderboard, direct messages, report flow
   - Removed mobile paper-cash gift UI to avoid Apple simulated-gambling/payment confusion
   - Added darker near-black theme, tighter flat panels, and a reactive bottom nav that compresses while scrolling
-  - No new native dependencies, so this should be OTA-publishable after backend/web deploy
+  - Added stock logo rows and user profile picture picker/upload
+  - Added `expo-image-picker`, so this now requires a fresh native build instead of OTA-only rollout
 - Backend/API additions:
   - `/api/watchlists`
   - `/api/alerts`
@@ -33,6 +34,7 @@ Last updated: 2026-05-27
   - `/api/social/report`
   - `/api/transfers`
   - `/api/account` DELETE for App Store-compliant account deletion
+  - `/api/profile/avatar` for Supabase Storage avatar upload
   - Extended `/api/me`
   - Extended `/api/admin`
 - Supabase schema updated locally in `supabase/schema.sql` for:
@@ -55,6 +57,11 @@ Last updated: 2026-05-27
 - 2026-05-27 after latest commit: `npm run build` passed locally.
 - 2026-05-27 after latest commit: `cd mobile && npx tsc --noEmit` passed.
 - 2026-05-27 after latest commit: `cd mobile && npx expo export --platform web` passed.
+- 2026-05-27: Canva generated viewable mobile concept candidates:
+  - `https://www.canva.com/d/hBdMkcXTqoBdoan`
+  - `https://www.canva.com/d/UIyxHdqD5f9oAgZ`
+  - `https://www.canva.com/d/5GIrzSvvSZMsjJv`
+  - `https://www.canva.com/d/A2-hSR9vShhxZpZ`
 - Attempted local HTTP smoke test, but output was inconclusive due local server command behavior. Build itself passed.
 
 ## Blockers / Not Finished
@@ -62,30 +69,28 @@ Last updated: 2026-05-27
   - Project ref: `fwlbickoywztcikyhvbj`
   - Attempted via Supabase connector.
   - Failed with permission error: `You do not have permission to perform this action`.
-  - Until this migration is applied, new social/watchlist/alerts/transfer features will gracefully return empty/unavailable in production.
+  - Later Vercel env pull produced blank Supabase URL/key values locally, and Supabase CLI is not logged in.
+  - Until this migration is applied, chat/social/watchlist/alerts/profile-avatar features can fail or return unavailable in production.
 - Vercel production deploy succeeded for the real `paper-trader` project.
   - Production URL: `https://paper-trader-lac.vercel.app`
-  - Latest inspected deployment id: `dpl_A97om3KtxrKScL2FJRG5w2ybTEtR`
-- Expo OTA was published to branch `production`.
-  - Latest update group: `5dd3d3af-6792-4363-a24a-47835cfa87e0`
-  - Runtime version: `1.0.0`
-  - Platforms: iOS and Android
-- No new EAS/TestFlight build was started.
+  - Latest inspected deployment id: `dpl_4R9wVc5o1DQa2MwytKPzFMJapjSJ`
+- Fresh iOS build was created and submitted because profile pictures added a native dependency.
+  - Build ID: `5a88b453-7c24-4798-998b-4dd11cda6a44`
+  - App version/runtime: `1.0.1`
+  - Build number: `14`
+  - Submission URL: `https://expo.dev/accounts/raine.ye/projects/paper-trader-mobile/submissions/adb8f91a-4cb3-44b7-a449-31b3b066eea4`
+  - App Store Connect build page: `https://appstoreconnect.apple.com/apps/6771218600/testflight/ios`
 
 ## Next Steps
 1. Apply the SQL additions from `supabase/schema.sql` to Supabase production project `fwlbickoywztcikyhvbj` using the dashboard SQL editor or a session/tool with DDL permission.
-2. In App Store Connect, update the rating questionnaire so Paper Trader is not marked as gambling or simulated gambling.
-3. Record the App Review account deletion video on a physical device:
+2. Wait for Apple to finish processing build 14, then select it in TestFlight/App Review.
+3. In App Store Connect, update the rating questionnaire so Paper Trader is not marked as gambling or simulated gambling.
+4. Record the App Review account deletion video on a physical device:
    - Sign in or create a test account.
    - Open Settings.
    - Tap Account deletion / Delete my account.
    - Confirm the destructive prompt.
    - Show the app returning to the signed-out screen.
-4. If OTA does not reach the TestFlight/App Review build, create a new production iOS build and submit:
-   ```bash
-   npx eas-cli@latest build -p ios --profile production
-   npx eas-cli@latest submit -p ios --latest --profile production
-   ```
 5. Re-run verification when making further code changes:
    ```bash
    npm run typecheck
