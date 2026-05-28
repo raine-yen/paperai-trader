@@ -15,7 +15,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.papertrader.mobile",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Paper Trader uses your photo library so you can choose a profile picture."
       }
     },
     "android": {
@@ -29,7 +30,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-image-picker"
     ],
     "extra": {
       "apiUrl": "https://paper-trader-lac.vercel.app",

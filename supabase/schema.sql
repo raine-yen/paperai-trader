@@ -166,6 +166,7 @@ create index if not exists idx_reward_claims_account on reward_claims(account_id
 -- =====================================================================
 create table if not exists trader_profiles (
   account_id uuid primary key references accounts(id) on delete cascade,
+  avatar_url text,
   bio text,
   strategy text,
   risk_style text not null default 'balanced' check (risk_style in ('conservative','balanced','aggressive')),
@@ -173,6 +174,8 @@ create table if not exists trader_profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table trader_profiles add column if not exists avatar_url text;
 
 create table if not exists watchlists (
   id uuid primary key default gen_random_uuid(),

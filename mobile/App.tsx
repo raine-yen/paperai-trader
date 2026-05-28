@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import { fetch } from "expo/fetch";
+import * as ImagePicker from "expo-image-picker";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -11,6 +12,7 @@ import {
   AppState,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -19,6 +21,7 @@ import {
   TextStyle,
   View,
 } from "react-native";
+import { getStockBrand, logoUrl } from "./src/marketBrand";
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -54,7 +57,7 @@ type Me = {
   alerts?: PriceAlert[];
   unread_messages?: number;
   competition?: { rank: number | null; participants: number; return_pct: number };
-  profile?: { bio?: string | null; strategy?: string | null; risk_style?: string | null } | null;
+  profile?: { avatar_url?: string | null; bio?: string | null; strategy?: string | null; risk_style?: string | null } | null;
 };
 type Quote = { symbol: string; price: number; prevClose?: number | null; name?: string | null; change?: number | null; changePercent?: number | null; marketCap?: number | null; volume?: number | null; trailingPE?: number | null; dayHigh?: number | null; dayLow?: number | null };
 type Leader = { account_id: string; display_name: string; equity: number; starting_cash: number; return_pct: number };
@@ -281,6 +284,21 @@ export default function App() {
     }
   }
 
+  async function apiForm<T>(path: string, form: FormData): Promise<T> {
+    const res = await fetchWithTimeout(`${API_URL}${path}`, {
+      method: "POST",
+      headers: {
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: form as unknown as BodyInit,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
   async function reportMessage(messageId: string) {
     try {
       await api("/api/social/report", { method: "POST", body: JSON.stringify({ message_id: messageId, reason: "Reported from mobile" }) });
@@ -326,6 +344,35 @@ export default function App() {
       setKeys(next.keys ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Key creation failed");
+    }
+  }
+
+  async function pickAvatar() {
+    setError("");
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError("Photo library permission is required to add a profile picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.82,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const form = new FormData();
+    form.append("avatar", {
+      uri: asset.uri,
+      name: asset.fileName || "avatar.jpg",
+      type: asset.mimeType || "image/jpeg",
+    } as unknown as Blob);
+    try {
+      await apiForm<{ avatar_url: string }>("/api/profile/avatar", form);
+      await refreshAll(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not upload profile picture");
     }
   }
 
@@ -393,7 +440,7 @@ export default function App() {
             reportMessage={reportMessage}
           />
         )}
-        {tab === "settings" && <Settings me={me} keys={keys} newSecret={newSecret} createKey={createKey} deleteAccount={deleteAccount} busy={busy} />}
+        {tab === "settings" && <Settings me={me} keys={keys} newSecret={newSecret} createKey={createKey} deleteAccount={deleteAccount} pickAvatar={pickAvatar} busy={busy} />}
       </ScrollView>
       <BottomNav tab={tab} setTab={setTab} unread={me?.unread_messages ?? 0} compact={navCompact} opacity={navOpacity} />
     </View>
@@ -408,7 +455,10 @@ function Header({ me, onSignOut }: { me: Me | null; onSignOut: () => void }) {
         <Text style={micro}>{greeting()}, {name || "Trader"}</Text>
         <Text style={screenTitle}>Paper Trader</Text>
       </View>
-      <Pressable onPress={onSignOut}><Text style={greenText}>Sign out</Text></Pressable>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <Avatar uri={me?.profile?.avatar_url} name={name || "Trader"} size={38} />
+        <Pressable onPress={onSignOut}><Text style={greenText}>Sign out</Text></Pressable>
+      </View>
     </View>
   );
 }
@@ -422,16 +472,16 @@ function Portfolio({ me, leaders, openSymbol }: { me: Me | null; leaders: Leader
   return (
     <>
       <Panel>
-        <Text style={label}>Portfolio</Text>
+        <Text style={label}>Portfolio cockpit</Text>
         <Text style={hero}>{usd(account.equity)}</Text>
         <Text style={[metricGood, gain < 0 && { color: c.red }]}>{signedUsd(gain)} ({signedPct(gainPct)}) all time</Text>
         <Bars values={[18, 26, 24, 36, 44, 41, 56, 62, 59, 74, 81, 78, 92]} />
       </Panel>
-      <Grid items={[["Cash", usd(account.cash)], ["Invested", usd(account.positions_value)], ["Rank", rankLabel(me)], ["Unread", String(me?.unread_messages ?? 0)]]} />
+      <Grid items={[["Practice", usd(account.cash)], ["Invested", usd(account.positions_value)], ["Rank", rankLabel(me)], ["Inbox", String(me?.unread_messages ?? 0)]]} />
       <Section title="Holdings" action="See market">
         {me?.positions.length ? me.positions.map((p) => (
           <Pressable key={p.symbol} onPress={() => openSymbol(p.symbol)}>
-            <Line title={p.symbol} sub={`${p.qty} shares`} right={usd(p.market_value)} tone={p.unrealized_pl >= 0 ? c.green : c.red} caption={signedPct(p.unrealized_plpc)} />
+            <MarketLine symbol={p.symbol} sub={`${p.qty} shares`} right={usd(p.market_value)} tone={p.unrealized_pl >= 0 ? c.green : c.red} caption={signedPct(p.unrealized_plpc)} />
           </Pressable>
         )) : <Text style={muted}>No positions yet. Discover a stock to place your first paper trade.</Text>}
       </Section>
@@ -442,7 +492,7 @@ function Portfolio({ me, leaders, openSymbol }: { me: Me | null; leaders: Leader
         <Line title="Simulation mode" sub="Educational only" right="Practice only" tone={c.green} />
       </Section>
       <Section title="Top competition traders">
-        {leaders.slice(0, 3).map((l, index) => <Line key={l.account_id} title={`#${index + 1} ${l.display_name}`} sub={usd(l.equity)} right={signedPct(l.return_pct)} tone={l.return_pct >= 0 ? c.green : c.red} />)}
+        {leaders.slice(0, 3).map((l, index) => <TraderLine key={l.account_id} rank={index + 1} leader={l} />)}
       </Section>
     </>
   );
@@ -471,11 +521,19 @@ function Discover(props: {
       <Section title="Discover">
         <Input value={search} onChangeText={(v) => setSearch(v.toUpperCase())} placeholder="Search symbol" autoCapitalize="characters" />
         <Button label={`Open ${search || "symbol"}`} variant="ghost" onPress={() => search && props.setSelectedSymbol(search.toUpperCase())} />
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {symbols.map((symbol) => <Chip key={symbol} active={props.selectedSymbol === symbol} label={symbol} onPress={() => props.setSelectedSymbol(symbol)} />)}
+        <View style={{ gap: 4 }}>
+          {symbols.slice(0, 8).map((symbol) => {
+            const quote = props.quotes[symbol];
+            return (
+              <Pressable key={symbol} onPress={() => props.setSelectedSymbol(symbol)}>
+                <MarketLine symbol={symbol} sub={getStockBrand(symbol).name} right={quote ? usd(quote.price) : "--"} tone={(quote?.changePercent ?? 0) >= 0 ? c.green : c.red} caption={quote?.changePercent == null ? undefined : signedPct(quote.changePercent)} />
+              </Pressable>
+            );
+          })}
         </View>
       </Section>
       <Panel>
+        <StockLogo symbol={props.selectedSymbol} size={52} />
         <Text style={label}>{props.quote?.name || "Stock detail"}</Text>
         <Text style={display}>{props.selectedSymbol}</Text>
         <Text style={[hero, { color: c.green }]}>{props.quote ? usd(props.quote.price) : "--"}</Text>
@@ -522,7 +580,7 @@ function Compete(props: {
       <Section title="Leaderboard">
         {props.leaders.slice(0, 8).map((l, index) => (
           <Pressable key={l.account_id} onPress={() => props.setTarget(l)}>
-            <Line title={`#${index + 1} ${l.display_name}`} sub={usd(l.equity)} right={signedPct(l.return_pct)} tone={l.return_pct >= 0 ? c.green : c.red} />
+            <TraderLine rank={index + 1} leader={l} />
           </Pressable>
         ))}
       </Section>
@@ -551,9 +609,15 @@ function Compete(props: {
   );
 }
 
-function Settings({ me, keys, newSecret, createKey, deleteAccount, busy }: { me: Me | null; keys: ApiKey[]; newSecret: string; createKey: () => void; deleteAccount: () => void; busy: boolean }) {
+function Settings({ me, keys, newSecret, createKey, deleteAccount, pickAvatar, busy }: { me: Me | null; keys: ApiKey[]; newSecret: string; createKey: () => void; deleteAccount: () => void; pickAvatar: () => void; busy: boolean }) {
   return (
     <>
+      <Panel>
+        <Avatar uri={me?.profile?.avatar_url} name={me?.account?.display_name ?? "Trader"} size={74} />
+        <Text style={sectionTitle}>{me?.account?.display_name ?? "Trader profile"}</Text>
+        <Text style={muted}>{me?.user?.email ?? "Signed in"} · classroom paper-trading profile</Text>
+        <Button label="Change profile picture" variant="ghost" onPress={pickAvatar} />
+      </Panel>
       <Section title="Account">
         <Line title="Name" sub={me?.user?.email ?? ""} right={me?.account?.display_name ?? "--"} />
         <Line title="Practice balance" sub="Simulation only" right={usd(me?.account?.cash ?? 0)} />
@@ -576,6 +640,54 @@ function Settings({ me, keys, newSecret, createKey, deleteAccount, busy }: { me:
         <Button label={busy ? "Working..." : "Delete my account"} variant="danger" disabled={busy} onPress={deleteAccount} />
       </Section>
     </>
+  );
+}
+
+function StockLogo({ symbol, size = 36 }: { symbol: string; size?: number }) {
+  const brand = getStockBrand(symbol);
+  const uri = logoUrl(symbol);
+  return (
+    <View style={[logoShell, { width: size, height: size, borderRadius: size / 2, backgroundColor: brand.color }]}>
+      {uri ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} /> : <Text style={[logoText, { fontSize: Math.max(11, size * 0.3) }]}>{symbol.slice(0, 2)}</Text>}
+    </View>
+  );
+}
+
+function Avatar({ uri, name, size = 40 }: { uri?: string | null; name: string; size?: number }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "PT";
+  return (
+    <View style={[avatarShell, { width: size, height: size, borderRadius: size / 2 }]}>
+      {uri ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} /> : <Text style={[logoText, { fontSize: Math.max(12, size * 0.28) }]}>{initials}</Text>}
+    </View>
+  );
+}
+
+function MarketLine({ symbol, sub, right, tone = c.text, caption }: { symbol: string; sub?: string; right?: string; tone?: string; caption?: string }) {
+  return (
+    <View style={line}>
+      <StockLogo symbol={symbol} />
+      <View style={{ flex: 1 }}>
+        <Text style={lineTitle}>{symbol}</Text>
+        {sub ? <Text style={muted} numberOfLines={1}>{sub}</Text> : null}
+      </View>
+      <View style={{ alignItems: "flex-end" }}>
+        {right ? <Text style={[lineTitle, { color: tone }]}>{right}</Text> : null}
+        {caption ? <Text style={[micro, { color: tone }]}>{caption}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+function TraderLine({ rank, leader }: { rank: number; leader: Leader }) {
+  return (
+    <View style={line}>
+      <Avatar name={leader.display_name} />
+      <View style={{ flex: 1 }}>
+        <Text style={lineTitle}>#{rank} {leader.display_name}</Text>
+        <Text style={muted}>{usd(leader.equity)}</Text>
+      </View>
+      <Text style={[lineTitle, { color: leader.return_pct >= 0 ? c.green : c.red }]}>{signedPct(leader.return_pct)}</Text>
+    </View>
   );
 }
 
@@ -724,3 +836,6 @@ const nav = { position: "absolute" as const, left: 14, right: 14, bottom: 24, fl
 const navCompactStyle = { position: "absolute" as const, right: 14, bottom: 24, flexDirection: "row" as const, gap: 5, backgroundColor: "#05090cf2", borderColor: "#26333b", borderWidth: 1, borderRadius: 999, padding: 7 };
 const navItem = { flex: 1, alignItems: "center" as const, justifyContent: "center" as const, borderRadius: 999, minHeight: 44 };
 const navDot = { width: 38, height: 38, alignItems: "center" as const, justifyContent: "center" as const, borderRadius: 999 };
+const logoShell = { alignItems: "center" as const, justifyContent: "center" as const, overflow: "hidden" as const, borderColor: "rgba(255,255,255,0.12)", borderWidth: 1 };
+const avatarShell = { alignItems: "center" as const, justifyContent: "center" as const, overflow: "hidden" as const, backgroundColor: "#111820", borderColor: "rgba(255,255,255,0.14)", borderWidth: 1 };
+const logoText: TextStyle = { color: c.text, fontWeight: "900", letterSpacing: 0 };

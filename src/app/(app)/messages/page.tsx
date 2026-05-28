@@ -87,7 +87,7 @@ export default function MessagesPage() {
   if (loading) return <div className="flex py-24 justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>;
 
   return (
-    <div className="animate-fade-in grid min-h-[calc(100vh-4rem)] gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+    <div className="animate-fade-in grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)_280px]">
       <aside className="card overflow-hidden">
         <div className="border-b border-bg-border p-5">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
@@ -114,12 +114,12 @@ export default function MessagesPage() {
         </div>
       </aside>
 
-      <section className="card flex min-h-[640px] flex-col overflow-hidden">
+      <section className="card flex h-[520px] min-h-[420px] resize-y flex-col overflow-hidden">
         <div className="border-b border-bg-border p-5">
           <h2 className="text-xl font-black">{selected?.display_name ?? "Pick a trader"}</h2>
           <p className="mt-1 text-sm text-gray-500">Keep it school-safe. You can block or report any message.</p>
         </div>
-        <div className="flex-1 space-y-3 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-center text-sm text-gray-500">No messages yet.</div>
           ) : (
@@ -139,7 +139,7 @@ export default function MessagesPage() {
             })
           )}
         </div>
-        <div className="border-t border-bg-border p-4">
+        <div className="sticky bottom-0 border-t border-bg-border bg-bg-card p-4">
           {status && <div className="mb-3 rounded-md bg-bg-elevated px-3 py-2 text-sm text-gray-300">{status}</div>}
           <div className="flex gap-3">
             <input className="input" placeholder="Message this trader..." value={body} onChange={(e) => setBody(e.target.value)} maxLength={500} />
