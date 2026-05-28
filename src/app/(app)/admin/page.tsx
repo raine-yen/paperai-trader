@@ -398,8 +398,8 @@ export default function AdminPage() {
 
         <div className="card overflow-hidden">
           <div className="border-b border-bg-border p-5">
-            <h2 className="font-semibold">Paper-cash Transfers</h2>
-            <p className="mt-1 text-xs text-gray-500">Simulated-only transfer ledger. Reverse completed transfers when needed.</p>
+            <h2 className="font-semibold">Practice Credit Ledger</h2>
+            <p className="mt-1 text-xs text-gray-500">Educational simulation ledger. Review or reverse completed practice-credit activity when needed.</p>
           </div>
           <div className="divide-y divide-bg-border">
             {(data.moderation?.transfers ?? []).length === 0 ? (

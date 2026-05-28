@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CheckCircle2, Clock3, Gift, Landmark, Target, Trophy, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CheckCircle2, Clock3, Landmark, Target, Trophy, Wallet } from "lucide-react";
 import { EquityChart } from "@/components/equity-chart";
 import { getCompanyName } from "@/lib/market-data";
 import { cn, formatPct, formatUSD, timeAgo } from "@/lib/utils";
@@ -142,7 +142,7 @@ export default function Dashboard() {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      setRewardMessage(j.error ?? "Could not claim reward");
+      setRewardMessage(j.error ?? "Could not add practice credits");
       setClaimingReward(null);
       return;
     }
@@ -157,7 +157,7 @@ export default function Dashboard() {
         equity: Number(prev.account.equity) + Number(j.amount ?? 200),
       },
     } : prev);
-    setRewardMessage(`Claimed ${formatUSD(Number(j.amount ?? 200))}.`);
+    setRewardMessage(`Added ${formatUSD(Number(j.amount ?? 200))} in practice credits.`);
     setClaimingReward(null);
   }
 
@@ -253,9 +253,9 @@ export default function Dashboard() {
               <Trophy className="h-3.5 w-3.5 text-accent-green" />
               Quests
             </div>
-            <h2 className="mt-2 font-semibold">Goals and claimable rewards</h2>
+            <h2 className="mt-2 font-semibold">Learning goals and practice credits</h2>
           </div>
-          <div className="text-sm text-gray-400">Week {rewardCycle.week} cycle - {quests.filter((q) => claimedRewards.includes(`${rewardCycle.id}:${q.id}`)).length}/{quests.length} claimed</div>
+          <div className="text-sm text-gray-400">Week {rewardCycle.week} cycle - {quests.filter((q) => claimedRewards.includes(`${rewardCycle.id}:${q.id}`)).length}/{quests.length} complete</div>
         </div>
         {rewardMessage && <div className="border-b border-bg-border bg-bg-elevated px-5 py-3 text-sm font-semibold text-gray-300">{rewardMessage}</div>}
         <div className="grid gap-4 p-5 lg:grid-cols-3">
@@ -287,11 +287,10 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <div className="text-xs text-gray-500">
-                    <Gift className="mr-1 inline h-3.5 w-3.5" />
                     {quest.reward}
                   </div>
                   <button type="button" onClick={() => claimReward(quest)} disabled={!complete || claimed || claimingReward === claimKey} className="btn-primary px-3 py-1.5 text-xs">
-                    {claimingReward === claimKey ? "Claiming" : claimed ? "Claimed" : "Claim"}
+                    {claimingReward === claimKey ? "Adding" : claimed ? "Added" : "Add"}
                   </button>
                 </div>
               </div>
@@ -411,7 +410,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Place your first trade.",
       progress: stats.orders,
       goal: 1,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
     {
       id: "three-holdings",
@@ -419,7 +418,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Hold three different symbols at once.",
       progress: stats.holdings,
       goal: 3,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
     {
       id: "green-portfolio",
@@ -428,7 +427,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       progress: Math.max(0, stats.totalReturnPct),
       goal: 2,
       decimals: 1,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
   ];
   const weekTwo: Quest[] = [
@@ -438,7 +437,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Submit five total orders.",
       progress: stats.orders,
       goal: 5,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
     {
       id: "cash-buffer",
@@ -446,7 +445,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Keep at least $10,000 in cash.",
       progress: Math.min(stats.cash, 10000),
       goal: 10000,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
     {
       id: "timekeeper",
@@ -454,7 +453,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Create one scheduled price order.",
       progress: stats.scheduledOrders,
       goal: 1,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
   ];
   return week === 1 ? weekOne : weekTwo;

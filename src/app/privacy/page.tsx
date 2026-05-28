@@ -10,7 +10,7 @@ const sections = [
   {
     title: "Information We Collect",
     body: [
-      "Paper Trader collects the information needed to create and operate a paper trading account. This includes your email address, display name, authentication session data, simulated account balances, positions, orders, leaderboard performance, watchlists, alerts, direct messages, simulated paper-cash transfers, reports, blocks, and API key metadata.",
+      "Paper Trader collects the information needed to create and operate a paper trading account. This includes your email address, display name, authentication session data, simulated account balances, positions, orders, leaderboard performance, watchlists, alerts, direct messages, practice-credit activity, reports, blocks, and API key metadata.",
       "If you contact us for support, we may also receive the information you include in your message.",
     ],
   },
@@ -37,7 +37,7 @@ const sections = [
   {
     title: "Your Choices",
     body: [
-      "You can request account access, correction, or deletion by contacting support. You can also revoke API keys directly inside the app.",
+      "You can delete your account from Settings inside the app. You can also request account access or correction by contacting support, and you can revoke API keys directly inside the app.",
     ],
   },
   {

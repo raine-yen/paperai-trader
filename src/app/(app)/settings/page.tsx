@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, KeyRound, Loader2, ShieldCheck, UserRound } from "lucide-react";
+import { Bell, KeyRound, Loader2, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
 
 type Alert = { id: string; symbol: string; direction: string; target_price?: number | null; move_pct?: number | null; status: string };
@@ -21,6 +21,8 @@ export default function SettingsPage() {
   const [strategy, setStrategy] = useState("");
   const [risk, setRisk] = useState("balanced");
   const [status, setStatus] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -48,6 +50,23 @@ export default function SettingsPage() {
     const json = await res.json().catch(() => ({}));
     setStatus(res.ok ? "Profile updated." : json.error ?? "Could not update profile");
     if (res.ok) load();
+  }
+
+  async function deleteAccount() {
+    if (deleteConfirm !== "DELETE") {
+      setStatus("Type DELETE to confirm account deletion.");
+      return;
+    }
+    setDeleteBusy(true);
+    setStatus("");
+    const res = await fetch("/api/account", { method: "DELETE" });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(json.error ?? "Could not delete account");
+      setDeleteBusy(false);
+      return;
+    }
+    window.location.href = "/";
   }
 
   if (loading) return <div className="flex py-24 justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>;
@@ -94,7 +113,7 @@ export default function SettingsPage() {
           <div className="mt-4 grid gap-3 text-sm text-gray-400 md:grid-cols-3">
             <div className="surface p-4">Keep messages school-safe and competition-focused.</div>
             <div className="surface p-4">Report harassment, spam, or personal information sharing.</div>
-            <div className="surface p-4">Paper-cash gifts are simulated only and have no real-world value.</div>
+            <div className="surface p-4">No real-money trading, gambling, betting, prizes, deposits, or withdrawals.</div>
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link href="/privacy" className="btn-ghost border border-bg-border">Privacy policy</Link>
@@ -113,7 +132,7 @@ export default function SettingsPage() {
           <div className="mt-4 space-y-3 text-sm">
             <Row label="Name" value={me?.account?.display_name ?? "-"} />
             <Row label="Email" value={me?.user?.email ?? "-"} />
-            <Row label="Paper cash" value={formatUSD(Number(me?.account?.cash ?? 0))} />
+            <Row label="Practice balance" value={formatUSD(Number(me?.account?.cash ?? 0))} />
             <Row label="Unread DMs" value={String(me?.unread_messages ?? 0)} />
           </div>
         </div>
@@ -139,6 +158,24 @@ export default function SettingsPage() {
           </div>
           <KeyRound className="h-5 w-5 text-gray-500" />
         </Link>
+        <div className="card border-red-500/30 p-5">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 text-red-400" />
+            <h2 className="font-semibold">Delete account</h2>
+          </div>
+          <p className="mt-2 text-sm text-gray-500">
+            Permanently deletes your Paper Trader account and associated profile, orders, positions, messages, watchlists, and alerts.
+          </p>
+          <label className="label mt-4 block">Type DELETE to confirm</label>
+          <input className="input mt-2" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder="DELETE" />
+          <button
+            onClick={deleteAccount}
+            disabled={deleteBusy || deleteConfirm !== "DELETE"}
+            className="mt-3 w-full rounded-md bg-red-500 px-4 py-3 text-sm font-black text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {deleteBusy ? "Deleting..." : "Delete my account"}
+          </button>
+        </div>
       </aside>
     </div>
   );

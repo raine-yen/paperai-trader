@@ -1,11 +1,11 @@
 # Codex Handoff: Trading Cockpit Redesign
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 ## Current Branch
-- Repo path: `C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader`
+- Repo path: `C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean`
 - Branch: `codex/trading-cockpit-redesign`
-- Commit pushed: `2fcdf7c Build trading cockpit redesign`
+- Latest local work: App Review compliance + darker mobile cockpit pass, not pushed yet until final commit/push step.
 - PR URL: `https://github.com/raine-yen/paperai-trader/pull/new/codex/trading-cockpit-redesign`
 
 ## What Was Implemented
@@ -16,10 +16,12 @@ Last updated: 2026-05-26
   - New `Settings` page
   - Dashboard now shows competition pulse, alerts, unread messages
   - Market stock detail now supports watchlist + quick price alerts
-  - Admin now includes message reports and paper-transfer moderation panels
+  - Admin now includes message reports and practice-credit moderation panels
 - Full mobile Expo redesign:
   - Replaced old mobile app with 4 tabs: `Portfolio`, `Discover`, `Compete`, `Settings`
-  - Added watchlist, alerts, trade ticket, leaderboard, direct messages, report flow, simulated paper-cash gift UI
+  - Added watchlist, alerts, trade ticket, leaderboard, direct messages, report flow
+  - Removed mobile paper-cash gift UI to avoid Apple simulated-gambling/payment confusion
+  - Added darker near-black theme, tighter flat panels, and a reactive bottom nav that compresses while scrolling
   - No new native dependencies, so this should be OTA-publishable after backend/web deploy
 - Backend/API additions:
   - `/api/watchlists`
@@ -30,6 +32,7 @@ Last updated: 2026-05-26
   - `/api/social/block`
   - `/api/social/report`
   - `/api/transfers`
+  - `/api/account` DELETE for App Store-compliant account deletion
   - Extended `/api/me`
   - Extended `/api/admin`
 - Supabase schema updated locally in `supabase/schema.sql` for:
@@ -41,16 +44,17 @@ Last updated: 2026-05-26
   - `direct_messages`
   - `message_reports`
   - `paper_transfers`
-- App-review pages added:
+- App-review pages added/updated:
   - `/terms`
   - `/community-guidelines`
-  - `/privacy` updated for messages/transfers/reports/blocks
+  - `/privacy` updated for messages, practice-credit activity, reports, blocks, and in-app account deletion
+  - Settings now exposes account deletion on web and mobile
 
 ## Verification Completed
-- `npm run typecheck` passed.
-- `npm run build` passed locally.
-- `cd mobile && npx tsc --noEmit` passed.
-- `cd mobile && npx expo export --platform web` passed.
+- 2026-05-27: `npm run typecheck` passed.
+- 2026-05-27: `npm run build` passed locally.
+- 2026-05-27: `cd mobile && npx tsc --noEmit` passed.
+- 2026-05-27: `cd mobile && npx expo export --platform web` passed.
 - Attempted local HTTP smoke test, but output was inconclusive due local server command behavior. Build itself passed.
 
 ## Blockers / Not Finished
@@ -65,7 +69,7 @@ Last updated: 2026-05-26
     `Client network socket disconnected before secure TLS connection was established`.
   - Inspect URL from failed attempt:
     `https://vercel.com/raine-yens-projects/paper-trader/Fun2K1rJmwWdaZwtot4JJWHVgNca`
-- Expo OTA was NOT published yet.
+- Expo OTA was NOT published yet for the latest App Review compliance/mobile cockpit changes.
 - No new EAS/TestFlight build was started.
 
 ## Next Steps
@@ -76,7 +80,7 @@ Last updated: 2026-05-26
    ```
 3. Publish Expo OTA from `mobile` after web/API is live:
    ```bash
-   npx eas-cli@latest update --branch production --message "Trading cockpit redesign"
+   npx eas-cli@latest update --branch production --message "App Review compliance and mobile cockpit polish"
    ```
 4. If OTA does not reach the TestFlight build, create a new production iOS build and submit:
    ```bash
@@ -94,6 +98,8 @@ Last updated: 2026-05-26
 
 ## Important Notes
 - Keep `/v2/*` Alpaca-compatible API stable; do not mix social features into it.
-- "Send money" is simulated paper-cash only. Do not describe it as real money, payments, deposits, or withdrawals.
+- Avoid App Store-facing "cash gift", "bonus", gambling, betting, wager, prize, or cash-out language. Use "practice balance" and "practice credits" for simulated educational balances.
+- App Store Connect rating should indicate no gambling/simulated gambling if the app is educational paper trading only.
+- App Review screen recording path: sign in or create test account -> Settings -> Account deletion -> Delete my account -> confirm destructive system prompt -> account returns to auth screen.
 - Direct messages require report/block/admin moderation for App Store safety expectations.
 - Mobile changes did not add native dependencies, so start with Expo OTA before making a new binary.

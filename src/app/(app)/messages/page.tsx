@@ -14,7 +14,6 @@ export default function MessagesPage() {
   const [selected, setSelected] = useState<Leader | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
-  const [amount, setAmount] = useState("250");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -64,19 +63,6 @@ export default function MessagesPage() {
     }
     setBody("");
     await loadMessages(selected.account_id);
-  }
-
-  async function sendTransfer() {
-    if (!selected) return;
-    setStatus("");
-    const res = await fetch("/api/transfers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipient_account_id: selected.account_id, amount: Number(amount), note: "Competition paper-cash gift" }),
-    });
-    const json = await res.json().catch(() => ({}));
-    setStatus(res.ok ? `Sent ${formatUSD(Number(amount))} in simulated paper cash.` : json.error ?? "Transfer failed");
-    if (res.ok) load();
   }
 
   async function reportMessage(messageId: string) {
@@ -164,14 +150,12 @@ export default function MessagesPage() {
 
       <aside className="space-y-5">
         <div className="card p-5">
-          <h2 className="font-semibold">Paper-cash gift</h2>
-          <p className="mt-2 text-sm text-gray-500">This is simulated competition cash only. It is not real money.</p>
-          <input className="input mt-4 font-mono" type="number" min="1" max="5000" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <button onClick={sendTransfer} disabled={!selected} className="btn-buy mt-3 w-full">Send simulated cash</button>
+          <h2 className="font-semibold">Competition context</h2>
+          <p className="mt-2 text-sm text-gray-500">Use messages to ask about strategy, watchlist ideas, and classroom league progress. No real-money transfers, betting, prizes, or cash-out mechanics are supported.</p>
         </div>
         <div className="card p-5">
           <h2 className="font-semibold">Safety</h2>
-          <p className="mt-2 text-sm text-gray-500">Blocking prevents messages and paper-cash transfers between both accounts.</p>
+          <p className="mt-2 text-sm text-gray-500">Blocking prevents messages between both accounts. Reports are visible to admins for moderation.</p>
           <button onClick={blockUser} disabled={!selected} className="btn-ghost mt-4 w-full border border-bg-border text-accent-red">
             <Ban className="h-4 w-4" /> Block trader
           </button>

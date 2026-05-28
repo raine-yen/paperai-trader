@@ -7,7 +7,10 @@ import type { ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -23,10 +26,10 @@ const API_URL =
   "http://127.0.0.1:3000";
 
 const c = {
-  bg: "#050607",
-  card: "#090d10",
-  panel: "#101519",
-  line: "#1f272d",
+  bg: "#020304",
+  card: "#06090b",
+  panel: "#0b1013",
+  line: "#172027",
   text: "#f3f7f5",
   muted: "#88949d",
   green: "#21e47b",
@@ -42,7 +45,6 @@ type Position = { symbol: string; qty: number; avg_entry_price: number; current_
 type Order = { id: string; symbol: string; qty: number; side: string; type: string; status: string; filled_avg_price?: number; created_at?: string };
 type WatchItem = { id?: string; symbol: string; price?: number | null; changePct?: number | null };
 type PriceAlert = { id: string; symbol: string; direction: string; target_price?: number | null; move_pct?: number | null; status: string };
-type Transfer = { id: string; sender_account_id: string; recipient_account_id: string; amount: number; status: string; created_at: string };
 type Me = {
   user?: { email?: string };
   account: Account | null;
@@ -50,7 +52,6 @@ type Me = {
   orders: Order[];
   watchlist?: WatchItem[];
   alerts?: PriceAlert[];
-  transfers?: Transfer[];
   unread_messages?: number;
   competition?: { rank: number | null; participants: number; return_pct: number };
   profile?: { bio?: string | null; strategy?: string | null; risk_style?: string | null } | null;
@@ -89,13 +90,14 @@ export default function App() {
   const [messageTarget, setMessageTarget] = useState<Leader | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageBody, setMessageBody] = useState("");
-  const [giftAmount, setGiftAmount] = useState("250");
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [newSecret, setNewSecret] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [navCompact, setNavCompact] = useState(false);
   const inFlight = useRef(false);
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     restoreSession();
@@ -124,6 +126,12 @@ export default function App() {
 
   const selectedQuote = quotes[selectedSymbol];
   const selectedPosition = me?.positions.find((p) => p.symbol === selectedSymbol) ?? null;
+  const navOpacity = scrollY.interpolate({ inputRange: [0, 80], outputRange: [1, 0.92], extrapolate: "clamp" });
+
+  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const y = event.nativeEvent.contentOffset.y;
+    setNavCompact(y > 180);
+  }
 
   async function restoreSession() {
     const stored = await SecureStore.getItemAsync("paper-trader-session").catch(() => null);
@@ -273,17 +281,6 @@ export default function App() {
     }
   }
 
-  async function sendGift() {
-    if (!messageTarget) return;
-    try {
-      await api("/api/transfers", { method: "POST", body: JSON.stringify({ recipient_account_id: messageTarget.account_id, amount: Number(giftAmount), note: "Mobile paper-cash gift" }) });
-      Alert.alert("Paper cash sent", `${usd(Number(giftAmount))} simulated cash sent to ${messageTarget.display_name}.`);
-      await refreshAll(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Gift failed");
-    }
-  }
-
   async function reportMessage(messageId: string) {
     try {
       await api("/api/social/report", { method: "POST", body: JSON.stringify({ message_id: messageId, reason: "Reported from mobile" }) });
@@ -291,6 +288,34 @@ export default function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Report failed");
     }
+  }
+
+  async function deleteAccount() {
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your Paper Trader account, profile, positions, orders, messages, watchlist, and alerts.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete account",
+          style: "destructive",
+          onPress: async () => {
+            setBusy(true);
+            setError("");
+            try {
+              await api("/api/account", { method: "DELETE" });
+              await saveSession(null);
+              setMe(null);
+              Alert.alert("Account deleted", "Your Paper Trader account has been deleted.");
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Could not delete account");
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function createKey() {
@@ -326,6 +351,11 @@ export default function App() {
       <StatusBar style="light" />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
+        scrollEventThrottle={16}
+        onScroll={(event) => {
+          scrollY.setValue(event.nativeEvent.contentOffset.y);
+          handleScroll(event);
+        }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => refreshAll(true)} tintColor={c.green} />}
         contentContainerStyle={{ padding: 18, paddingTop: 56, paddingBottom: 116, gap: 14 }}
       >
@@ -361,14 +391,11 @@ export default function App() {
             setMessageBody={setMessageBody}
             sendMessage={sendMessage}
             reportMessage={reportMessage}
-            giftAmount={giftAmount}
-            setGiftAmount={setGiftAmount}
-            sendGift={sendGift}
           />
         )}
-        {tab === "settings" && <Settings me={me} keys={keys} newSecret={newSecret} createKey={createKey} />}
+        {tab === "settings" && <Settings me={me} keys={keys} newSecret={newSecret} createKey={createKey} deleteAccount={deleteAccount} busy={busy} />}
       </ScrollView>
-      <BottomNav tab={tab} setTab={setTab} unread={me?.unread_messages ?? 0} />
+      <BottomNav tab={tab} setTab={setTab} unread={me?.unread_messages ?? 0} compact={navCompact} opacity={navOpacity} />
     </View>
   );
 }
@@ -412,6 +439,7 @@ function Portfolio({ me, leaders, openSymbol }: { me: Me | null; leaders: Leader
         <Line title="Largest mover" sub={top ? top.symbol : "None yet"} right={top ? signedUsd(top.unrealized_pl) : "--"} tone={(top?.unrealized_pl ?? 0) >= 0 ? c.green : c.red} />
         <Line title="Active alerts" sub="Watching ideas" right={String(me?.alerts?.filter((a) => a.status === "active").length ?? 0)} />
         <Line title="Watchlist" sub="Symbols tracked" right={String(me?.watchlist?.length ?? 0)} />
+        <Line title="Simulation mode" sub="Educational only" right="No prizes" tone={c.green} />
       </Section>
       <Section title="Top competition traders">
         {leaders.slice(0, 3).map((l, index) => <Line key={l.account_id} title={`#${index + 1} ${l.display_name}`} sub={usd(l.equity)} right={signedPct(l.return_pct)} tone={l.return_pct >= 0 ? c.green : c.red} />)}
@@ -482,17 +510,14 @@ function Compete(props: {
   setMessageBody: (body: string) => void;
   sendMessage: () => void;
   reportMessage: (messageId: string) => void;
-  giftAmount: string;
-  setGiftAmount: (amount: string) => void;
-  sendGift: () => void;
 }) {
   const target = props.target ?? props.leaders.find((l) => l.account_id !== props.me?.account?.id) ?? null;
   return (
     <>
       <Panel>
-        <Text style={label}>Spring League</Text>
+        <Text style={label}>Classroom League</Text>
         <Text style={display}>{rankLabel(props.me)}</Text>
-        <Text style={muted}>Compete, message classmates, and send simulated paper-cash gifts.</Text>
+        <Text style={muted}>Compare simulated portfolio performance, study top traders, and discuss strategy with classmates.</Text>
       </Panel>
       <Section title="Leaderboard">
         {props.leaders.slice(0, 8).map((l, index) => (
@@ -518,10 +543,7 @@ function Compete(props: {
             </View>
             <Input value={props.messageBody} onChangeText={props.setMessageBody} placeholder="Message..." maxLength={500} />
             <Button label="Send message" onPress={props.sendMessage} />
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Input value={props.giftAmount} onChangeText={props.setGiftAmount} keyboardType="decimal-pad" placeholder="250" />
-              <Button label="Gift paper cash" variant="ghost" onPress={props.sendGift} />
-            </View>
+            <Text style={micro}>Long-press an incoming message to report it for admin review.</Text>
           </>
         ) : <Text style={muted}>No traders yet.</Text>}
       </Section>
@@ -529,12 +551,12 @@ function Compete(props: {
   );
 }
 
-function Settings({ me, keys, newSecret, createKey }: { me: Me | null; keys: ApiKey[]; newSecret: string; createKey: () => void }) {
+function Settings({ me, keys, newSecret, createKey, deleteAccount, busy }: { me: Me | null; keys: ApiKey[]; newSecret: string; createKey: () => void; deleteAccount: () => void; busy: boolean }) {
   return (
     <>
       <Section title="Account">
         <Line title="Name" sub={me?.user?.email ?? ""} right={me?.account?.display_name ?? "--"} />
-        <Line title="Paper cash" sub="Simulated only" right={usd(me?.account?.cash ?? 0)} />
+        <Line title="Practice balance" sub="Simulation only" right={usd(me?.account?.cash ?? 0)} />
         <Line title="Risk style" sub="Profile" right={me?.profile?.risk_style ?? "balanced"} />
       </Section>
       <Section title="Alerts">
@@ -547,22 +569,26 @@ function Settings({ me, keys, newSecret, createKey }: { me: Me | null; keys: Api
         {keys.map((k) => <Line key={k.id} title={k.label || "Trading bot"} sub={k.key_id} right={k.revoked_at ? "Revoked" : "Active"} />)}
       </Section>
       <Section title="Safety">
-        <Text style={muted}>Paper Trader is educational. Direct messages can be reported, users can be blocked, and paper-cash gifts have no real-world value.</Text>
+        <Text style={muted}>Paper Trader is educational. There is no real-money trading, gambling, betting, prizes, deposits, or withdrawals. Direct messages can be reported for admin review.</Text>
+      </Section>
+      <Section title="Account deletion">
+        <Text style={muted}>Permanently delete your account and associated Paper Trader data. This cannot be undone.</Text>
+        <Button label={busy ? "Working..." : "Delete my account"} variant="danger" disabled={busy} onPress={deleteAccount} />
       </Section>
     </>
   );
 }
 
-function BottomNav({ tab, setTab, unread }: { tab: Tab; setTab: (tab: Tab) => void; unread: number }) {
-  const items: Array<[Tab, string]> = [["portfolio", "Portfolio"], ["discover", "Discover"], ["compete", "Compete"], ["settings", "Settings"]];
+function BottomNav({ tab, setTab, unread, compact, opacity }: { tab: Tab; setTab: (tab: Tab) => void; unread: number; compact: boolean; opacity: Animated.AnimatedInterpolation<string | number> }) {
+  const items: Array<[Tab, string, string]> = [["portfolio", "PF", "Portfolio"], ["discover", "SR", "Discover"], ["compete", "CP", "Compete"], ["settings", "ST", "Settings"]];
   return (
-    <View style={nav}>
-      {items.map(([key, labelText]) => (
-        <Pressable key={key} onPress={() => setTab(key)} style={[navItem, tab === key && { backgroundColor: c.green }]}>
-          <Text style={{ color: tab === key ? "#001307" : c.text, fontWeight: "900", fontSize: 11 }}>{labelText}{key === "compete" && unread ? ` ${unread}` : ""}</Text>
+    <Animated.View style={[compact ? navCompactStyle : nav, { opacity }]}>
+      {items.map(([key, icon, labelText]) => (
+        <Pressable key={key} onPress={() => setTab(key)} style={[compact ? navDot : navItem, tab === key && { backgroundColor: c.green }]}>
+          <Text style={{ color: tab === key ? "#001307" : c.text, fontWeight: "900", fontSize: compact ? 10 : 11 }}>{compact ? icon : labelText}{!compact && key === "compete" && unread ? ` ${unread}` : ""}</Text>
         </Pressable>
       ))}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -681,18 +707,20 @@ const metricGood: TextStyle = { color: c.green, fontSize: 15, fontWeight: "900" 
 const tileValue: TextStyle = { color: c.text, fontSize: 17, fontWeight: "900", fontVariant: ["tabular-nums"] };
 const lineTitle: TextStyle = { color: c.text, fontSize: 15, fontWeight: "850" as TextStyle["fontWeight"], fontVariant: ["tabular-nums"] };
 const rowBetween = { flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "center" as const, gap: 12 };
-const panel = { backgroundColor: "#070a0c", borderColor: c.line, borderWidth: 1, borderRadius: 22, padding: 18, gap: 14 };
-const card = { backgroundColor: c.card, borderColor: c.line, borderWidth: 1, borderRadius: 18, padding: 16, gap: 12 };
-const tile = { width: "48%" as const, backgroundColor: c.panel, borderColor: c.line, borderWidth: 1, borderRadius: 14, padding: 13, gap: 6 };
+const panel = { backgroundColor: "#030506", borderColor: c.line, borderBottomWidth: 1, paddingVertical: 18, gap: 14 };
+const card = { backgroundColor: c.card, borderColor: c.line, borderTopWidth: 1, borderBottomWidth: 1, borderRadius: 8, padding: 16, gap: 12 };
+const tile = { width: "48%" as const, backgroundColor: c.panel, borderColor: c.line, borderWidth: 1, borderRadius: 8, padding: 13, gap: 6 };
 const line = { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: 12, borderBottomColor: c.line, borderBottomWidth: 1, paddingVertical: 10 };
-const input = { color: c.text, backgroundColor: "#070a0c", borderColor: c.line, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16 };
-const button = { borderRadius: 14, paddingVertical: 13, paddingHorizontal: 14, alignItems: "center" as const, justifyContent: "center" as const, flex: 1 };
+const input = { color: c.text, backgroundColor: "#050708", borderColor: c.line, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16 };
+const button = { borderRadius: 999, paddingVertical: 13, paddingHorizontal: 14, alignItems: "center" as const, justifyContent: "center" as const, flex: 1 };
 const buttonText: TextStyle = { color: c.text, fontWeight: "900", fontSize: 13 };
-const segment = { flexDirection: "row" as const, backgroundColor: c.panel, borderRadius: 14, padding: 4, gap: 4 };
-const segmentItem = { flex: 1, alignItems: "center" as const, paddingVertical: 10, borderRadius: 11 };
+const segment = { flexDirection: "row" as const, backgroundColor: c.panel, borderRadius: 999, padding: 4, gap: 4 };
+const segmentItem = { flex: 1, alignItems: "center" as const, paddingVertical: 10, borderRadius: 999 };
 const chip = { borderColor: c.line, borderWidth: 1, backgroundColor: c.panel, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9 };
-const banner: TextStyle = { borderRadius: 14, padding: 12, fontWeight: "800" };
+const banner: TextStyle = { borderRadius: 8, padding: 12, fontWeight: "800" };
 const bars = { height: 138, flexDirection: "row" as const, alignItems: "flex-end" as const, gap: 3, paddingTop: 8 };
 const bubble = { maxWidth: "82%" as const, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10 };
-const nav = { position: "absolute" as const, left: 14, right: 14, bottom: 24, flexDirection: "row" as const, gap: 6, backgroundColor: "#050607e8", borderColor: c.line, borderWidth: 1, borderRadius: 22, padding: 8 };
-const navItem = { flex: 1, alignItems: "center" as const, justifyContent: "center" as const, borderRadius: 16, minHeight: 44 };
+const nav = { position: "absolute" as const, left: 14, right: 14, bottom: 24, flexDirection: "row" as const, gap: 6, backgroundColor: "#05090cf2", borderColor: "#26333b", borderWidth: 1, borderRadius: 999, padding: 8 };
+const navCompactStyle = { position: "absolute" as const, right: 14, bottom: 24, flexDirection: "row" as const, gap: 5, backgroundColor: "#05090cf2", borderColor: "#26333b", borderWidth: 1, borderRadius: 999, padding: 7 };
+const navItem = { flex: 1, alignItems: "center" as const, justifyContent: "center" as const, borderRadius: 999, minHeight: 44 };
+const navDot = { width: 38, height: 38, alignItems: "center" as const, justifyContent: "center" as const, borderRadius: 999 };
