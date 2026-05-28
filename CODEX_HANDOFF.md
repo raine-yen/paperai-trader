@@ -5,7 +5,7 @@ Last updated: 2026-05-27
 ## Current Branch
 - Repo path: `C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean`
 - Branch: `codex/trading-cockpit-redesign`
-- Latest local work: App Review compliance + darker mobile cockpit pass, not pushed yet until final commit/push step.
+- Latest pushed commit: `be9ecc9 Refine App Store safety copy`
 - PR URL: `https://github.com/raine-yen/paperai-trader/pull/new/codex/trading-cockpit-redesign`
 
 ## What Was Implemented
@@ -51,10 +51,10 @@ Last updated: 2026-05-27
   - Settings now exposes account deletion on web and mobile
 
 ## Verification Completed
-- 2026-05-27: `npm run typecheck` passed.
-- 2026-05-27: `npm run build` passed locally.
-- 2026-05-27: `cd mobile && npx tsc --noEmit` passed.
-- 2026-05-27: `cd mobile && npx expo export --platform web` passed.
+- 2026-05-27 after latest commit: `npm run typecheck` passed.
+- 2026-05-27 after latest commit: `npm run build` passed locally.
+- 2026-05-27 after latest commit: `cd mobile && npx tsc --noEmit` passed.
+- 2026-05-27 after latest commit: `cd mobile && npx expo export --platform web` passed.
 - Attempted local HTTP smoke test, but output was inconclusive due local server command behavior. Build itself passed.
 
 ## Blockers / Not Finished
@@ -63,31 +63,30 @@ Last updated: 2026-05-27
   - Attempted via Supabase connector.
   - Failed with permission error: `You do not have permission to perform this action`.
   - Until this migration is applied, new social/watchlist/alerts/transfer features will gracefully return empty/unavailable in production.
-- Vercel production deploy was attempted.
-  - Upload/build started.
-  - Failed/timed out due network TLS disconnect:
-    `Client network socket disconnected before secure TLS connection was established`.
-  - Inspect URL from failed attempt:
-    `https://vercel.com/raine-yens-projects/paper-trader/Fun2K1rJmwWdaZwtot4JJWHVgNca`
-- Expo OTA was NOT published yet for the latest App Review compliance/mobile cockpit changes.
+- Vercel production deploy succeeded for the real `paper-trader` project.
+  - Production URL: `https://paper-trader-lac.vercel.app`
+  - Latest inspected deployment id: `dpl_A97om3KtxrKScL2FJRG5w2ybTEtR`
+- Expo OTA was published to branch `production`.
+  - Latest update group: `5dd3d3af-6792-4363-a24a-47835cfa87e0`
+  - Runtime version: `1.0.0`
+  - Platforms: iOS and Android
 - No new EAS/TestFlight build was started.
 
 ## Next Steps
 1. Apply the SQL additions from `supabase/schema.sql` to Supabase production project `fwlbickoywztcikyhvbj` using the dashboard SQL editor or a session/tool with DDL permission.
-2. Retry Vercel deploy from repo root:
-   ```bash
-   npx vercel deploy --prod --yes
-   ```
-3. Publish Expo OTA from `mobile` after web/API is live:
-   ```bash
-   npx eas-cli@latest update --branch production --message "App Review compliance and mobile cockpit polish"
-   ```
-4. If OTA does not reach the TestFlight build, create a new production iOS build and submit:
+2. In App Store Connect, update the rating questionnaire so Paper Trader is not marked as gambling or simulated gambling.
+3. Record the App Review account deletion video on a physical device:
+   - Sign in or create a test account.
+   - Open Settings.
+   - Tap Account deletion / Delete my account.
+   - Confirm the destructive prompt.
+   - Show the app returning to the signed-out screen.
+4. If OTA does not reach the TestFlight/App Review build, create a new production iOS build and submit:
    ```bash
    npx eas-cli@latest build -p ios --profile production
    npx eas-cli@latest submit -p ios --latest --profile production
    ```
-5. Re-run verification:
+5. Re-run verification when making further code changes:
    ```bash
    npm run typecheck
    npm run build
