@@ -14,7 +14,7 @@ export default function TermsPage() {
         <h1 className="mt-3 text-4xl font-black tracking-tight">Terms</h1>
         <div className="mt-8 space-y-5 text-sm leading-7 text-gray-300">
           <p>Paper Trader is an educational paper-trading simulator. It does not provide brokerage services, investment advice, real-money trading, deposits, withdrawals, or cash transfers.</p>
-          <p>All balances, trades, leaderboard rankings, learning goals, and practice credits are simulated and have no real-world monetary value. The app does not include gambling, betting, wagering, sweepstakes, prizes, or cash-out mechanics.</p>
+          <p>All balances, trades, leaderboard rankings, learning goals, and practice credits are simulated and have no real-world monetary value. The app does not include real-money trading, deposits, withdrawals, payouts, or cash-out mechanics.</p>
           <p>Users are responsible for school-safe conduct in direct messages and competition spaces. Accounts may be disabled or content may be hidden for abuse, harassment, spam, or unsafe behavior.</p>
           <p>Market data may be delayed, unavailable, or approximate and is provided only for educational simulation.</p>
         </div>

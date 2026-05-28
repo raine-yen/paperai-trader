@@ -113,7 +113,7 @@ export default function SettingsPage() {
           <div className="mt-4 grid gap-3 text-sm text-gray-400 md:grid-cols-3">
             <div className="surface p-4">Keep messages school-safe and competition-focused.</div>
             <div className="surface p-4">Report harassment, spam, or personal information sharing.</div>
-            <div className="surface p-4">No real-money trading, gambling, betting, prizes, deposits, or withdrawals.</div>
+            <div className="surface p-4">No real-money trading, deposits, withdrawals, payouts, or cash-out.</div>
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link href="/privacy" className="btn-ghost border border-bg-border">Privacy policy</Link>

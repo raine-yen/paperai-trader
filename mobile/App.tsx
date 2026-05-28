@@ -439,7 +439,7 @@ function Portfolio({ me, leaders, openSymbol }: { me: Me | null; leaders: Leader
         <Line title="Largest mover" sub={top ? top.symbol : "None yet"} right={top ? signedUsd(top.unrealized_pl) : "--"} tone={(top?.unrealized_pl ?? 0) >= 0 ? c.green : c.red} />
         <Line title="Active alerts" sub="Watching ideas" right={String(me?.alerts?.filter((a) => a.status === "active").length ?? 0)} />
         <Line title="Watchlist" sub="Symbols tracked" right={String(me?.watchlist?.length ?? 0)} />
-        <Line title="Simulation mode" sub="Educational only" right="No prizes" tone={c.green} />
+        <Line title="Simulation mode" sub="Educational only" right="Practice only" tone={c.green} />
       </Section>
       <Section title="Top competition traders">
         {leaders.slice(0, 3).map((l, index) => <Line key={l.account_id} title={`#${index + 1} ${l.display_name}`} sub={usd(l.equity)} right={signedPct(l.return_pct)} tone={l.return_pct >= 0 ? c.green : c.red} />)}
@@ -569,7 +569,7 @@ function Settings({ me, keys, newSecret, createKey, deleteAccount, busy }: { me:
         {keys.map((k) => <Line key={k.id} title={k.label || "Trading bot"} sub={k.key_id} right={k.revoked_at ? "Revoked" : "Active"} />)}
       </Section>
       <Section title="Safety">
-        <Text style={muted}>Paper Trader is educational. There is no real-money trading, gambling, betting, prizes, deposits, or withdrawals. Direct messages can be reported for admin review.</Text>
+        <Text style={muted}>Paper Trader is educational. There is no real-money trading, deposits, withdrawals, payouts, or cash-out. Direct messages can be reported for admin review.</Text>
       </Section>
       <Section title="Account deletion">
         <Text style={muted}>Permanently delete your account and associated Paper Trader data. This cannot be undone.</Text>

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 const rules = [
   "Keep messages respectful, school-safe, and focused on learning or competition.",
   "Do not harass, threaten, spam, impersonate, or share private personal information.",
-  "Do not present simulated balances, practice credits, or classroom rankings as real money, prizes, betting, or gambling.",
+  "Do not present simulated balances, practice credits, or classroom rankings as real money, payouts, or cash-out value.",
   "Use report and block controls when something feels unsafe or inappropriate.",
   "Admins may review reports, hide messages, disable accounts, and moderate unsafe activity.",
 ];

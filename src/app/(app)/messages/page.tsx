@@ -151,7 +151,7 @@ export default function MessagesPage() {
       <aside className="space-y-5">
         <div className="card p-5">
           <h2 className="font-semibold">Competition context</h2>
-          <p className="mt-2 text-sm text-gray-500">Use messages to ask about strategy, watchlist ideas, and classroom league progress. No real-money transfers, betting, prizes, or cash-out mechanics are supported.</p>
+          <p className="mt-2 text-sm text-gray-500">Use messages to ask about strategy, watchlist ideas, and classroom league progress. No real-money transfers, deposits, withdrawals, payouts, or cash-out mechanics are supported.</p>
         </div>
         <div className="card p-5">
           <h2 className="font-semibold">Safety</h2>
