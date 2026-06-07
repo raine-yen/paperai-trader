@@ -1,12 +1,15 @@
 # Codex Handoff: Trading Cockpit Redesign
 
-Last updated: 2026-05-27
+Last updated: 2026-06-07
 
 ## Current Branch
 - Repo path: `C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean`
+- This is the production repo to use for the real website, API, Expo mobile app, Supabase schema, and GitHub pushes.
+- Do not use `C:\Users\UX5406AA_SKU1\OneDrive\Documents\Projects\paper-trader` for production work. That OneDrive folder is a small Vite/prototype/design folder and does not contain the real Next.js API, Expo app, Supabase schema, or native iOS project.
 - Branch: `codex/trading-cockpit-redesign`
-- Latest pushed commit: `fc97012 Configure iOS submit app id`
+- Latest pushed commit: `facc9d0 Prepare native iOS project for TestFlight`
 - PR URL: `https://github.com/raine-yen/paperai-trader/pull/new/codex/trading-cockpit-redesign`
+- GitHub remote: `https://github.com/raine-yen/paperai-trader.git`
 
 ## What Was Implemented
 - Full web cockpit redesign:
@@ -24,6 +27,11 @@ Last updated: 2026-05-27
   - Added darker near-black theme, tighter flat panels, and a reactive bottom nav that compresses while scrolling
   - Added stock logo rows and user profile picture picker/upload
   - Added `expo-image-picker`, so this now requires a fresh native build instead of OTA-only rollout
+- Native SwiftUI experiment:
+  - Separate native project exists at `ios/PaperTrader.xcodeproj`.
+  - Commit `2c81c7c Refine native iOS dashboard depth and theming` changed `ios/PaperTrader/ContentView.swift`, `DashboardView.swift`, `MarketView.swift`, and `Theme.swift`.
+  - Commit `facc9d0 Prepare native iOS project for TestFlight` set the native project's API URL to `https://paper-trader-lac.vercel.app`, bundle id to `com.papertrader.mobile`, version to `1.0.2`, and build number to `15`.
+  - Important: EAS/TestFlight builds from Windows use `mobile/`, not this separate Swift project. SwiftUI changes must be ported into `mobile/App.tsx` to appear in EAS builds.
 - Backend/API additions:
   - `/api/watchlists`
   - `/api/alerts`
@@ -64,6 +72,21 @@ Last updated: 2026-05-27
   - `https://www.canva.com/d/A2-hSR9vShhxZpZ`
 - Attempted local HTTP smoke test, but output was inconclusive due local server command behavior. Build itself passed.
 
+## Current Work In Progress
+- As of 2026-06-07, there are uncommitted changes in `mobile/App.tsx`.
+- These changes started porting the SwiftUI dashboard feel into the Expo app:
+  - Portfolio hero label changed to `Total net worth`.
+  - Added a sparkline-style account visual.
+  - Added metric rows for practice balance, invested value, and return.
+  - Portfolio grid now emphasizes rank, inbox, alerts, and watchlist.
+  - Holdings list is capped to the first four positions.
+  - Added a collapsible `Recent orders` section.
+- Before building/submitting again, inspect and finish this work:
+  - Add `snapshots` to the mobile `Me` TypeScript type, or remove the `me?.snapshots` reference.
+  - Replace the non-ASCII middle dot in the new order row text with an ASCII separator.
+  - Run `cd mobile && npx tsc --noEmit`.
+  - Commit and push the finished mobile changes.
+
 ## Blockers / Not Finished
 - Supabase production migration was NOT applied.
   - Project ref: `fwlbickoywztcikyhvbj`
@@ -81,17 +104,56 @@ Last updated: 2026-05-27
   - Submission URL: `https://expo.dev/accounts/raine.ye/projects/paper-trader-mobile/submissions/adb8f91a-4cb3-44b7-a449-31b3b066eea4`
   - App Store Connect build page: `https://appstoreconnect.apple.com/apps/6771218600/testflight/ios`
 
+## How iOS Is Built And Submitted From Windows
+- The TestFlight app is the Expo app in `C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean\mobile`.
+- App Store Connect app id: `6771218600`.
+- iOS bundle id: `com.papertrader.mobile`.
+- Expo owner/project:
+  - Owner: `raine.ye`
+  - Slug: `paper-trader-mobile`
+  - EAS project id: `0c09d383-ef50-4df0-b7ab-5a77cd306f6d`
+- `mobile/eas.json` is already configured:
+  - `appVersionSource`: `remote`
+  - production build has `autoIncrement: true`
+  - submit profile has `ascAppId: "6771218600"`
+- To create a new TestFlight binary from Windows:
+  ```bash
+  cd C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean\mobile
+  npx eas-cli@latest build -p ios --profile production --non-interactive
+  ```
+- To submit the latest completed iOS EAS build to App Store Connect:
+  ```bash
+  cd C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean\mobile
+  npx eas-cli@latest submit -p ios --latest --profile production --non-interactive
+  ```
+- To check recent iOS builds:
+  ```bash
+  cd C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean\mobile
+  npx eas-cli@latest build:list --platform ios --limit 5 --non-interactive
+  ```
+- Why this works without a Mac:
+  - EAS Build runs the iOS archive on Expo's macOS build servers.
+  - Windows only starts the remote build and submission.
+  - The separate Swift/Xcode project in `ios/` cannot be archived locally on this Windows machine because there is no Xcode or `xcodebuild`.
+- OTA updates:
+  - `mobile/app.json` uses `runtimeVersion.policy = "appVersion"` and current version `1.0.1`.
+  - Build 14 uses runtime/app version `1.0.1`.
+  - JS-only changes can be published OTA only to installed builds with matching runtime `1.0.1`.
+  - Changes involving new native dependencies, app config, entitlements, icons, bundle id, or native files require a new EAS build.
+
 ## Next Steps
-1. Apply the SQL additions from `supabase/schema.sql` to Supabase production project `fwlbickoywztcikyhvbj` using the dashboard SQL editor or a session/tool with DDL permission.
-2. Wait for Apple to finish processing build 14, then select it in TestFlight/App Review.
-3. In App Store Connect, update the rating questionnaire so Paper Trader is not marked as gambling or simulated gambling.
-4. Record the App Review account deletion video on a physical device:
+1. Finish the uncommitted Expo dashboard port in `mobile/App.tsx`, typecheck it, commit it, and push it.
+2. If only JavaScript changed, decide whether to publish OTA to runtime `1.0.1` or create a fresh TestFlight binary anyway. For a clear beta-test artifact, prefer a new EAS iOS production build and submit it.
+3. Apply the SQL additions from `supabase/schema.sql` to Supabase production project `fwlbickoywztcikyhvbj` using the dashboard SQL editor or a session/tool with DDL permission.
+4. Wait for Apple to finish processing the newest submitted build, then select it in TestFlight/App Review.
+5. In App Store Connect, update the rating questionnaire so Paper Trader is not marked as gambling or simulated gambling.
+6. Record the App Review account deletion video on a physical device:
    - Sign in or create a test account.
    - Open Settings.
    - Tap Account deletion / Delete my account.
    - Confirm the destructive prompt.
    - Show the app returning to the signed-out screen.
-5. Re-run verification when making further code changes:
+7. Re-run verification when making further code changes:
    ```bash
    npm run typecheck
    npm run build
@@ -106,4 +168,4 @@ Last updated: 2026-05-27
 - App Store Connect rating should indicate no gambling/simulated gambling if the app is educational paper trading only.
 - App Review screen recording path: sign in or create test account -> Settings -> Account deletion -> Delete my account -> confirm destructive system prompt -> account returns to auth screen.
 - Direct messages require report/block/admin moderation for App Store safety expectations.
-- Mobile changes did not add native dependencies, so start with Expo OTA before making a new binary.
+- Current Expo mobile app already includes `expo-image-picker`, so profile-picture support was handled by build 14. Future JS-only UI edits can use OTA if the runtime version matches, but native/config edits still need a new EAS build.
