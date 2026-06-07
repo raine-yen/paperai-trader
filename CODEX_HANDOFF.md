@@ -6,6 +6,9 @@ Last updated: 2026-06-07
 - Repo path: `C:\Users\UX5406AA_SKU1\Documents\Projects\paper-trader-clean`
 - This is the production repo to use for the real website, API, Expo mobile app, Supabase schema, and GitHub pushes.
 - Do not use `C:\Users\UX5406AA_SKU1\OneDrive\Documents\Projects\paper-trader` for production work. That OneDrive folder is a small Vite/prototype/design folder and does not contain the real Next.js API, Expo app, Supabase schema, or native iOS project.
+- Cleanup note: attempted to rename the OneDrive prototype folder to `_archive-paper-trader-prototype-do-not-use` on 2026-06-07, but Windows reported it was open/in use. Added warning/locator files instead:
+  - `C:\Users\UX5406AA_SKU1\OneDrive\Documents\Projects\USE_THIS_FOR_PAPER_TRADER.txt`
+  - `C:\Users\UX5406AA_SKU1\OneDrive\Documents\Projects\paper-trader\__NOT_THE_REAL_APP_DO_NOT_USE_FOR_BUILDS.txt`
 - Branch: `codex/trading-cockpit-redesign`
 - Latest pushed commit: `facc9d0 Prepare native iOS project for TestFlight`
 - PR URL: `https://github.com/raine-yen/paperai-trader/pull/new/codex/trading-cockpit-redesign`
