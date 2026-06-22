@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fetchYahooPrices } from "@/lib/prices";
 import { getSessionUser } from "@/lib/session-user";
 import { isMissingTableError } from "@/lib/app-data";
+import { isAdminEmail } from "@/lib/admin";
 
 // Authenticated dashboard endpoint — returns the current user's account, positions, recent orders.
 export async function GET(req: NextRequest) {
@@ -106,6 +107,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     user: { id: user.id, email: user.email },
+    is_admin: isAdminEmail(user.email),
     account: { ...account, equity, positions_value: positionsValue },
     positions: positionsWithMarket,
     orders: orders ?? [],
