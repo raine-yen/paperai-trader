@@ -6,6 +6,7 @@ import { BarChart2, BookOpen, KeyRound, LineChart, LogOut, Menu, MessageCircle, 
 import { useState } from "react";
 import { isAdminEmail } from "@/lib/admin";
 import { cn } from "@/lib/utils";
+import { ThemeSelector } from "@/components/theme-selector";
 
 const BASE_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LineChart },
@@ -43,7 +44,7 @@ export function Nav({ email }: { email?: string }) {
             onClick={() => setOpen(false)}
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors",
-              active ? "bg-accent-green text-black shadow-[0_0_24px_rgba(0,200,83,.18)]" : "text-gray-400 hover:bg-white/[0.045] hover:text-white"
+              active ? "bg-accent-green text-black shadow-[0_0_24px_rgba(0,200,83,.18)]" : "text-gray-400 hover:bg-bg-elevated hover:text-gray-50"
             )}
           >
             <Icon className="h-4 w-4" />
@@ -72,6 +73,7 @@ export function Nav({ email }: { email?: string }) {
           <div className="ml-4 hidden flex-1 items-center gap-1 lg:ml-0 lg:mt-7 lg:flex lg:flex-col lg:items-stretch">{links}</div>
 
           <div className="ml-auto flex items-center gap-3 lg:ml-0 lg:mt-auto lg:flex-col lg:items-stretch">
+            <ThemeSelector compact />
             <div className="hidden items-center gap-2 rounded-full border border-bg-border bg-bg-card px-3 py-1.5 text-xs text-gray-400 md:flex lg:rounded-lg">
               <span className="h-2 w-2 rounded-full bg-accent-green shadow-[0_0_16px_rgba(0,200,83,.75)]" />
               Market data online

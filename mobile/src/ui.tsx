@@ -86,7 +86,7 @@ export function IconButton({
 export function Input(props: TextInputProps & { label?: string }) {
   return (
     <View style={{ gap: 8 }}>
-      {props.label ? <Text style={labelStyle}>{props.label}</Text> : null}
+      {props.label ? <Text style={labelStyle()}>{props.label}</Text> : null}
       <TextInput
         placeholderTextColor={colors.subtle}
         {...props}
@@ -120,12 +120,12 @@ export function Section({ title, action, children }: { title?: string; action?: 
   );
 }
 
-export function Surface({ children, padded = true }: { children: ReactNode; padded?: boolean }) {
+export function Surface({ children, padded = true, tone }: { children: ReactNode; padded?: boolean; tone?: string }) {
   return (
     <View
       style={{
         borderRadius: radius.lg,
-        backgroundColor: colors.card,
+        backgroundColor: tone ?? colors.card,
         borderWidth: 1,
         borderColor: colors.line,
         padding: padded ? 16 : 0,
@@ -267,14 +267,14 @@ export function MarketRow({
 export function Metric({ label, value, tone = colors.text }: { label: string; value: string; tone?: string }) {
   return (
     <View style={{ flex: 1, gap: 7 }}>
-      <Text style={labelStyle}>{label}</Text>
+      <Text style={labelStyle()}>{label}</Text>
       <Text style={{ color: tone, fontSize: 24, fontWeight: font.bold, fontVariant: ["tabular-nums"] }} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
 
-const labelStyle = {
+const labelStyle = () => ({
   color: colors.muted,
   fontSize: 13,
   fontWeight: font.medium,
-} as const;
+});

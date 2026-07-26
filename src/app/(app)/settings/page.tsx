@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, KeyRound, Loader2, ShieldCheck, Trash2, UserRound } from "lucide-react";
+import { Bell, KeyRound, Loader2, Palette, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
+import { ThemeSelector } from "@/components/theme-selector";
 
 type Alert = { id: string; symbol: string; direction: string; target_price?: number | null; move_pct?: number | null; status: string };
 type Me = {
@@ -88,16 +89,16 @@ export default function SettingsPage() {
           <p className="mt-1 text-sm text-gray-500">Visible from competition profiles so classmates can understand your simulated strategy.</p>
           <div className="mt-5 grid gap-4">
             <div>
-              <label className="label">Bio</label>
-              <textarea className="input min-h-24" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={280} />
+              <label htmlFor="profile-bio" className="label">Bio</label>
+              <textarea id="profile-bio" className="input min-h-24" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={280} />
             </div>
             <div>
-              <label className="label">Strategy</label>
-              <textarea className="input min-h-24" value={strategy} onChange={(e) => setStrategy(e.target.value)} maxLength={280} />
+              <label htmlFor="profile-strategy" className="label">Strategy</label>
+              <textarea id="profile-strategy" className="input min-h-24" value={strategy} onChange={(e) => setStrategy(e.target.value)} maxLength={280} />
             </div>
             <div>
-              <label className="label">Risk style</label>
-              <select className="input" value={risk} onChange={(e) => setRisk(e.target.value)}>
+              <label htmlFor="risk-style" className="label">Risk style</label>
+              <select id="risk-style" className="input" value={risk} onChange={(e) => setRisk(e.target.value)}>
                 <option value="conservative">Conservative</option>
                 <option value="balanced">Balanced</option>
                 <option value="aggressive">Aggressive</option>
@@ -124,6 +125,14 @@ export default function SettingsPage() {
       </section>
 
       <aside className="space-y-5">
+        <div className="card p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Palette className="h-4 w-4 text-accent-violet" />
+            <h2 className="font-semibold">Theme</h2>
+          </div>
+          <ThemeSelector />
+          <p className="mt-3 text-xs leading-5 text-gray-500">System follows your device. Midnight uses the highest-contrast trading palette.</p>
+        </div>
         <div className="card p-5">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-accent-green" />
@@ -166,8 +175,8 @@ export default function SettingsPage() {
           <p className="mt-2 text-sm text-gray-500">
             Permanently deletes your Paper Trader account and associated profile, orders, positions, messages, watchlists, and alerts.
           </p>
-          <label className="label mt-4 block">Type DELETE to confirm</label>
-          <input className="input mt-2" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder="DELETE" />
+          <label htmlFor="delete-confirmation" className="label mt-4 block">Type DELETE to confirm</label>
+          <input id="delete-confirmation" className="input mt-2" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder="DELETE" />
           <button
             onClick={deleteAccount}
             disabled={deleteBusy || deleteConfirm !== "DELETE"}

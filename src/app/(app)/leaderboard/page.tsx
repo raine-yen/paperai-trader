@@ -7,7 +7,6 @@ import { cn, formatPct, formatUSD } from "@/lib/utils";
 interface Entry {
   account_id: string;
   display_name: string;
-  email?: string;
   equity: number;
   starting_cash: number;
   return_pct: number;
@@ -129,7 +128,7 @@ export default function LeaderboardPage() {
                         <td className="px-4 py-4">
                           <div className="font-semibold">{entry.display_name}</div>
                           <div className="text-xs text-gray-500">
-                            {entry.email ?? `Starting ${formatUSD(Number(entry.starting_cash))}`}
+                            Starting {formatUSD(Number(entry.starting_cash))}
                           </div>
                         </td>
                         <td className="px-4 py-4 text-right font-semibold tabular-nums">{formatUSD(Number(entry.equity))}</td>

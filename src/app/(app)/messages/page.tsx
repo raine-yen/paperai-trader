@@ -102,7 +102,7 @@ export default function MessagesPage() {
             <button
               key={trader.account_id}
               onClick={() => setSelected(trader)}
-              className={cn("w-full p-4 text-left transition-colors hover:bg-white/[0.04]", selected?.account_id === trader.account_id && "bg-accent-green/10")}
+              className={cn("w-full p-4 text-left transition-colors hover:bg-bg-elevated", selected?.account_id === trader.account_id && "bg-accent-green/10")}
             >
               <div className="font-semibold">{trader.display_name}</div>
               <div className="mt-1 flex justify-between text-xs text-gray-500">
@@ -127,7 +127,7 @@ export default function MessagesPage() {
               const own = message.sender_account_id === me?.account?.id;
               return (
                 <div key={message.id} className={cn("flex", own ? "justify-end" : "justify-start")}>
-                  <div className={cn("max-w-[78%] rounded-lg px-4 py-3", own ? "bg-accent-green text-black" : "bg-bg-elevated text-white")}>
+                  <div className={cn("max-w-[78%] rounded-lg px-4 py-3", own ? "bg-accent-green text-black" : "bg-bg-elevated text-gray-50")}>
                     <div className="text-sm font-medium">{message.body}</div>
                     <div className={cn("mt-1 flex items-center gap-2 text-[11px]", own ? "text-black/60" : "text-gray-500")}>
                       <span>{timeAgo(message.created_at)}</span>

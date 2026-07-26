@@ -138,6 +138,15 @@ export type ApiKey = {
   created_at?: string | null;
 };
 
+export type LeaderboardEntry = {
+  account_id: string;
+  competition_id: string;
+  display_name: string;
+  equity: number;
+  starting_cash: number;
+  return_pct: number;
+};
+
 export type AdminAccount = Account & {
   email?: string;
   return_pct?: number;

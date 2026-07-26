@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Bot, KeyRound, LineChart, LockKeyhole, Radio, Trophy } from "lucide-react";
+import { ThemeSelector } from "@/components/theme-selector";
 
 const metrics = [
   { label: "Live refresh", value: "10s" },
@@ -16,7 +17,7 @@ const features = [
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-bg text-white">
+    <div className="min-h-screen bg-bg text-gray-50">
       <nav className="sticky top-0 z-20 border-b border-bg-border bg-bg/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5">
           <Link href="/" className="flex items-center gap-3">
@@ -27,6 +28,7 @@ export default function Landing() {
             </div>
           </Link>
           <div className="flex items-center gap-2">
+            <div className="hidden w-28 md:block"><ThemeSelector compact /></div>
             <Link href="/login" className="btn-ghost hidden sm:inline-flex">Log in</Link>
             <Link href="/signup" className="btn-buy">Start trading <ArrowRight className="h-4 w-4" /></Link>
           </div>
@@ -53,7 +55,7 @@ export default function Landing() {
             <div className="mt-10 grid max-w-lg grid-cols-3 gap-3">
               {metrics.map((m) => (
                 <div key={m.label} className="surface p-4">
-                  <div className="font-mono text-xl font-bold text-white">{m.value}</div>
+                  <div className="font-mono text-xl font-bold text-gray-50">{m.value}</div>
                   <div className="mt-1 text-xs text-gray-500">{m.label}</div>
                 </div>
               ))}

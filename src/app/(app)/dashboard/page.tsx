@@ -195,7 +195,7 @@ export default function Dashboard() {
               <h2 className="font-semibold">Account Mix</h2>
               <p className="text-xs text-gray-500">Cash and open market value</p>
             </div>
-            <Link href="/market" className="text-xs font-semibold text-accent-green hover:text-white">Trade</Link>
+            <Link href="/market" className="text-xs font-semibold text-accent-green hover:text-gray-50">Trade</Link>
           </div>
           <div className="space-y-4">
             <Allocation label="Cash" value={account.cash} total={allocationBase} tone="bg-accent-blue" />

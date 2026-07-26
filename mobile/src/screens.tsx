@@ -4,9 +4,9 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "rea
 import { InteractiveLineChart } from "./charts";
 import { compactMoney, compactNumber, firstName, greeting, maybeUsd, metric, rangeLabel, signedPct, signedUsd, timeAgo, usd } from "./format";
 import { getCompanyName, MARKET_GROUPS } from "./market-data";
-import { colors, font, navHeight, radius } from "./theme";
+import { colors, font, navHeight, radius, themeOptions, type ThemePreference } from "./theme";
 import { Avatar, Button, Divider, IconButton, Input, MarketRow, Metric, Row, Section, Segment, StockLogo, Surface } from "./ui";
-import type { AdminData, AmountMode, Bar, DiscoverView, Me, Order, OrderType, Position, Quote, Side } from "./types";
+import type { AdminData, AmountMode, Bar, DiscoverView, LeaderboardEntry, Me, Order, OrderType, Position, Quote, Side } from "./types";
 
 const chartRanges = [
   ["1h", "1H"],
@@ -455,14 +455,67 @@ function OrderScreen(props: Parameters<typeof DiscoverScreen>[0]) {
   );
 }
 
-export function CompeteScreen() {
+export function CompeteScreen({
+  entries,
+  currentAccountId,
+}: {
+  entries: LeaderboardEntry[];
+  currentAccountId?: string;
+}) {
+  const currentRank = entries.findIndex((entry) => entry.account_id === currentAccountId);
+  const current = currentRank >= 0 ? entries[currentRank] : null;
   return (
-    <View style={{ flex: 1, justifyContent: "center", gap: 22, minHeight: 610 }}>
-      <View style={{ width: 74, height: 74, borderRadius: 37, alignItems: "center", justifyContent: "center", backgroundColor: colors.panelAlt }}>
-        <Feather name="award" size={30} color={colors.accent} />
+    <View style={{ gap: 24 }}>
+      <View style={{ gap: 8 }}>
+        <Text style={{ color: colors.muted, fontSize: 13, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: font.bold }}>Live competition</Text>
+        <Text style={{ color: colors.text, fontSize: 42, lineHeight: 45, fontWeight: font.bold }}>Club rankings</Text>
+        <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 22 }}>Ranked by simulated return using current market prices.</Text>
       </View>
-      <Text style={{ color: colors.text, fontSize: 42, lineHeight: 45, fontWeight: font.bold }}>Competitions{"\n"}coming soon</Text>
-      <Text style={{ maxWidth: 310, color: colors.muted, fontSize: 16, lineHeight: 24 }}>This area is blocked off until the future competition plan is ready. Trading, portfolio, and settings stay focused for this build.</Text>
+
+      {current ? (
+        <Surface tone={colors.accentSoft}>
+          <Text style={{ color: colors.muted, fontSize: 12, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: font.bold }}>Your position</Text>
+          <View style={{ marginTop: 10, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
+            <Text style={{ color: colors.text, fontSize: 36, fontWeight: font.bold }}>#{currentRank + 1}</Text>
+            <Text style={{ color: current.return_pct >= 0 ? colors.accent : colors.red, fontSize: 24, fontWeight: font.bold }}>{signedPct(current.return_pct)}</Text>
+          </View>
+          <Text style={{ marginTop: 5, color: colors.muted, fontSize: 13 }}>{entries.length} active traders · {usd(current.equity)} equity</Text>
+        </Surface>
+      ) : null}
+
+      {entries.length ? (
+        <Section title="Leaderboard">
+          <Surface>
+            {entries.map((entry, index) => {
+              const isCurrent = entry.account_id === currentAccountId;
+              return (
+                <View key={entry.account_id}>
+                  <View accessibilityLabel={`Rank ${index + 1}, ${entry.display_name}, ${signedPct(entry.return_pct)}`} style={{ flexDirection: "row", alignItems: "center", gap: 13, paddingVertical: 3 }}>
+                    <View style={{ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: index < 3 ? colors.accentSoft : colors.panelAlt }}>
+                      <Text style={{ color: index < 3 ? colors.accent : colors.muted, fontWeight: font.bold }}>{index + 1}</Text>
+                    </View>
+                    <Avatar name={entry.display_name} size={38} />
+                    <View style={{ flex: 1 }}>
+                      <Text numberOfLines={1} style={{ color: colors.text, fontSize: 15, fontWeight: isCurrent ? font.bold : font.semibold }}>{entry.display_name}{isCurrent ? " · You" : ""}</Text>
+                      <Text style={{ marginTop: 3, color: colors.muted, fontSize: 12 }}>{usd(entry.equity)} equity</Text>
+                    </View>
+                    <Text style={{ color: entry.return_pct >= 0 ? colors.accent : colors.red, fontSize: 15, fontWeight: font.bold }}>{signedPct(entry.return_pct)}</Text>
+                  </View>
+                  {index < entries.length - 1 ? <Divider /> : null}
+                </View>
+              );
+            })}
+          </Surface>
+        </Section>
+      ) : (
+        <Surface>
+          <View style={{ alignItems: "center", gap: 12, paddingVertical: 28 }}>
+            <Feather name="award" size={30} color={colors.accent} />
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: font.bold }}>No rankings yet</Text>
+            <Text style={{ color: colors.muted, textAlign: "center", lineHeight: 21 }}>Pull to refresh when your club competition begins.</Text>
+          </View>
+        </Surface>
+      )}
     </View>
   );
 }
@@ -476,6 +529,8 @@ export function ProfileScreen({
   pickAvatar,
   signOut,
   openAdmin,
+  themePreference,
+  setThemePreference,
   busy,
 }: {
   me: Me | null;
@@ -486,6 +541,8 @@ export function ProfileScreen({
   pickAvatar: () => void;
   signOut: () => void;
   openAdmin: () => void;
+  themePreference: ThemePreference;
+  setThemePreference: (theme: ThemePreference) => void;
   busy: boolean;
 }) {
   const account = me?.account;
@@ -507,6 +564,34 @@ export function ProfileScreen({
           <Row title="Risk style" sub="Profile" right={me?.profile?.risk_style ?? "balanced"} icon="shield" />
           <Divider />
           <Row title="Active alerts" sub="Created from Discover" right={String(me?.alerts?.filter((a) => a.status === "active").length ?? 0)} icon="bell" />
+        </Surface>
+      </Section>
+
+      <Section title="Appearance">
+        <Surface>
+          {themeOptions.map((option, index) => {
+            const selected = option.value === themePreference;
+            return (
+              <View key={option.value}>
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={`${option.label} theme`}
+                  onPress={() => setThemePreference(option.value)}
+                  style={({ pressed }) => ({ minHeight: 54, flexDirection: "row", alignItems: "center", gap: 12, opacity: pressed ? 0.72 : 1 })}
+                >
+                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selected ? colors.accent : colors.subtle, alignItems: "center", justifyContent: "center" }}>
+                    {selected ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent }} /> : null}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontSize: 15, fontWeight: font.semibold }}>{option.label}</Text>
+                    <Text style={{ marginTop: 2, color: colors.muted, fontSize: 12 }}>{option.description}</Text>
+                  </View>
+                </Pressable>
+                {index < themeOptions.length - 1 ? <Divider /> : null}
+              </View>
+            );
+          })}
         </Surface>
       </Section>
 

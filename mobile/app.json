@@ -4,10 +4,10 @@
     "slug": "paper-trader-mobile",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon-v2.png",
+    "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash-icon-v2.png",
       "resizeMode": "contain",
       "backgroundColor": "#050607"
     },
@@ -21,7 +21,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon-v2.png",
         "backgroundColor": "#050607"
       },
       "predictiveBackGestureEnabled": false
@@ -31,7 +31,8 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-font"
     ],
     "extra": {
       "apiUrl": "https://paper-trader-lac.vercel.app",

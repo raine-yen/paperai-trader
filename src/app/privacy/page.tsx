@@ -50,7 +50,7 @@ const sections = [
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-bg text-white">
+    <main className="min-h-screen bg-bg text-gray-50">
       <div className="mx-auto max-w-4xl px-5 py-16">
         <div className="mb-10 flex items-center justify-between gap-4">
           <div>

@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, NativeScrollEvent, NativeSyntheticEvent, RefreshControl, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, NativeScrollEvent, NativeSyntheticEvent, RefreshControl, ScrollView, Text, useColorScheme, View } from "react-native";
 import { BottomNav } from "./src/bottom-nav";
 import {
   AdminScreen,
@@ -15,8 +15,8 @@ import {
   ProfileScreen,
   screenBottomPadding,
 } from "./src/screens";
-import { colors } from "./src/theme";
-import type { AdminData, AmountMode, ApiKey, Bar, DiscoverView, Me, Order, OrderType, Quote, Session, Side, Tab } from "./src/types";
+import { applyTheme, colors, resolveTheme, type ThemePreference } from "./src/theme";
+import type { AdminData, AmountMode, ApiKey, Bar, DiscoverView, LeaderboardEntry, Me, Order, OrderType, Quote, Session, Side, Tab } from "./src/types";
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -36,6 +36,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
 }
 
 export default function App() {
+  const systemScheme = useColorScheme();
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
@@ -61,6 +62,8 @@ export default function App() {
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
   const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>("system");
   const [newSecret, setNewSecret] = useState("");
   const [adminData, setAdminData] = useState<AdminData | null>(null);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -72,6 +75,8 @@ export default function App() {
   const navX = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const inFlight = useRef(false);
+  const resolvedTheme = resolveTheme(themePreference, systemScheme);
+  applyTheme(resolvedTheme);
 
   const selectedQuote = quotes[selectedSymbol] ?? null;
   const selectedPosition = useMemo(() => me?.positions.find((p) => p.symbol === selectedSymbol) ?? null, [me?.positions, selectedSymbol]);
@@ -140,9 +145,20 @@ export default function App() {
   }, [selectedQuote?.price, selectedSymbol]);
 
   async function restoreSession() {
-    const stored = await SecureStore.getItemAsync("paper-trader-session").catch(() => null);
+    const [stored, storedTheme] = await Promise.all([
+      SecureStore.getItemAsync("paper-trader-session").catch(() => null),
+      SecureStore.getItemAsync("paper-trader-theme").catch(() => null),
+    ]);
     if (stored) setSession(JSON.parse(stored));
+    if (storedTheme && ["system", "light", "dark", "midnight"].includes(storedTheme)) {
+      setThemePreferenceState(storedTheme as ThemePreference);
+    }
     setChecking(false);
+  }
+
+  function setThemePreference(next: ThemePreference) {
+    setThemePreferenceState(next);
+    SecureStore.setItemAsync("paper-trader-theme", next).catch(() => {});
   }
 
   async function saveSession(next: Session | null) {
@@ -246,12 +262,14 @@ export default function App() {
     try {
       const nextMe = await api<Me>("/api/me");
       const symbols = symbolsFor(nextMe, selectedSymbol);
-      const [nextQuotes, nextKeys] = await Promise.all([
+      const [nextQuotes, nextKeys, nextLeaderboard] = await Promise.all([
         api<{ quotes: Quote[] }>(`/api/quotes?symbols=${encodeURIComponent(symbols.join(","))}`),
         api<{ keys: ApiKey[] }>("/api/keys").catch(() => ({ keys: [] })),
+        api<{ entries: LeaderboardEntry[] }>("/api/leaderboard").catch(() => ({ entries: [] })),
       ]);
       setMe(nextMe);
       setKeys(nextKeys.keys ?? []);
+      setLeaderboard(nextLeaderboard.entries ?? []);
       setQuotes((prev) => ({
         ...prev,
         ...Object.fromEntries((nextQuotes.quotes ?? []).map((q) => [String(q.symbol).toUpperCase(), normalizeQuote(q, String(q.symbol))])),
@@ -406,6 +424,7 @@ export default function App() {
     await saveSession(null);
     setMe(null);
     setKeys([]);
+    setLeaderboard([]);
     setAdminData(null);
     setNewSecret("");
   }
@@ -462,7 +481,7 @@ export default function App() {
   if (checking) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}>
-        <StatusBar style="light" />
+        <StatusBar style={resolvedTheme === "light" ? "dark" : "light"} />
         <ActivityIndicator color={colors.accent} />
       </View>
     );
@@ -471,7 +490,7 @@ export default function App() {
   if (!session) {
     return (
       <>
-        <StatusBar style="light" />
+        <StatusBar style={resolvedTheme === "light" ? "dark" : "light"} />
         <AuthScreen
           mode={authMode}
           setMode={setAuthMode}
@@ -491,7 +510,7 @@ export default function App() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <StatusBar style="light" />
+      <StatusBar style={resolvedTheme === "light" ? "dark" : "light"} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
@@ -540,7 +559,7 @@ export default function App() {
             createAlert={createAlert}
           />
         ) : tab === "compete" ? (
-          <CompeteScreen />
+          <CompeteScreen entries={leaderboard} currentAccountId={me?.account?.id} />
         ) : profileView === "admin" ? (
           <AdminScreen data={adminData} loading={adminLoading} error={adminError} back={() => setProfileView("settings")} runAction={runAdminAction} />
         ) : (
@@ -553,6 +572,8 @@ export default function App() {
             pickAvatar={pickAvatar}
             signOut={signOut}
             openAdmin={openAdmin}
+            themePreference={themePreference}
+            setThemePreference={setThemePreference}
             busy={busy}
           />
         )}
