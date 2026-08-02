@@ -1,0 +1,132 @@
+name: Native iPad App Store Previews
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/native-ipad-previews
+
+jobs:
+  capture:
+    runs-on: macos-15
+    timeout-minutes: 50
+
+    steps:
+      - name: Check out exact build-24 source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.4
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Java for Maestro
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install locked app dependencies
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate the native iOS project
+        working-directory: mobile
+        env:
+          CI: 1
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Install iOS pods
+        working-directory: mobile/ios
+        run: pod install --repo-update
+
+      - name: Create and boot a 13-inch iPad Simulator
+        shell: bash
+        run: |
+          device_type=$(xcrun simctl list devicetypes -j | jq -r '.devicetypes[] | select(.name == "iPad Pro 13-inch (M4)") | .identifier' | head -1)
+          if [[ -z "$device_type" ]]; then
+            device_type=$(xcrun simctl list devicetypes -j | jq -r '.devicetypes[] | select(.name | test("iPad Pro 13-inch")) | .identifier' | head -1)
+          fi
+          test -n "$device_type"
+
+          runtime=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable == true and (.name | startswith("iOS")))] | last | .identifier')
+          test -n "$runtime"
+
+          simulator_udid=$(xcrun simctl create "PaperAI Native Preview" "$device_type" "$runtime")
+          echo "SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$simulator_udid"
+          xcrun simctl bootstatus "$simulator_udid" -b
+
+      - name: Compile the exact React Native app for the simulator
+        working-directory: mobile
+        shell: bash
+        run: |
+          workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$workspace"
+          scheme=$(xcodebuild -workspace "$workspace" -list -json | jq -r '.workspace.schemes[0]')
+          test -n "$scheme"
+
+          xcodebuild \
+            -workspace "$workspace" \
+            -scheme "$scheme" \
+            -configuration Release \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Install the app and normalize the status bar
+        working-directory: mobile
+        shell: bash
+        run: |
+          app_path=$(find ios/build/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$app_path"
+          xcrun simctl install "$SIMULATOR_UDID" "$app_path"
+          xcrun simctl status_bar "$SIMULATOR_UDID" override \
+            --time '9:41' \
+            --batteryState charged \
+            --batteryLevel 100 \
+            --wifiBars 3
+
+      - name: Install Maestro
+        shell: bash
+        run: curl -fsSL "https://get.maestro.mobile.dev" | bash
+
+      - name: Capture three native iPad screenshots
+        working-directory: mobile
+        shell: bash
+        env:
+          MAESTRO_TESTS_DIR: ${{ github.workspace }}/mobile/artifacts
+        run: |
+          mkdir -p artifacts
+          "$HOME/.maestro/bin/maestro" --device "$SIMULATOR_UDID" test \
+            --test-output-dir=artifacts/maestro \
+            .maestro/ipad-app-store.yml
+
+      - name: Verify App Store dimensions
+        working-directory: mobile
+        shell: bash
+        run: |
+          count=0
+          for image in artifacts/*.png; do
+            width=$(sips -g pixelWidth "$image" | awk '/pixelWidth/ {print $2}')
+            height=$(sips -g pixelHeight "$image" | awk '/pixelHeight/ {print $2}')
+            echo "$(basename "$image"): ${width}x${height}"
+            test "$width" = "2064"
+            test "$height" = "2752"
+            count=$((count + 1))
+          done
+          test "$count" = "3"
+
+      - name: Upload native iPad previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paperai-trader-native-ipad-13
+          path: |
+            mobile/artifacts/*.png
+            mobile/artifacts/maestro
+          if-no-files-found: warn
+          retention-days: 7
