@@ -9,7 +9,7 @@ appId: com.papertrader.mobile
 - tapOn: "Display name"
 - inputText: "PaperAI Preview"
 - tapOn: "Email"
-- inputText: "paperai.preview.20260801@example.com"
+- inputText: "${PREVIEW_EMAIL}"
 - tapOn: "Password"
 - inputText: "PaperAI-Preview-2026!"
 - tapOn: "Create account"
