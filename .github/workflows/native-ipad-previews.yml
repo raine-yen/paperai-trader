@@ -106,6 +106,7 @@ jobs:
         run: |
           mkdir -p artifacts
           "$HOME/.maestro/bin/maestro" --device "$SIMULATOR_UDID" test \
+            -e PREVIEW_EMAIL="$PREVIEW_EMAIL" \
             --test-output-dir=artifacts/maestro \
             .maestro/ipad-app-store.yml
 
