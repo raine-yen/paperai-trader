@@ -12,7 +12,6 @@ appId: com.papertrader.mobile
 - inputText: "paperai.preview.20260801@example.com"
 - tapOn: "Password"
 - inputText: "PaperAI-Preview-2026!"
-- hideKeyboard
 - tapOn: "Create account"
 - extendedWaitUntil:
     visible: "Account home"
