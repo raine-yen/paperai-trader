@@ -65,7 +65,7 @@ jobs:
         run: |
           workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
           test -n "$workspace"
-          scheme=$(xcodebuild -workspace "$workspace" -list -json | jq -r '.workspace.schemes[0]')
+          scheme=$(xcodebuild -workspace "$workspace" -list -json | jq -r '.workspace.schemes[] | select(. == "PaperTrader")' | head -1)
           test -n "$scheme"
 
           xcodebuild \
