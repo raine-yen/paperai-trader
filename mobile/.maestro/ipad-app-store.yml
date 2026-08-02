@@ -1,0 +1,55 @@
+appId: com.papertrader.mobile
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Sign in"
+    timeout: 30000
+- tapOn: "Create"
+- tapOn: "Display name"
+- inputText: "PaperAI Preview"
+- tapOn: "Email"
+- inputText: "paperai.preview.20260801@example.com"
+- tapOn: "Password"
+- inputText: "PaperAI-Preview-2026!"
+- hideKeyboard
+- tapOn: "Create account"
+- extendedWaitUntil:
+    visible: "Account home"
+    timeout: 60000
+
+- tapOn: "Search"
+- extendedWaitUntil:
+    visible: "Find stocks"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "AAPL"
+    timeout: 30000
+- takeScreenshot: "${MAESTRO_TESTS_DIR}/02-search-and-trade"
+
+- scrollUntilVisible:
+    element:
+      text: "Buy AAPL"
+    direction: DOWN
+    timeout: 30000
+    speed: 60
+- tapOn: "Buy AAPL"
+- extendedWaitUntil:
+    visible: "Order submitted"
+    timeout: 30000
+- tapOn: "OK"
+- swipe:
+    start: "50%,30%"
+    end: "50%,82%"
+    duration: 700
+- tapOn: "Portfolio"
+- extendedWaitUntil:
+    visible: "Holdings"
+    timeout: 30000
+- takeScreenshot: "${MAESTRO_TESTS_DIR}/01-portfolio"
+
+- tapOn: "Compete"
+- extendedWaitUntil:
+    visible: "Global leaderboard"
+    timeout: 30000
+- takeScreenshot: "${MAESTRO_TESTS_DIR}/03-global-leaderboard"
