@@ -101,6 +101,8 @@ jobs:
         shell: bash
         env:
           MAESTRO_TESTS_DIR: ${{ github.workspace }}/mobile/artifacts
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: 300000
+          PREVIEW_EMAIL: paperai.preview.${{ github.run_id }}@example.com
         run: |
           mkdir -p artifacts
           "$HOME/.maestro/bin/maestro" --device "$SIMULATOR_UDID" test \
