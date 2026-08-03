@@ -100,7 +100,6 @@ jobs:
         working-directory: mobile
         shell: bash
         env:
-          MAESTRO_TESTS_DIR: ${{ github.workspace }}/mobile/artifacts
           MAESTRO_DRIVER_STARTUP_TIMEOUT: 300000
           PREVIEW_EMAIL: paperai.preview.${{ github.run_id }}@example.com
         run: |
@@ -109,6 +108,12 @@ jobs:
             -e PREVIEW_EMAIL="$PREVIEW_EMAIL" \
             --test-output-dir=artifacts/maestro \
             .maestro/ipad-app-store.yml
+
+          for name in 01-portfolio 02-search-and-trade 03-global-leaderboard; do
+            image=$(find artifacts/maestro -type f -name "$name.png" -print -quit)
+            test -n "$image"
+            cp "$image" "artifacts/$name.png"
+          done
 
       - name: Verify App Store dimensions
         working-directory: mobile
