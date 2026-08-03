@@ -24,7 +24,7 @@ appId: com.papertrader.mobile
 - extendedWaitUntil:
     visible: "AAPL"
     timeout: 30000
-- takeScreenshot: "${MAESTRO_TESTS_DIR}/02-search-and-trade"
+- takeScreenshot: "02-search-and-trade"
 
 - scrollUntilVisible:
     element:
@@ -45,10 +45,10 @@ appId: com.papertrader.mobile
 - extendedWaitUntil:
     visible: "Holdings"
     timeout: 30000
-- takeScreenshot: "${MAESTRO_TESTS_DIR}/01-portfolio"
+- takeScreenshot: "01-portfolio"
 
 - tapOn: "Compete"
 - extendedWaitUntil:
     visible: "Global leaderboard"
     timeout: 30000
-- takeScreenshot: "${MAESTRO_TESTS_DIR}/03-global-leaderboard"
+- takeScreenshot: "03-global-leaderboard"
