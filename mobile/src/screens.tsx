@@ -1,12 +1,44 @@
 import { Feather } from "@expo/vector-icons";
-import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { InteractiveLineChart } from "./charts";
-import { compactMoney, compactNumber, firstName, greeting, maybeUsd, metric, rangeLabel, signedPct, signedUsd, timeAgo, usd } from "./format";
+import { compactMoney, compactNumber, firstName, maybeUsd, metric, rangeLabel, signedPct, signedUsd, timeAgo, usd } from "./format";
 import { getCompanyName, MARKET_GROUPS } from "./market-data";
-import { colors, font, navHeight, radius, themeOptions, type ThemePreference } from "./theme";
-import { Avatar, Button, Divider, IconButton, Input, MarketRow, Metric, Row, Section, Segment, StockLogo, Surface } from "./ui";
-import type { AdminData, AmountMode, Bar, DiscoverView, LeaderboardEntry, Me, Order, OrderType, Position, Quote, Side } from "./types";
+import { colors, font, layoutBreakpoints, navHeight, radius, space, themeOptions, type ThemePreference } from "./theme";
+import {
+  Avatar,
+  Button,
+  Divider,
+  Eyebrow,
+  IconButton,
+  InlineNotice,
+  Input,
+  MarketRow,
+  Metric,
+  PaperBadge,
+  Row,
+  Section,
+  Segment,
+  SkeletonBlock,
+  StatePanel,
+  StockLogo,
+  Surface,
+  TrendPill,
+} from "./ui";
+import type {
+  AdminData,
+  AmountMode,
+  Bar,
+  DiscoverView,
+  LeaderboardEntry,
+  Me,
+  Order,
+  OrderStage,
+  OrderType,
+  Position,
+  Quote,
+  Side,
+} from "./types";
 
 const chartRanges = [
   ["1h", "1H"],
@@ -42,23 +74,47 @@ export function AuthScreen({
   busy: boolean;
   error: string;
 }) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, gap: 18, backgroundColor: colors.bg }}>
-      <View style={{ gap: 12 }}>
-        <Text style={{ color: colors.muted, fontSize: 14 }}>Paper Trader</Text>
-        <Text style={{ color: colors.text, fontSize: 42, lineHeight: 45, fontWeight: font.bold }}>Practice the market.</Text>
-        <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 22 }}>Use the same account as the website. Trades are simulated for learning and have no real-world monetary value.</Text>
-      </View>
-      <Surface>
-        <View style={{ gap: 14 }}>
-          <Segment value={mode} options={[["login", "Sign in"], ["signup", "Create"]]} onChange={setMode} />
-          {mode === "signup" ? <Input label="Display name" value={displayName} onChangeText={setDisplayName} placeholder="Raine" /> : null}
-          <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="you@example.com" />
-          <Input label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="Password" />
-          {error ? <Text selectable style={{ color: colors.red, fontSize: 13, lineHeight: 19 }}>{error}</Text> : null}
-          <Button label={busy ? "Working..." : mode === "login" ? "Sign in" : "Create account"} onPress={submit} disabled={busy} />
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: isTablet ? space.x12 : space.x6, backgroundColor: colors.background }}
+    >
+      <View style={{ width: "100%", maxWidth: 980, alignSelf: "center", flexDirection: isTablet ? "row" : "column", alignItems: "stretch", gap: isTablet ? space.x12 : space.x8 }}>
+        <View style={{ flex: 1.15, justifyContent: "center", gap: space.x6 }}>
+          <PaperBadge />
+          <View style={{ gap: space.x3 }}>
+            <Eyebrow>PaperAI Trader</Eyebrow>
+            <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 58 : 42, lineHeight: isTablet ? 62 : 46, fontWeight: font.bold }}>Build skill, not risk.</Text>
+            <Text style={{ maxWidth: 520, color: colors.textSecondary, fontSize: 16, lineHeight: 24 }}>
+              Research real market data, practice decisions with simulated funds, and learn from every outcome. Nothing here is real-money trading.
+            </Text>
+          </View>
+          {isTablet ? (
+            <View style={{ flexDirection: "row", gap: space.x4 }}>
+              <MiniPrinciple icon="search" title="Research" body="See the context" />
+              <MiniPrinciple icon="shield" title="Practice" body="Review before submit" />
+              <MiniPrinciple icon="book-open" title="Reflect" body="Learn from results" />
+            </View>
+          ) : null}
         </View>
-      </Surface>
+        <Surface elevated style={{ flex: 0.85, alignSelf: "stretch", padding: space.x6 }}>
+          <View style={{ gap: space.x4 }}>
+            <View style={{ gap: space.x2 }}>
+              <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: font.bold }}>{mode === "login" ? "Welcome back" : "Create your practice account"}</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>Use the same account as PaperAI Trader on the web.</Text>
+            </View>
+            <Segment testID="auth-mode" value={mode} options={[["login", "Sign in"], ["signup", "Create account"]]} onChange={setMode} />
+            {mode === "signup" ? <Input testID="auth-display-name" label="Display name" value={displayName} onChangeText={setDisplayName} placeholder="How your club sees you" autoComplete="name" /> : null}
+            <Input testID="auth-email" label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" placeholder="you@example.com" />
+            <Input testID="auth-password" label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="Password" />
+            {error ? <InlineNotice tone="error" title="Could not continue" body={error} /> : null}
+            <Button testID="auth-submit" label={busy ? "Working…" : mode === "login" ? "Sign in" : "Create practice account"} onPress={submit} loading={busy} />
+          </View>
+        </Surface>
+      </View>
     </ScrollView>
   );
 }
@@ -67,103 +123,160 @@ export function PortfolioScreen({
   me,
   quotes,
   openSymbol,
+  goDiscover,
   refreshing,
 }: {
   me: Me | null;
   quotes: Record<string, Quote>;
   openSymbol: (symbol: string) => void;
+  goDiscover: () => void;
   refreshing: boolean;
 }) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
   const [compare, setCompare] = useState(false);
   const account = me?.account;
-  if (!account) return <EmptyState title="No trading account" body="Refresh after signing in or contact your club admin." />;
+  if (!account) {
+    return refreshing ? (
+      <View accessibilityLabel="Loading portfolio" style={{ gap: space.x4 }}>
+        <SkeletonBlock height={42} width="58%" />
+        <SkeletonBlock height={isTablet ? 470 : 510} radiusValue={radius.lg} />
+        <SkeletonBlock height={220} radiusValue={radius.lg} />
+      </View>
+    ) : <StatePanel title="No practice account" body="Refresh after signing in or contact your club administrator." icon="alert-circle" />;
+  }
 
   const gain = Number(account.equity) - Number(account.starting_cash);
   const gainPct = Number(account.starting_cash) > 0 ? (gain / Number(account.starting_cash)) * 100 : 0;
-  const snapshots = me?.snapshots?.length ? me.snapshots : fallbackSnapshots(account);
+  const snapshots = me?.snapshots ?? [];
   const allocationBase = Math.max(Number(account.cash) + Number(account.positions_value), 1);
-  const largest = me?.positions?.slice().sort((a, b) => Math.abs(Number(b.unrealized_pl)) - Math.abs(Number(a.unrealized_pl)))[0];
+  const positionsByValue = [...(me?.positions ?? [])].sort((a, b) => Number(b.market_value) - Number(a.market_value));
+  const largestPosition = positionsByValue[0];
+  const concentration = largestPosition ? (Number(largestPosition.market_value) / allocationBase) * 100 : 0;
+  const largestMover = [...(me?.positions ?? [])].sort((a, b) => Math.abs(Number(b.unrealized_pl)) - Math.abs(Number(a.unrealized_pl)))[0];
 
-  return (
-    <View style={{ gap: 28 }}>
-      <View style={{ gap: 8 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <View>
-            <Text style={{ color: colors.muted, fontSize: 14 }}>{greeting()}, {firstName(account.display_name) || "Trader"}</Text>
-            <Text style={{ marginTop: 4, color: colors.text, fontSize: 22, fontWeight: font.bold }}>Portfolio</Text>
+  const hero = (
+    <Surface elevated style={{ flex: isTablet ? 1.45 : undefined, padding: isTablet ? space.x6 : space.x4 }}>
+      <View style={{ gap: space.x4 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.x4 }}>
+          <View style={{ flex: 1, gap: space.x2 }}>
+            <PaperBadge compact />
+            <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Total portfolio value</Text>
+            <Text
+              adjustsFontSizeToFit
+              minimumFontScale={0.62}
+              numberOfLines={1}
+              style={{ color: colors.textPrimary, fontSize: isTablet ? 64 : 52, lineHeight: isTablet ? 68 : 58, fontWeight: font.semibold, fontVariant: ["tabular-nums"] }}
+            >
+              {usd(account.equity)}
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.x3 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 16, fontVariant: ["tabular-nums"] }}>{signedUsd(gain)} since start</Text>
+              <TrendPill value={gainPct} />
+            </View>
           </View>
-          <Avatar uri={me?.profile?.avatar_url} name={account.display_name} size={44} />
-        </View>
-        {refreshing ? <Text style={{ color: colors.muted, fontSize: 12 }}>Refreshing market data...</Text> : null}
-      </View>
-
-      <View style={{ gap: 14 }}>
-        <Text style={{ color: colors.muted, fontSize: 14 }}>Total net worth</Text>
-        <Text style={{ color: colors.text, fontSize: 62, lineHeight: 66, fontWeight: font.regular, fontVariant: ["tabular-nums"] }}>{usd(account.equity, 0)}</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Text style={{ color: colors.text, fontSize: 20, fontVariant: ["tabular-nums"] }}>{signedUsd(gain)}</Text>
-          <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.md, backgroundColor: gain >= 0 ? colors.accentSoft : colors.redSoft }}>
-            <Text style={{ color: gain >= 0 ? colors.accent : colors.red, fontSize: 18, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{signedPct(gainPct)}</Text>
-          </View>
+          <Avatar uri={me?.profile?.avatar_url} name={account.display_name} size={48} />
         </View>
         <InteractiveLineChart
-          height={270}
-          points={snapshots.map((s) => ({ value: Number(s.equity), label: new Date(s.created_at).toLocaleDateString([], { month: "short", day: "numeric" }) }))}
+          testID="portfolio-chart"
+          chartLabel="Portfolio equity"
+          height={isTablet ? 320 : 250}
+          points={snapshots.map((snapshot) => ({ value: Number(snapshot.equity), label: new Date(snapshot.created_at).toLocaleDateString([], { month: "short", day: "numeric" }) }))}
           baseline={Number(account.starting_cash)}
           negative={gain < 0}
           formatValue={(value) => usd(value, 0)}
           compareEnabled={compare}
           onCompareChange={setCompare}
+          emptyTitle="Portfolio history is building"
+          emptyBody="Your verified equity snapshots will appear here after the account records market activity."
         />
       </View>
+    </Surface>
+  );
 
-      <View style={{ flexDirection: "row", gap: 30 }}>
-        <Metric label="Practice balance" value={usd(account.cash, 0)} />
-        <Metric label="Invested" value={usd(account.positions_value, 0)} />
-      </View>
+  const decisionRail = (
+    <View style={{ flex: isTablet ? 0.75 : undefined, gap: space.x4 }}>
       <Surface>
-        <View style={{ gap: 13 }}>
-          <Allocation label="Practice balance" value={Number(account.cash)} total={allocationBase} tone={colors.muted} />
-          <Allocation label="Positions" value={Number(account.positions_value)} total={allocationBase} tone={colors.accent} />
+        <Eyebrow>Available now</Eyebrow>
+        <View style={{ marginTop: space.x3, flexDirection: "row", gap: space.x4 }}>
+          <Metric label="Practice balance" value={usd(account.cash, 0)} />
+          <Metric label="Invested" value={usd(account.positions_value, 0)} />
         </View>
       </Surface>
-
-      <Section title="Holdings" action={<Text style={{ color: colors.accent, fontWeight: font.bold }}>See all</Text>}>
-        <View>
-          {me.positions.length ? me.positions.slice(0, 5).map((position, index) => (
-            <View key={position.symbol}>
-              <MarketRow symbol={position.symbol} quote={quotes[position.symbol]} position={position} onPress={() => openSymbol(position.symbol)} />
-              {index < Math.min(me.positions.length, 5) - 1 ? <Divider /> : null}
+      <Surface>
+        <View style={{ gap: space.x3 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.x3 }}>
+            <View style={{ flex: 1 }}>
+              <Eyebrow>Risk lens</Eyebrow>
+              <Text style={{ marginTop: space.x1, color: colors.textPrimary, fontSize: 18, fontWeight: font.bold }}>Portfolio mix</Text>
             </View>
-          )) : <EmptyState title="No holdings yet" body="Open Discover to place your first paper trade." compact />}
+            <Text style={{ color: colors.textSecondary, fontSize: 13, fontVariant: ["tabular-nums"] }}>{Math.round(concentration)}% top holding</Text>
+          </View>
+          <Allocation label="Practice balance" value={Number(account.cash)} total={allocationBase} tone={colors.textTertiary} />
+          <Allocation label="Positions" value={Number(account.positions_value)} total={allocationBase} tone={colors.brand} />
+          <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>
+            {largestPosition ? `${largestPosition.symbol} is your largest position. Review concentration alongside your learning goal.` : "Add a paper position to start reviewing allocation."}
+          </Text>
         </View>
-      </Section>
+      </Surface>
+      <Button label="Explore a practice trade" icon="search" onPress={goDiscover} />
+    </View>
+  );
 
-      <Section title="Recent activity">
-        <View>
-          {me.orders.length ? me.orders.slice(0, 5).map((order, index) => (
-            <View key={order.id}>
-              <OrderLine order={order} />
-              {index < Math.min(me.orders.length, 5) - 1 ? <Divider /> : null}
-            </View>
-          )) : <Text style={{ color: colors.muted }}>No orders yet.</Text>}
+  return (
+    <View testID="screen-portfolio-ready" style={{ gap: space.x8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.x4 }}>
+        <View style={{ flex: 1, gap: space.x1 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Welcome back, {firstName(account.display_name) || "Trader"}</Text>
+          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 38 : 32, fontWeight: font.bold }}>Portfolio overview</Text>
         </View>
-      </Section>
+        {refreshing ? <ActivityIndicator accessibilityLabel="Refreshing market data" color={colors.brand} /> : null}
+      </View>
 
-      <Section title="Account pulse">
-        <Surface>
-          <Row title="Largest mover" sub={largest ? getCompanyName(largest.symbol) : "None yet"} right={largest ? signedUsd(largest.unrealized_pl) : "--"} tone={(largest?.unrealized_pl ?? 0) >= 0 ? colors.accent : colors.red} icon="activity" />
-          <Divider />
-          <Row title="Active alerts" sub="Watching your market ideas" right={String(me.alerts?.filter((a) => a.status === "active").length ?? 0)} icon="bell" />
-          <Divider />
-          <Row title="Watchlist" sub="Tracked symbols" right={String(me.watchlist?.length ?? 0)} icon="eye" />
-        </Surface>
-      </Section>
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "stretch", gap: space.x4 }}>
+        {hero}
+        {decisionRail}
+      </View>
+
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "flex-start", gap: space.x6 }}>
+        <Section title="Holdings" eyebrow={`${me.positions.length} positions`} testID="portfolio-holdings" style={{ flex: 1, width: "100%" }}>
+          <Surface style={{ flex: 1 }}>
+            {me.positions.length ? me.positions.slice(0, isTablet ? 7 : 5).map((position, index) => (
+              <View key={position.symbol}>
+                <MarketRow symbol={position.symbol} quote={quotes[position.symbol]} position={position} onPress={() => openSymbol(position.symbol)} testID={`holding-${position.symbol}`} />
+                {index < Math.min(me.positions.length, isTablet ? 7 : 5) - 1 ? <Divider /> : null}
+              </View>
+            )) : <StatePanel compact title="No holdings yet" body="Research a symbol and review your first simulated order." actionLabel="Open Discover" onAction={goDiscover} />}
+          </Surface>
+        </Section>
+
+        <View style={{ flex: isTablet ? 0.8 : undefined, width: isTablet ? 360 : "100%", gap: space.x6 }}>
+          <Section title="Recent practice" eyebrow="Orders">
+            <Surface>
+              {me.orders.length ? me.orders.slice(0, 4).map((order, index) => (
+                <View key={order.id}>
+                  <OrderLine order={order} />
+                  {index < Math.min(me.orders.length, 4) - 1 ? <Divider /> : null}
+                </View>
+              )) : <StatePanel compact title="No paper orders yet" body="Completed and pending practice orders will appear here." />}
+            </Surface>
+          </Section>
+          <Section title="Account pulse" eyebrow="Review">
+            <Surface>
+              <Row title="Largest mover" sub={largestMover ? getCompanyName(largestMover.symbol) : "None yet"} right={largestMover ? signedUsd(largestMover.unrealized_pl) : "—"} tone={(largestMover?.unrealized_pl ?? 0) >= 0 ? colors.bullish : colors.bearish} icon="activity" onPress={largestMover ? () => openSymbol(largestMover.symbol) : undefined} />
+              <Divider />
+              <Row title="Active alerts" sub="Watching your market ideas" right={String(me.alerts?.filter((alert) => alert.status === "active").length ?? 0)} icon="bell" />
+              <Divider />
+              <Row title="Watchlist" sub="Symbols saved for research" right={String(me.watchlist?.length ?? 0)} icon="eye" onPress={goDiscover} />
+            </Surface>
+          </Section>
+        </View>
+      </View>
     </View>
   );
 }
 
-export function DiscoverScreen(props: {
+type DiscoverScreenProps = {
   view: DiscoverView;
   setView: (view: DiscoverView) => void;
   me: Me | null;
@@ -179,6 +292,7 @@ export function DiscoverScreen(props: {
   setSearch: (value: string) => void;
   searchResult: { symbol: string; quote: Quote } | null;
   searchLoading: boolean;
+  searchError: string;
   side: Side;
   setSide: (side: Side) => void;
   orderType: OrderType;
@@ -189,12 +303,19 @@ export function DiscoverScreen(props: {
   setAmount: (value: string) => void;
   limitPrice: string;
   setLimitPrice: (value: string) => void;
+  orderStage: OrderStage;
+  setOrderStage: (stage: OrderStage) => void;
+  reviewQuotePrice: number | null;
+  lastOrder: Order | null;
   submitOrder: () => void;
   orderBusy: boolean;
   orderMessage: string;
   addWatch: () => void;
   createAlert: (direction: "above" | "below") => void;
-}) {
+  goPortfolio: () => void;
+};
+
+export function DiscoverScreen(props: DiscoverScreenProps) {
   if (props.view === "order") return <OrderScreen {...props} />;
   if (props.view === "detail") return <StockDetailScreen {...props} />;
   return <DiscoverListScreen {...props} />;
@@ -209,66 +330,98 @@ function DiscoverListScreen({
   setSearch,
   searchResult,
   searchLoading,
-}: Parameters<typeof DiscoverScreen>[0]) {
+  searchError,
+}: DiscoverScreenProps) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
   const [category, setCategory] = useState("Top");
-  const owned = me?.positions.map((p) => p.symbol) ?? [];
-  const watch = me?.watchlist?.map((w) => w.symbol) ?? [];
+  const owned = me?.positions.map((position) => position.symbol) ?? [];
+  const watch = me?.watchlist?.map((item) => item.symbol) ?? [];
   const top = Object.values(quotes)
     .filter((quote): quote is Quote & { symbol: string } => Boolean(quote.symbol))
     .slice()
     .sort((a, b) => Number(b.changePercent ?? 0) - Number(a.changePercent ?? 0))
-    .map((q) => q.symbol)
+    .map((quote) => quote.symbol)
     .slice(0, 10);
   const categories = ["Top", "Owned", "Watchlist", "Popular", "Tech", "Finance", "ETFs", "Consumer"];
-  const symbols = category === "Top" ? top : category === "Owned" ? owned : category === "Watchlist" ? watch : MARKET_GROUPS[category] ?? MARKET_GROUPS.Popular;
+  const symbols = category === "Top" ? (top.length ? top : MARKET_GROUPS.Popular) : category === "Owned" ? owned : category === "Watchlist" ? watch : MARKET_GROUPS[category] ?? MARKET_GROUPS.Popular;
 
   function open(symbol: string) {
     setSelectedSymbol(symbol);
     setView("detail");
   }
 
-  return (
-    <View style={{ gap: 28 }}>
-      <View style={{ gap: 18 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ color: colors.text, fontSize: 42, lineHeight: 44, fontWeight: font.bold }}>Top daily{"\n"}gainers</Text>
-          <IconButton icon="sliders" label="Filter movers" />
+  const marketList = (
+    <Surface>
+      {symbols.length ? symbols.map((symbol, index) => (
+        <View key={symbol}>
+          <MarketRow symbol={symbol} quote={quotes[symbol]} position={me?.positions.find((position) => position.symbol === symbol) ?? null} onPress={() => open(symbol)} />
+          {index < symbols.length - 1 ? <Divider /> : null}
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-          {categories.map((cat) => (
-            <FilterChip key={cat} label={cat} active={category === cat} onPress={() => setCategory(cat)} />
-          ))}
-        </ScrollView>
+      )) : <StatePanel compact title="Nothing saved here yet" body="Add a symbol to your watchlist or place a paper trade to build this view." />}
+    </Surface>
+  );
+
+  return (
+    <View testID="screen-discover-ready" style={{ gap: space.x8 }}>
+      <View style={{ flexDirection: isTablet ? "row" : "column", justifyContent: "space-between", alignItems: isTablet ? "flex-end" : "flex-start", gap: space.x4 }}>
+        <View style={{ maxWidth: 620, gap: space.x2 }}>
+          <PaperBadge compact />
+          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 42 : 34, lineHeight: isTablet ? 46 : 38, fontWeight: font.bold }}>Find your next practice idea</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 22 }}>Research first. A paper order is always reviewed before it is submitted.</Text>
+        </View>
+        <View style={{ width: isTablet ? 360 : "100%" }}>
+          <Input
+            testID="market-search"
+            accessibilityLabel="Search stocks and ETFs"
+            value={search}
+            onChangeText={(value) => setSearch(value.toUpperCase())}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            placeholder="Search symbol, for example AAPL"
+          />
+        </View>
       </View>
 
-      <View style={{ gap: 14 }}>
-        <Input
-          value={search}
-          onChangeText={(value) => setSearch(value.toUpperCase())}
-          autoCapitalize="characters"
-          placeholder="Search stock or ETF"
-        />
-        {searchLoading ? <ActivityIndicator color={colors.muted} /> : null}
-        {searchResult ? (
-          <Surface>
-            <MarketRow symbol={searchResult.symbol} quote={searchResult.quote} position={me?.positions.find((p) => p.symbol === searchResult.symbol) ?? null} onPress={() => open(searchResult.symbol)} />
-          </Surface>
-        ) : null}
-      </View>
+      {searchLoading ? <InlineNotice title="Searching verified market data" body="Results will appear without replacing your current list." /> : null}
+      {searchError && !searchLoading ? <InlineNotice tone="warning" title="Search needs attention" body={searchError} /> : null}
+      {searchResult ? (
+        <Surface elevated>
+          <Eyebrow>Search result</Eyebrow>
+          <MarketRow symbol={searchResult.symbol} quote={searchResult.quote} position={me?.positions.find((position) => position.symbol === searchResult.symbol) ?? null} onPress={() => open(searchResult.symbol)} />
+        </Surface>
+      ) : null}
 
-      <View>
-        {symbols.length ? symbols.map((symbol, index) => (
-          <View key={symbol}>
-            <MarketRow symbol={symbol} quote={quotes[symbol]} position={me?.positions.find((p) => p.symbol === symbol) ?? null} onPress={() => open(symbol)} />
-            {index < symbols.length - 1 ? <Divider /> : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.x2 }}>
+        {categories.map((item) => <FilterChip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}
+      </ScrollView>
+
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "flex-start", gap: space.x6 }}>
+        <View style={{ flex: 1.35, width: "100%" }}>
+          <Section title={category === "Top" ? "Market leaders" : category} eyebrow="Available quote data">
+            {marketList}
+          </Section>
+        </View>
+        {isTablet ? (
+          <View style={{ width: 330, gap: space.x6 }}>
+            <Section title="Research checklist" eyebrow="Before you trade">
+              <Surface>
+                <ChecklistRow icon="activity" title="Read the move" body="Separate today’s change from the long-term thesis." />
+                <Divider />
+                <ChecklistRow icon="pie-chart" title="Check exposure" body="Know how the position changes your allocation." />
+                <Divider />
+                <ChecklistRow icon="edit-3" title="Name the reason" body="A clear thesis makes review more useful." />
+              </Surface>
+            </Section>
+            <InlineNotice tone="info" title="Estimates can move" body="Quotes and order totals can change before a simulated market order fills." />
           </View>
-        )) : <EmptyState title="Nothing here yet" body="This list will fill as you add positions or watchlist symbols." compact />}
+        ) : null}
       </View>
     </View>
   );
 }
 
-function StockDetailScreen(props: Parameters<typeof DiscoverScreen>[0]) {
+function StockDetailScreen(props: DiscoverScreenProps) {
   const {
     selectedSymbol,
     quote,
@@ -278,97 +431,137 @@ function StockDetailScreen(props: Parameters<typeof DiscoverScreen>[0]) {
     setChartRange,
     setView,
     setSide,
+    setOrderStage,
     addWatch,
     createAlert,
   } = props;
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
   const [compare, setCompare] = useState(false);
-  const price = quote?.price ?? 0;
-  const change = quote?.change ?? (quote?.prevClose ? price - quote.prevClose : 0);
-  const changePct = quote?.changePercent ?? (quote?.prevClose ? (change / quote.prevClose) * 100 : 0);
+  const hasQuote = quote != null && Number.isFinite(Number(quote.price)) && Number(quote.price) > 0;
+  const price = hasQuote ? Number(quote.price) : 0;
+  const change = hasQuote ? Number(quote.change ?? (quote.prevClose ? price - quote.prevClose : 0)) : 0;
+  const changePct = hasQuote ? Number(quote.changePercent ?? (quote.prevClose ? (change / quote.prevClose) * 100 : 0)) : 0;
   const up = change >= 0;
-  const chartPoints = bars.length > 1
-    ? bars.map((bar) => ({ value: Number(bar.c), label: new Date(bar.t).toLocaleString([], chartRange === "1h" || chartRange === "1d" ? { hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" }) }))
-    : fallbackStock(selectedSymbol);
+  const isWatched = Boolean(props.me?.watchlist?.some((item) => item.symbol === selectedSymbol));
+  const chartPoints = bars.map((bar) => ({
+    value: Number(bar.c),
+    label: new Date(bar.t).toLocaleString([], chartRange === "1h" || chartRange === "1d" ? { hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" }),
+  }));
 
-  function openOrder(side: Side) {
-    setSide(side);
+  function openOrder(nextSide: Side) {
+    setSide(nextSide);
+    setOrderStage("configure");
     setView("order");
   }
 
-  return (
-    <View style={{ gap: 22, paddingBottom: 120 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <IconButton icon="chevron-left" label="Back to market" onPress={() => setView("list")} />
-        <View style={{ alignItems: "center" }}>
-          <Text style={{ color: colors.text, fontSize: 20, fontWeight: font.bold }}>{selectedSymbol}</Text>
-          <Text style={{ marginTop: 2, color: colors.muted, fontSize: 12 }} numberOfLines={1}>{quote?.name ?? getCompanyName(selectedSymbol)}</Text>
+  const chartWorkspace = (
+    <Surface elevated style={{ flex: isTablet ? 1.45 : undefined, padding: isTablet ? space.x6 : space.x4 }}>
+      <View style={{ gap: space.x4 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.x4 }}>
+          <View style={{ gap: space.x3 }}>
+            <StockLogo symbol={selectedSymbol} size={58} />
+            <View style={{ gap: space.x1 }}>
+              <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={{ color: colors.textPrimary, fontSize: isTablet ? 58 : 48, lineHeight: isTablet ? 62 : 54, fontWeight: font.semibold, fontVariant: ["tabular-nums"] }}>{hasQuote ? usd(price) : "Price unavailable"}</Text>
+              {hasQuote ? (
+                <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.x3 }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 16, fontVariant: ["tabular-nums"] }}>{signedUsd(change)} today</Text>
+                  <TrendPill value={changePct} />
+                </View>
+              ) : <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Verified quote data has not loaded for this symbol.</Text>}
+            </View>
+          </View>
+          <PaperBadge compact />
         </View>
-        <IconButton icon="bell" label="Create alert" onPress={() => createAlert("above")} />
-      </View>
 
-      <View style={{ gap: 9 }}>
-        <StockLogo symbol={selectedSymbol} size={58} />
-        <Text style={{ color: colors.text, fontSize: 56, lineHeight: 60, fontWeight: font.regular, fontVariant: ["tabular-nums"] }}>{price ? usd(price) : "--"}</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Text style={{ color: colors.text, fontSize: 19, fontVariant: ["tabular-nums"] }}>{signedUsd(change)} today</Text>
-          <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.md, backgroundColor: up ? colors.accentSoft : colors.redSoft }}>
-            <Text style={{ color: up ? colors.accent : colors.red, fontSize: 18, fontWeight: font.bold }}>{signedPct(changePct)}</Text>
+        <InteractiveLineChart
+          testID={`chart-${selectedSymbol}`}
+          chartLabel={`${selectedSymbol} price`}
+          height={isTablet ? 340 : 270}
+          points={chartPoints}
+          negative={!up}
+          baseline={quote?.prevClose ?? undefined}
+          formatValue={(value) => usd(value)}
+          compareEnabled={compare}
+          onCompareChange={setCompare}
+          emptyTitle="Verified history unavailable"
+          emptyBody="Try another range or refresh. PaperAI will not draw invented price movement."
+        />
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.x2 }}>
+          {chartRanges.map(([range, label]) => <FilterChip key={range} label={label} active={chartRange === range} onPress={() => setChartRange(range)} />)}
+        </ScrollView>
+      </View>
+    </Surface>
+  );
+
+  const researchRail = (
+    <View style={{ flex: isTablet ? 0.8 : undefined, gap: space.x4 }}>
+      <Surface>
+        <Eyebrow>Your position</Eyebrow>
+        <View style={{ marginTop: space.x3, flexDirection: "row", gap: space.x4 }}>
+          <Metric label="Quantity" value={position ? Number(position.qty).toFixed(4) : "0"} />
+          <Metric label="Market value" value={usd(position?.market_value ?? 0, 0)} />
+        </View>
+        {position ? (
+          <View style={{ marginTop: space.x4 }}>
+            <InlineNotice tone={position.unrealized_pl >= 0 ? "success" : "warning"} title={`${signedUsd(position.unrealized_pl)} unrealized`} body="Paper returns are learning feedback, not real-world gain or loss." />
+          </View>
+        ) : null}
+      </Surface>
+
+      <Surface>
+        <Eyebrow>Research actions</Eyebrow>
+        <View style={{ marginTop: space.x3, gap: space.x2 }}>
+          <Button label={isWatched ? "Saved to watchlist" : "Save to watchlist"} variant="secondary" icon={isWatched ? "check" : "eye"} onPress={addWatch} disabled={isWatched} disabledReason={`${selectedSymbol} is already in your watchlist.`} />
+          <View style={{ flexDirection: "row", gap: space.x2 }}>
+            <Button label="Alert above" variant="quiet" icon="arrow-up" onPress={() => createAlert("above")} disabled={!hasQuote} disabledReason="A verified quote is required before creating an alert." style={{ flex: 1 }} />
+            <Button label="Alert below" variant="quiet" icon="arrow-down" onPress={() => createAlert("below")} disabled={!hasQuote} disabledReason="A verified quote is required before creating an alert." style={{ flex: 1 }} />
           </View>
         </View>
+      </Surface>
+
+      <View style={{ flexDirection: "row", gap: space.x3 }}>
+        <Button testID={`trade-sell-${selectedSymbol}`} label="Sell" variant="secondary" onPress={() => openOrder("sell")} disabled={!hasQuote} disabledReason="A verified quote is required before configuring a paper order." style={{ flex: 1 }} />
+        <Button testID={`trade-buy-${selectedSymbol}`} label="Buy" onPress={() => openOrder("buy")} disabled={!hasQuote} disabledReason="A verified quote is required before configuring a paper order." style={{ flex: 1 }} />
       </View>
+    </View>
+  );
 
-      <InteractiveLineChart
-        height={300}
-        points={chartPoints}
-        negative={!up}
-        baseline={quote?.prevClose ?? chartPoints[0]?.value}
-        formatValue={(value) => usd(value)}
-        compareEnabled={compare}
-        onCompareChange={setCompare}
-      />
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        {chartRanges.map(([range, label]) => <FilterChip key={range} label={label} active={chartRange === range} onPress={() => setChartRange(range)} />)}
-      </ScrollView>
-
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        <IconButton icon="eye" label="Add to watchlist" onPress={addWatch} />
-        <IconButton icon="bell" label="Alert above" onPress={() => createAlert("above")} />
-        <IconButton icon="bell-off" label="Alert below" onPress={() => createAlert("below")} danger />
-      </View>
-
-      <Section title="Your position">
-        <View style={{ flexDirection: "row", gap: 34 }}>
-          <Metric label="Quantity" value={position ? Number(position.qty).toFixed(4) : "0"} />
-          <Metric label="Value" value={usd(position?.market_value ?? 0, 0)} />
+  return (
+    <View testID={`quote-${selectedSymbol}-ready`} style={{ gap: space.x6 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.x3 }}>
+        <IconButton icon="chevron-left" label="Back to Discover" onPress={() => setView("list")} />
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: font.bold }}>{selectedSymbol}</Text>
+          <Text style={{ marginTop: space.x1, color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{quote?.name ?? getCompanyName(selectedSymbol)}</Text>
         </View>
-      </Section>
+        <IconButton icon="bell" label={`Create ${selectedSymbol} alert`} onPress={() => createAlert("above")} disabled={!hasQuote} accessibilityHint={!hasQuote ? "A verified quote is required first." : undefined} />
+      </View>
 
-      <Section title="Fundamentals">
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "stretch", gap: space.x4 }}>
+        {chartWorkspace}
+        {researchRail}
+      </View>
+
+      <Section title="Fundamentals" eyebrow="Plain-language context">
         <Surface>
-          <Row title="P/E ratio" sub="Trailing" right={metric(quote?.trailingPE)} icon="bar-chart-2" />
+          <Row title="P/E ratio" sub="Price compared with the last 12 months of earnings" right={metric(quote?.trailingPE)} icon="bar-chart-2" />
           <Divider />
-          <Row title="Market cap" sub="Current quote" right={compactMoney(quote?.marketCap)} icon="pie-chart" />
+          <Row title="Market cap" sub="Estimated total value of public shares" right={compactMoney(quote?.marketCap)} icon="pie-chart" />
           <Divider />
-          <Row title="Volume" sub={`Avg ${compactNumber(quote?.averageVolume)}`} right={compactNumber(quote?.volume)} icon="activity" />
+          <Row title="Volume" sub={`Typical session ${compactNumber(quote?.averageVolume)}`} right={compactNumber(quote?.volume)} icon="activity" />
           <Divider />
-          <Row title="Day range" sub={`Open ${maybeUsd(quote?.open)}`} right={rangeLabel(quote?.dayLow ?? null, quote?.dayHigh ?? null)} icon="maximize-2" />
+          <Row title="Day range" sub={`Opened near ${maybeUsd(quote?.open)}`} right={rangeLabel(quote?.dayLow ?? null, quote?.dayHigh ?? null)} icon="maximize-2" />
           <Divider />
-          <Row title="52-week range" sub={quote?.updatedAt ? `Updated ${timeAgo(quote.updatedAt)}` : "Latest quote"} right={rangeLabel(quote?.yearLow ?? null, quote?.yearHigh ?? null)} icon="calendar" />
+          <Row title="52-week range" sub={!quote ? "Quote data unavailable" : quote.updatedAt ? `Quote updated ${timeAgo(quote.updatedAt)}` : "Quote timestamp unavailable"} right={rangeLabel(quote?.yearLow ?? null, quote?.yearHigh ?? null)} icon="calendar" />
         </Surface>
       </Section>
-
-      <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, paddingTop: 18, paddingBottom: 6 }}>
-        <View style={{ flexDirection: "row", gap: 14 }}>
-          <Button label="Sell" variant="secondary" onPress={() => openOrder("sell")} style={{ flex: 1 }} />
-          <Button label="Buy" onPress={() => openOrder("buy")} style={{ flex: 1 }} />
-        </View>
-      </View>
     </View>
   );
 }
 
-function OrderScreen(props: Parameters<typeof DiscoverScreen>[0]) {
+function OrderScreen(props: DiscoverScreenProps) {
   const {
     selectedSymbol,
     quote,
@@ -383,13 +576,20 @@ function OrderScreen(props: Parameters<typeof DiscoverScreen>[0]) {
     setAmount,
     limitPrice,
     setLimitPrice,
+    orderStage,
+    setOrderStage,
+    reviewQuotePrice,
+    lastOrder,
     submitOrder,
     orderBusy,
     orderMessage,
     setView,
     me,
+    goPortfolio,
   } = props;
-  const price = orderType === "limit" && Number(limitPrice) > 0 ? Number(limitPrice) : quote?.price ?? 0;
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
+  const price = orderType === "limit" && Number(limitPrice) > 0 ? Number(limitPrice) : orderStage === "review" && reviewQuotePrice != null ? reviewQuotePrice : quote?.price ?? 0;
   const cash = Number(me?.account?.cash ?? 0);
   const ownedQty = Number(position?.qty ?? 0);
   const ownedValue = ownedQty * (quote?.price ?? 0);
@@ -398,59 +598,278 @@ function OrderScreen(props: Parameters<typeof DiscoverScreen>[0]) {
   const notional = desiredShares * price;
   const sellTooMuch = side === "sell" && desiredShares > ownedQty + 0.00001;
   const buyTooMuch = side === "buy" && notional > cash + 0.01;
+  const invalidLimit = orderType === "limit" && (!Number.isFinite(Number(limitPrice)) || Number(limitPrice) <= 0);
+  const canReview = desiredShares > 0 && price > 0 && !sellTooMuch && !buyTooMuch && !invalidLimit;
+  const validationMessage = sellTooMuch
+    ? `You can sell up to ${ownedQty.toFixed(4)} shares.`
+    : buyTooMuch
+      ? "This practice order is above your available buying power."
+      : invalidLimit
+        ? "Enter a valid limit price before review."
+        : desiredShares <= 0
+          ? "Enter a share or dollar amount to continue."
+          : price <= 0
+            ? "A verified quote is required before review."
+            : "Ready for a final simulated-order review.";
 
   function setMax() {
     if (side === "sell") setAmount(amountMode === "shares" ? ownedQty.toFixed(4) : ownedValue.toFixed(2));
     else setAmount(amountMode === "shares" && price > 0 ? (Math.floor((cash / price) * 10000) / 10000).toFixed(4) : cash.toFixed(2));
   }
 
-  return (
-    <View style={{ gap: 22 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <View>
-          <Text style={{ color: colors.text, fontSize: 42, lineHeight: 46, fontWeight: font.bold }}>{side === "buy" ? "Buy" : "Sell"} {selectedSymbol}</Text>
-          <Text style={{ marginTop: 8, color: colors.muted, fontSize: 14 }}>Market and limit paper orders</Text>
-        </View>
-        <IconButton icon="x" label="Close order" onPress={() => setView("detail")} />
+  if (orderStage === "receipt") {
+    return (
+      <OrderReceiptScreen
+        order={lastOrder}
+        symbol={selectedSymbol}
+        quote={quote}
+        message={orderMessage}
+        goPortfolio={goPortfolio}
+        backToSymbol={() => {
+          setOrderStage("configure");
+          setView("detail");
+        }}
+      />
+    );
+  }
+
+  if (orderStage === "review") {
+    return (
+      <OrderReviewScreen
+        symbol={selectedSymbol}
+        side={side}
+        orderType={orderType}
+        amountMode={amountMode}
+        amount={numAmount}
+        shares={desiredShares}
+        price={price}
+        notional={notional}
+        cash={cash}
+        ownedQty={ownedQty}
+        limitPrice={Number(limitPrice)}
+        busy={orderBusy}
+        message={orderMessage}
+        edit={() => setOrderStage("configure")}
+        confirm={submitOrder}
+      />
+    );
+  }
+
+  const entry = (
+    <View style={{ flex: isTablet ? 1.2 : undefined, gap: space.x4 }}>
+      <Segment testID="order-side" value={side} options={[["buy", "Buy"], ["sell", "Sell"]]} onChange={setSide} />
+      <View style={{ flexDirection: isTablet ? "row" : "column", gap: space.x3 }}>
+        <View style={{ flex: 1 }}><Segment testID="order-type" value={orderType} options={[["market", "Market"], ["limit", "Limit"]]} onChange={setOrderType} /></View>
+        <View style={{ flex: 1 }}><Segment testID="order-mode" value={amountMode} options={[["shares", "Shares"], ["dollars", "Dollars"]]} onChange={setAmountMode} /></View>
       </View>
-
-      <Segment value={side} options={[["buy", "Buy"], ["sell", "Sell"]]} onChange={setSide} />
-
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <View style={{ flex: 1 }}>
-          <Segment value={orderType} options={[["market", "Market"], ["limit", "Limit"]]} onChange={setOrderType} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Segment value={amountMode} options={[["shares", "Shares"], ["dollars", "Dollars"]]} onChange={setAmountMode} />
-        </View>
+      <Input
+        testID="order-amount"
+        label={amountMode === "shares" ? "Number of shares" : "Practice dollars"}
+        helper={amountMode === "dollars" ? "We convert dollars to fractional shares using the estimated order price." : "Fractional quantities are rounded down to four decimals."}
+        keyboardType="decimal-pad"
+        value={amount}
+        onChangeText={setAmount}
+        placeholder={amountMode === "shares" ? "0.0000" : "0.00"}
+      />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.x2 }}>
+        {(amountMode === "shares" ? ["1", "5", "10"] : ["100", "500", "1000"]).map((preset) => (
+          <PresetChip key={preset} label={amountMode === "shares" ? `${preset} shares` : `$${preset}`} onPress={() => setAmount(preset)} />
+        ))}
+        <PresetChip label="Max" onPress={setMax} />
       </View>
+      {orderType === "limit" ? <Input testID="order-limit-price" label="Limit price" helper="The paper order waits unless the market reaches this price or better." keyboardType="decimal-pad" value={limitPrice} onChangeText={setLimitPrice} placeholder="0.00" error={invalidLimit && limitPrice ? "Use a price greater than zero." : undefined} /> : null}
+    </View>
+  );
 
-      <View style={{ gap: 10 }}>
-        <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
-          <Text style={{ color: colors.text, fontSize: 60, lineHeight: 66, fontWeight: font.regular }}>{amount || "0"} {amountMode === "shares" ? "shares" : "dollars"}</Text>
+  const summary = (
+    <View style={{ flex: isTablet ? 0.8 : undefined, gap: space.x4 }}>
+      <Surface elevated>
+        <Eyebrow>Estimated impact</Eyebrow>
+        <View style={{ marginTop: space.x3 }}>
+          <Row title="Estimated price" sub={orderType === "market" ? "Latest quote; fill can move" : "Your limit price"} right={price ? usd(price) : "—"} />
+          <Divider />
+          <Row title={side === "buy" ? "Estimated cost" : "Estimated proceeds"} sub={`${desiredShares.toFixed(4)} shares`} right={usd(notional)} />
+          <Divider />
+          <Row title={side === "buy" ? "Buying power after" : "Shares after sale"} sub="Before pending-order adjustments" right={side === "buy" ? usd(Math.max(0, cash - notional)) : Math.max(0, ownedQty - desiredShares).toFixed(4)} />
         </View>
-        <Input keyboardType="decimal-pad" value={amount} onChangeText={setAmount} placeholder={amountMode === "shares" ? "Shares" : "Dollars"} />
-        <Button label="Max" variant="secondary" onPress={setMax} />
-      </View>
-
-      {orderType === "limit" ? <Input label="Limit price" keyboardType="decimal-pad" value={limitPrice} onChangeText={setLimitPrice} placeholder="0.00" /> : null}
-
-      <Surface>
-        <Row title="Estimated price" right={usd(price)} />
-        <Divider />
-        <Row title={side === "buy" ? "Estimated cost" : "Estimated proceeds"} right={usd(notional)} />
-        <Divider />
-        <Row title={side === "buy" ? "Buying power after" : "Shares after sale"} right={side === "buy" ? usd(Math.max(0, cash - notional)) : Math.max(0, ownedQty - desiredShares).toFixed(4)} />
       </Surface>
+      <InlineNotice tone={canReview ? "success" : "warning"} title={canReview ? "Ready to review" : "Review is locked"} body={validationMessage} />
+      <Button
+        testID="order-review"
+        label="Review simulated order"
+        icon="arrow-right"
+        onPress={() => setOrderStage("review")}
+        disabled={!canReview}
+        disabledReason={validationMessage}
+      />
+      <Text style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 18, textAlign: "center" }}>No order is sent until you confirm on the next screen.</Text>
+    </View>
+  );
 
-      {(sellTooMuch || buyTooMuch) ? (
-        <Text selectable style={{ color: colors.red, fontSize: 14, lineHeight: 20 }}>
-          {sellTooMuch ? `You can sell up to ${ownedQty.toFixed(4)} shares.` : "This order is above your buying power."}
-        </Text>
-      ) : null}
-      {orderMessage ? <Text selectable style={{ color: orderMessage.toLowerCase().includes("failed") ? colors.red : colors.accent, textAlign: "center", fontWeight: font.bold }}>{orderMessage}</Text> : null}
+  return (
+    <View testID="screen-order-configure" style={{ gap: space.x6 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.x4 }}>
+        <View style={{ flex: 1, gap: space.x2 }}>
+          <PaperBadge compact />
+          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 42 : 34, lineHeight: isTablet ? 46 : 38, fontWeight: font.bold }}>{side === "buy" ? "Buy" : "Sell"} {selectedSymbol}</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Configure first, then review every detail.</Text>
+        </View>
+        <IconButton icon="x" label="Close order ticket" onPress={() => setView("detail")} />
+      </View>
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "flex-start", gap: space.x6 }}>
+        {entry}
+        {summary}
+      </View>
+    </View>
+  );
+}
 
-      <Button label={orderBusy ? "Submitting..." : "Review paper order"} onPress={submitOrder} disabled={orderBusy || !desiredShares || sellTooMuch || buyTooMuch} variant={side === "sell" ? "danger" : "primary"} />
+function OrderReviewScreen({
+  symbol,
+  side,
+  orderType,
+  amountMode,
+  amount,
+  shares,
+  price,
+  notional,
+  cash,
+  ownedQty,
+  limitPrice,
+  busy,
+  message,
+  edit,
+  confirm,
+}: {
+  symbol: string;
+  side: Side;
+  orderType: OrderType;
+  amountMode: AmountMode;
+  amount: number;
+  shares: number;
+  price: number;
+  notional: number;
+  cash: number;
+  ownedQty: number;
+  limitPrice: number;
+  busy: boolean;
+  message: string;
+  edit: () => void;
+  confirm: () => void;
+}) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
+  return (
+    <View testID="screen-order-review-ready" style={{ gap: isTablet ? space.x6 : space.x4 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.x4 }}>
+        <View style={{ flex: 1, gap: isTablet ? space.x2 : space.x1 }}>
+          <PaperBadge />
+          <Eyebrow>Final check · no real money</Eyebrow>
+          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 44 : 32, lineHeight: isTablet ? 48 : 36, fontWeight: font.bold }}>Review simulated order</Text>
+        </View>
+        <IconButton icon="edit-2" label="Edit order" onPress={edit} />
+      </View>
+
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "stretch", gap: isTablet ? space.x6 : space.x4 }}>
+        <Surface elevated style={{ flex: 1.2, padding: isTablet ? space.x8 : space.x3 }}>
+          <View style={{ gap: isTablet ? space.x6 : space.x4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.x4 }}>
+              <StockLogo symbol={symbol} size={isTablet ? 64 : 48} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{side === "buy" ? "Simulated buy" : "Simulated sell"}</Text>
+                <Text style={{ marginTop: space.x1, color: colors.textPrimary, fontSize: isTablet ? 30 : 26, fontWeight: font.bold }}>{symbol}</Text>
+              </View>
+              <View accessibilityLabel={`${side === "buy" ? "Buy" : "Sell"} side`} style={{ minHeight: 34, flexDirection: "row", alignItems: "center", gap: space.x1, paddingHorizontal: space.x3, borderRadius: radius.pill, backgroundColor: side === "buy" ? colors.bullishSoft : colors.bearishSoft }}>
+                <Feather name={side === "buy" ? "arrow-up-right" : "arrow-down-right"} size={14} color={side === "buy" ? colors.bullish : colors.bearish} />
+                <Text style={{ color: side === "buy" ? colors.bullish : colors.bearish, fontSize: 13, fontWeight: font.bold }}>{side === "buy" ? "BUY" : "SELL"}</Text>
+              </View>
+            </View>
+            <View>
+              <Row compact={!isTablet} title="Order type" sub={orderType === "market" ? "Estimated from the latest quote" : `Will wait at ${usd(limitPrice)}`} right={orderType === "market" ? "Market" : "Limit"} />
+              <Divider />
+              <Row compact={!isTablet} title="Amount entered" sub={amountMode === "shares" ? "Share quantity" : "Practice-dollar notional"} right={amountMode === "shares" ? `${amount.toFixed(4)} sh` : usd(amount)} />
+              <Divider />
+              <Row compact={!isTablet} title="Estimated shares" sub="Rounded down to four decimals" right={shares.toFixed(4)} />
+              <Divider />
+              <Row compact={!isTablet} title="Estimated price" sub="May differ if the market moves" right={usd(price)} />
+              <Divider />
+              <Row compact={!isTablet} title={side === "buy" ? "Estimated total" : "Estimated proceeds"} sub="Simulated funds only" right={usd(notional)} />
+            </View>
+          </View>
+        </Surface>
+
+        <View style={{ flex: 0.8, gap: isTablet ? space.x4 : space.x3 }}>
+          <Surface style={!isTablet ? { padding: space.x3 } : undefined}>
+            <Eyebrow>After this order</Eyebrow>
+            <View style={{ marginTop: space.x3, flexDirection: "row", gap: space.x4 }}>
+              <Metric label={side === "buy" ? "Buying power" : "Shares left"} value={side === "buy" ? usd(Math.max(0, cash - notional), 0) : Math.max(0, ownedQty - shares).toFixed(4)} />
+              <Metric label="Estimated total" value={usd(notional, 0)} />
+            </View>
+          </Surface>
+          <InlineNotice tone="info" title="This is a paper trade" body="Only your simulated portfolio changes—no deposits, withdrawals, payouts, or cash-out." />
+          {message ? <InlineNotice tone="error" title="The order was not submitted" body={message} /> : null}
+          <Button testID="order-confirm" label={busy ? "Submitting paper order…" : "Confirm paper trade"} icon="check" onPress={confirm} loading={busy} />
+          {isTablet ? <Button label="Edit details" variant="secondary" onPress={edit} disabled={busy} /> : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function OrderReceiptScreen({
+  order,
+  symbol,
+  quote,
+  message,
+  goPortfolio,
+  backToSymbol,
+}: {
+  order: Order | null;
+  symbol: string;
+  quote?: Quote | null;
+  message: string;
+  goPortfolio: () => void;
+  backToSymbol: () => void;
+}) {
+  const successful = Boolean(order);
+  return (
+    <View testID="screen-order-receipt-ready" style={{ alignSelf: "center", width: "100%", maxWidth: 720, gap: space.x6 }}>
+      <Surface elevated style={{ padding: space.x8 }}>
+        <View style={{ alignItems: "center", gap: space.x4 }}>
+          <View style={{ width: 72, height: 72, borderRadius: radius.xl, alignItems: "center", justifyContent: "center", backgroundColor: successful ? colors.bullishSoft : colors.bearishSoft }}>
+            <Feather name={successful ? "check" : "alert-circle"} size={32} color={successful ? colors.bullish : colors.bearish} />
+          </View>
+          <PaperBadge />
+          <View style={{ alignItems: "center", gap: space.x2 }}>
+            <Text style={{ color: colors.textPrimary, fontSize: 34, fontWeight: font.bold }}>{successful ? "Paper order received" : "Order needs attention"}</Text>
+            <Text style={{ maxWidth: 520, color: colors.textSecondary, fontSize: 15, lineHeight: 22, textAlign: "center" }}>{message || "Review the details and try again when a verified quote is available."}</Text>
+          </View>
+          {order ? (
+            <View style={{ alignSelf: "stretch", marginTop: space.x2 }}>
+              <Row title={`${order.side === "buy" ? "Buy" : "Sell"} ${order.symbol}`} sub={`${Number(order.qty).toFixed(4)} shares · ${order.type}`} right={order.status.replace(/_/g, " ")} />
+              <Divider />
+              <Row title="Reference" sub="Paper order ID" right={order.id.slice(0, 8).toUpperCase()} />
+              <Divider />
+              <Row
+                title={order.filled_avg_price != null ? "Paper fill price" : "Latest reference price"}
+                sub={order.filled_avg_price != null ? "Recorded simulated execution" : "Pending orders may fill later"}
+                right={order.filled_avg_price != null ? usd(Number(order.filled_avg_price)) : quote ? usd(quote.price) : "—"}
+              />
+              {order.created_at ? (
+                <>
+                  <Divider />
+                  <Row title="Submitted" sub="Device-local time" right={formatOrderTime(order.created_at)} />
+                </>
+              ) : null}
+            </View>
+          ) : null}
+          <InlineNotice tone="success" title="Learning prompt" body="Before moving on, note what would confirm or invalidate your original thesis." />
+          <View style={{ alignSelf: "stretch", flexDirection: "row", gap: space.x3 }}>
+            <Button label="Back to symbol" variant="secondary" onPress={backToSymbol} style={{ flex: 1 }} />
+            <Button label="View portfolio" onPress={goPortfolio} style={{ flex: 1 }} />
+          </View>
+        </View>
+      </Surface>
     </View>
   );
 }
@@ -462,60 +881,72 @@ export function CompeteScreen({
   entries: LeaderboardEntry[];
   currentAccountId?: string;
 }) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
   const currentRank = entries.findIndex((entry) => entry.account_id === currentAccountId);
   const current = currentRank >= 0 ? entries[currentRank] : null;
+  const leader = entries[0];
+
+  const leaderboard = entries.length ? (
+    <Surface testID="leaderboard-ready">
+      {entries.map((entry, index) => {
+        const isCurrent = entry.account_id === currentAccountId;
+        return (
+          <View key={entry.account_id}>
+            <View accessibilityLabel={`Rank ${index + 1}, ${entry.display_name}, ${signedPct(entry.return_pct)} simulated return`} style={{ minHeight: 68, flexDirection: "row", alignItems: "center", gap: space.x3 }}>
+              <View style={{ width: 38, height: 38, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: index < 3 ? colors.brandSoft : colors.surfaceMuted }}>
+                <Text style={{ color: index < 3 ? colors.brand : colors.textSecondary, fontWeight: font.bold }}>{index + 1}</Text>
+              </View>
+              <Avatar name={entry.display_name} size={40} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 15, fontWeight: isCurrent ? font.bold : font.semibold }}>{entry.display_name}{isCurrent ? " · You" : ""}</Text>
+                <Text style={{ marginTop: space.x1, color: colors.textSecondary, fontSize: 12 }}>Simulated equity {usd(entry.equity, 0)}</Text>
+              </View>
+              <View style={{ alignItems: "flex-end", gap: space.x1 }}>
+                <Text style={{ color: entry.return_pct >= 0 ? colors.bullish : colors.bearish, fontSize: 15, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{signedPct(entry.return_pct)}</Text>
+                <Text style={{ color: colors.textTertiary, fontSize: 10 }}>SINCE START</Text>
+              </View>
+            </View>
+            {index < entries.length - 1 ? <Divider /> : null}
+          </View>
+        );
+      })}
+    </Surface>
+  ) : <StatePanel title="No rankings yet" body="Pull to refresh after your club competition begins." icon="award" />;
+
   return (
-    <View style={{ gap: 24 }}>
-      <View style={{ gap: 8 }}>
-        <Text style={{ color: colors.muted, fontSize: 13, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: font.bold }}>Live competition</Text>
-        <Text style={{ color: colors.text, fontSize: 42, lineHeight: 45, fontWeight: font.bold }}>Club rankings</Text>
-        <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 22 }}>Ranked by simulated return using current market prices.</Text>
+    <View testID="screen-competition-ready" style={{ gap: space.x8 }}>
+      <View style={{ maxWidth: 680, gap: space.x2 }}>
+        <PaperBadge compact />
+        <Eyebrow>Learning together</Eyebrow>
+        <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 42 : 34, lineHeight: isTablet ? 46 : 38, fontWeight: font.bold }}>Club rankings</Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 22 }}>Compare simulated returns constructively. Rank is context—not a reason to trade more often.</Text>
       </View>
 
-      {current ? (
-        <Surface tone={colors.accentSoft}>
-          <Text style={{ color: colors.muted, fontSize: 12, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: font.bold }}>Your position</Text>
-          <View style={{ marginTop: 10, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
-            <Text style={{ color: colors.text, fontSize: 36, fontWeight: font.bold }}>#{currentRank + 1}</Text>
-            <Text style={{ color: current.return_pct >= 0 ? colors.accent : colors.red, fontSize: 24, fontWeight: font.bold }}>{signedPct(current.return_pct)}</Text>
-          </View>
-          <Text style={{ marginTop: 5, color: colors.muted, fontSize: 13 }}>{entries.length} active traders · {usd(current.equity)} equity</Text>
-        </Surface>
-      ) : null}
-
-      {entries.length ? (
-        <Section title="Leaderboard">
-          <Surface>
-            {entries.map((entry, index) => {
-              const isCurrent = entry.account_id === currentAccountId;
-              return (
-                <View key={entry.account_id}>
-                  <View accessibilityLabel={`Rank ${index + 1}, ${entry.display_name}, ${signedPct(entry.return_pct)}`} style={{ flexDirection: "row", alignItems: "center", gap: 13, paddingVertical: 3 }}>
-                    <View style={{ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: index < 3 ? colors.accentSoft : colors.panelAlt }}>
-                      <Text style={{ color: index < 3 ? colors.accent : colors.muted, fontWeight: font.bold }}>{index + 1}</Text>
-                    </View>
-                    <Avatar name={entry.display_name} size={38} />
-                    <View style={{ flex: 1 }}>
-                      <Text numberOfLines={1} style={{ color: colors.text, fontSize: 15, fontWeight: isCurrent ? font.bold : font.semibold }}>{entry.display_name}{isCurrent ? " · You" : ""}</Text>
-                      <Text style={{ marginTop: 3, color: colors.muted, fontSize: 12 }}>{usd(entry.equity)} equity</Text>
-                    </View>
-                    <Text style={{ color: entry.return_pct >= 0 ? colors.accent : colors.red, fontSize: 15, fontWeight: font.bold }}>{signedPct(entry.return_pct)}</Text>
-                  </View>
-                  {index < entries.length - 1 ? <Divider /> : null}
-                </View>
-              );
-            })}
-          </Surface>
-        </Section>
-      ) : (
-        <Surface>
-          <View style={{ alignItems: "center", gap: 12, paddingVertical: 28 }}>
-            <Feather name="award" size={30} color={colors.accent} />
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: font.bold }}>No rankings yet</Text>
-            <Text style={{ color: colors.muted, textAlign: "center", lineHeight: 21 }}>Pull to refresh when your club competition begins.</Text>
-          </View>
-        </Surface>
-      )}
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "flex-start", gap: space.x6 }}>
+        <View style={{ flex: isTablet ? 0.75 : undefined, width: "100%", gap: space.x4 }}>
+          {current ? (
+            <Surface elevated tone={colors.brandSoft}>
+              <Eyebrow>Your position</Eyebrow>
+              <View style={{ marginTop: space.x3, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: space.x4 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 48, fontWeight: font.bold }}>#{currentRank + 1}</Text>
+                <TrendPill value={current.return_pct} />
+              </View>
+              <Text style={{ marginTop: space.x2, color: colors.textSecondary, fontSize: 13 }}>{entries.length} active learners · {usd(current.equity, 0)} simulated equity</Text>
+            </Surface>
+          ) : (
+            <Surface><Text style={{ color: colors.textSecondary }}>Join an active club to see your position.</Text></Surface>
+          )}
+          {isTablet ? <WeeklyReviewCard /> : null}
+          {isTablet && leader ? <InlineNotice tone="info" title={`${leader.display_name} leads this round`} body={`${signedPct(leader.return_pct)} simulated return. Study the process, not only the outcome.`} /> : null}
+        </View>
+        <View style={{ flex: isTablet ? 1.25 : undefined, width: "100%" }}>
+          <Section title="Leaderboard" eyebrow="Privacy-safe display names">
+            {leaderboard}
+          </Section>
+        </View>
+      </View>
+      {!isTablet ? <WeeklyReviewCard /> : null}
     </View>
   );
 }
@@ -545,97 +976,102 @@ export function ProfileScreen({
   setThemePreference: (theme: ThemePreference) => void;
   busy: boolean;
 }) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
   const account = me?.account;
   return (
-    <View style={{ gap: 26 }}>
-      <View style={{ gap: 14 }}>
-        <Avatar uri={me?.profile?.avatar_url} name={account?.display_name ?? "Trader"} size={82} />
-        <View>
-          <Text style={{ color: colors.text, fontSize: 34, fontWeight: font.bold }}>{account?.display_name ?? "Trader"}</Text>
-          <Text style={{ marginTop: 6, color: colors.muted, fontSize: 14 }}>{me?.user?.email ?? "Signed in"}</Text>
+    <View testID="screen-profile-ready" style={{ gap: space.x8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.x4 }}>
+        <Avatar uri={me?.profile?.avatar_url} name={account?.display_name ?? "Trader"} size={76} />
+        <View style={{ flex: 1 }}>
+          <PaperBadge compact />
+          <Text style={{ marginTop: space.x2, color: colors.textPrimary, fontSize: 30, fontWeight: font.bold }}>{account?.display_name ?? "Trader"}</Text>
+          <Text style={{ marginTop: space.x1, color: colors.textSecondary, fontSize: 14 }}>{me?.user?.email ?? "Signed in"}</Text>
         </View>
-        <Button label="Change profile picture" variant="secondary" icon="image" onPress={pickAvatar} />
+        {isTablet ? <Button label="Change photo" variant="secondary" icon="image" onPress={pickAvatar} /> : null}
       </View>
+      {!isTablet ? <Button label="Change profile picture" variant="secondary" icon="image" onPress={pickAvatar} /> : null}
 
-      <Section title="Account">
-        <Surface>
-          <Row title="Practice balance" sub="Simulation only" right={usd(account?.cash ?? 0)} icon="credit-card" />
-          <Divider />
-          <Row title="Risk style" sub="Profile" right={me?.profile?.risk_style ?? "balanced"} icon="shield" />
-          <Divider />
-          <Row title="Active alerts" sub="Created from Discover" right={String(me?.alerts?.filter((a) => a.status === "active").length ?? 0)} icon="bell" />
-        </Surface>
-      </Section>
-
-      <Section title="Appearance">
-        <Surface>
-          {themeOptions.map((option, index) => {
-            const selected = option.value === themePreference;
-            return (
-              <View key={option.value}>
-                <Pressable
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selected }}
-                  accessibilityLabel={`${option.label} theme`}
-                  onPress={() => setThemePreference(option.value)}
-                  style={({ pressed }) => ({ minHeight: 54, flexDirection: "row", alignItems: "center", gap: 12, opacity: pressed ? 0.72 : 1 })}
-                >
-                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selected ? colors.accent : colors.subtle, alignItems: "center", justifyContent: "center" }}>
-                    {selected ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent }} /> : null}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontSize: 15, fontWeight: font.semibold }}>{option.label}</Text>
-                    <Text style={{ marginTop: 2, color: colors.muted, fontSize: 12 }}>{option.description}</Text>
-                  </View>
-                </Pressable>
-                {index < themeOptions.length - 1 ? <Divider /> : null}
-              </View>
-            );
-          })}
-        </Surface>
-      </Section>
-
-      <Section title="API keys">
-        <Surface>
-          <Row title="Generate key" sub="For API/bot access" right="Create" icon="key" onPress={createKey} />
-          {newSecret ? (
-            <>
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "flex-start", gap: space.x6 }}>
+        <View style={{ flex: 1, width: "100%", gap: space.x6 }}>
+          <Section title="Account" eyebrow="Practice profile">
+            <Surface>
+              <Row title="Practice balance" sub="Simulation only" right={usd(account?.cash ?? 0)} icon="credit-card" />
               <Divider />
-              <Text selectable style={{ color: colors.accent, fontSize: 12, lineHeight: 18 }}>{newSecret}</Text>
-            </>
+              <Row title="Risk style" sub="Learning preference" right={me?.profile?.risk_style ?? "Balanced"} icon="shield" />
+              <Divider />
+              <Row title="Active alerts" sub="Created from Discover" right={String(me?.alerts?.filter((alert) => alert.status === "active").length ?? 0)} icon="bell" />
+            </Surface>
+          </Section>
+
+          <Section title="Appearance" eyebrow="System, light, dark, midnight">
+            <Surface>
+              {themeOptions.map((option, index) => {
+                const selected = option.value === themePreference;
+                return (
+                  <View key={option.value}>
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                      accessibilityLabel={`${option.label} theme`}
+                      testID={`theme-${option.value}`}
+                      onPress={() => setThemePreference(option.value)}
+                      style={({ pressed }) => ({ minHeight: 58, flexDirection: "row", alignItems: "center", gap: space.x3, opacity: pressed ? 0.7 : 1 })}
+                    >
+                      <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: selected ? colors.brand : colors.borderStrong, alignItems: "center", justifyContent: "center" }}>
+                        {selected ? <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand }} /> : null}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: font.semibold }}>{option.label}</Text>
+                        <Text style={{ marginTop: space.x1, color: colors.textSecondary, fontSize: 12 }}>{option.description}</Text>
+                      </View>
+                    </Pressable>
+                    {index < themeOptions.length - 1 ? <Divider /> : null}
+                  </View>
+                );
+              })}
+            </Surface>
+          </Section>
+        </View>
+
+        <View style={{ flex: 1, width: "100%", gap: space.x6 }}>
+          <Section title="API access" eyebrow="Bots and integrations">
+            <Surface>
+              <Row title="Generate API key" sub="Secret is shown only once" right="Create" icon="key" onPress={createKey} />
+              {newSecret ? (
+                <>
+                  <Divider />
+                  <InlineNotice tone="warning" title="Copy this secret now" body="It will not be displayed again. Keep it private." />
+                  <Text selectable style={{ marginTop: space.x3, color: colors.textPrimary, fontSize: 12, lineHeight: 18, fontVariant: ["tabular-nums"] }}>{newSecret}</Text>
+                </>
+              ) : null}
+              {keys.map((key) => (
+                <View key={key.id}>
+                  <Divider />
+                  <Row title={key.label || "Trading bot"} sub={key.key_id} right={key.revoked_at ? "Revoked" : "Active"} icon="terminal" />
+                </View>
+              ))}
+            </Surface>
+          </Section>
+
+          {me?.is_admin ? (
+            <Section title="Administration">
+              <Surface><Row title="Admin console" sub="Accounts, reports, and safety controls" right="Open" icon="shield" onPress={openAdmin} /></Surface>
+            </Section>
           ) : null}
-          {keys.map((key) => (
-            <View key={key.id}>
-              <Divider />
-              <Row title={key.label || "Trading bot"} sub={key.key_id} right={key.revoked_at ? "Revoked" : "Active"} icon="terminal" />
-            </View>
-          ))}
-        </Surface>
-      </Section>
 
-      {me?.is_admin ? (
-        <Section title="Admin">
-          <Surface>
-            <Row title="Admin console" sub="Accounts, reports, and safety controls" right="Open" icon="shield" onPress={openAdmin} />
-          </Surface>
-        </Section>
-      ) : null}
-
-      <Section title="Safety">
-        <Surface>
-          <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 21 }}>Paper Trader is educational. There is no real-money trading, deposits, withdrawals, payouts, or cash-out. Reports are visible to admins for review.</Text>
-        </Surface>
-      </Section>
-
-      <Section title="Account deletion">
-        <Surface>
-          <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 21 }}>Permanently delete your account and associated Paper Trader data. This cannot be undone.</Text>
-          <View style={{ marginTop: 14, gap: 10 }}>
-            <Button label={busy ? "Working..." : "Delete my account"} variant="danger" disabled={busy} onPress={deleteAccount} />
-            <Button label="Sign out" variant="secondary" onPress={signOut} />
-          </View>
-        </Surface>
-      </Section>
+          <Section title="Safety and privacy" eyebrow="Your control">
+            <Surface>
+              <InlineNotice tone="info" title="Educational simulation only" body="PaperAI Trader has no real-money trading, deposits, withdrawals, payouts, prizes, or cash-out." />
+              <View style={{ marginTop: space.x4, gap: space.x3 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>Deleting your account permanently removes the associated PaperAI Trader profile and activity. This cannot be undone.</Text>
+                <Button testID="delete-account" label={busy ? "Working…" : "Delete my account"} variant="danger" disabled={busy} onPress={deleteAccount} />
+                <Button label="Sign out" variant="secondary" onPress={signOut} />
+              </View>
+            </Surface>
+          </Section>
+        </View>
+      </View>
     </View>
   );
 }
@@ -654,32 +1090,30 @@ export function AdminScreen({
   runAction: (action: string, payload: Record<string, unknown>) => void;
 }) {
   return (
-    <View style={{ gap: 22 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <View>
-          <Text style={{ color: colors.text, fontSize: 38, fontWeight: font.bold }}>Admin</Text>
-          <Text style={{ marginTop: 6, color: colors.muted, fontSize: 14 }}>Private controls for allowlisted accounts</Text>
+    <View style={{ gap: space.x6 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.x4 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: 38, fontWeight: font.bold }}>Admin</Text>
+          <Text style={{ marginTop: space.x2, color: colors.textSecondary, fontSize: 14 }}>Private controls for allowlisted accounts</Text>
         </View>
         <IconButton icon="chevron-left" label="Back to profile" onPress={back} />
       </View>
-      {loading ? <ActivityIndicator color={colors.accent} /> : null}
-      {error ? <Text selectable style={{ color: colors.red }}>{error}</Text> : null}
+      {loading ? <ActivityIndicator color={colors.brand} /> : null}
+      {error ? <InlineNotice tone="error" title="Admin unavailable" body={error} /> : null}
       {data ? (
         <>
-          <View style={{ flexDirection: "row", gap: 18 }}>
-            <Metric label="Users" value={String(data.stats.total_users)} />
-            <Metric label="Orders" value={String(data.stats.total_orders)} />
-          </View>
-          <View style={{ flexDirection: "row", gap: 18 }}>
-            <Metric label="Equity" value={usd(data.stats.total_equity, 0)} />
-            <Metric label="Reports" value={String(data.stats.open_reports)} tone={data.stats.open_reports ? colors.red : colors.text} />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.x4 }}>
+            <Surface style={{ minWidth: 160, flex: 1 }}><Metric label="Users" value={String(data.stats.total_users)} /></Surface>
+            <Surface style={{ minWidth: 160, flex: 1 }}><Metric label="Orders" value={String(data.stats.total_orders)} /></Surface>
+            <Surface style={{ minWidth: 160, flex: 1 }}><Metric label="Equity" value={usd(data.stats.total_equity, 0)} /></Surface>
+            <Surface style={{ minWidth: 160, flex: 1 }}><Metric label="Reports" value={String(data.stats.open_reports)} tone={data.stats.open_reports ? colors.bearish : colors.textPrimary} /></Surface>
           </View>
           <Section title="Accounts">
             <Surface>
               {data.accounts.slice(0, 8).map((account, index) => (
                 <View key={account.id}>
-                  <Row title={account.display_name} sub={account.email} right={signedPct(account.return_pct ?? 0)} tone={(account.return_pct ?? 0) >= 0 ? colors.accent : colors.red} icon="user" />
-                  <View style={{ flexDirection: "row", gap: 8, paddingBottom: 10 }}>
+                  <Row title={account.display_name} sub={account.email} right={signedPct(account.return_pct ?? 0)} tone={(account.return_pct ?? 0) >= 0 ? colors.bullish : colors.bearish} icon="user" />
+                  <View style={{ flexDirection: "row", gap: space.x2, paddingBottom: space.x3 }}>
                     <Button label="Reset" variant="secondary" onPress={() => confirmAdmin("Reset account?", () => runAction("reset", { account_id: account.id }))} />
                     <Button label={account.status === "disabled" ? "Enable" : "Disable"} variant={account.status === "disabled" ? "primary" : "danger"} onPress={() => confirmAdmin("Change account status?", () => runAction(account.status === "disabled" ? "enable" : "disable", { account_id: account.id }))} />
                   </View>
@@ -693,13 +1127,13 @@ export function AdminScreen({
               {data.moderation.reports.length ? data.moderation.reports.slice(0, 8).map((report, index) => (
                 <View key={report.id}>
                   <Row title={report.reason || "Message report"} sub={report.direct_messages?.body ?? "Message unavailable"} right={report.status} icon="flag" />
-                  <View style={{ flexDirection: "row", gap: 8, paddingBottom: 10 }}>
+                  <View style={{ flexDirection: "row", gap: space.x2, paddingBottom: space.x3 }}>
                     <Button label="Hide" variant="danger" onPress={() => runAction("hide_message", { message_id: report.message_id })} />
                     <Button label="Dismiss" variant="secondary" onPress={() => runAction("dismiss_report", { report_id: report.id })} />
                   </View>
                   {index < Math.min(data.moderation.reports.length, 8) - 1 ? <Divider /> : null}
                 </View>
-              )) : <Text style={{ color: colors.muted }}>No reports waiting.</Text>}
+              )) : <Text style={{ color: colors.textSecondary }}>No reports waiting.</Text>}
             </Surface>
           </Section>
         </>
@@ -708,29 +1142,67 @@ export function AdminScreen({
   );
 }
 
-function Allocation({ label, value, total, tone }: { label: string; value: number; total: number; tone: string }) {
-  const width = `${Math.max(4, Math.min(100, (value / total) * 100))}%` as `${number}%`;
+function MiniPrinciple({ icon, title, body }: { icon: keyof typeof Feather.glyphMap; title: string; body: string }) {
   return (
-    <View style={{ gap: 8 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Text style={{ color: colors.muted, fontSize: 13 }}>{label}</Text>
-        <Text style={{ color: colors.text, fontSize: 13, fontWeight: font.bold }}>{usd(value, 0)}</Text>
+    <View style={{ flex: 1, gap: space.x2 }}>
+      <Feather name={icon} size={18} color={colors.brand} />
+      <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: font.bold }}>{title}</Text>
+      <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{body}</Text>
+    </View>
+  );
+}
+
+function ChecklistRow({ icon, title, body, success }: { icon: keyof typeof Feather.glyphMap; title: string; body: string; success?: boolean }) {
+  return (
+    <View style={{ minHeight: 62, flexDirection: "row", alignItems: "center", gap: space.x3 }}>
+      <View style={{ width: 38, height: 38, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: success ? colors.bullishSoft : colors.surfaceMuted }}>
+        <Feather name={icon} size={17} color={success ? colors.bullish : colors.brand} />
       </View>
-      <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.panelAlt }}>
-        <View style={{ width, height: 8, borderRadius: 4, backgroundColor: tone }} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: font.bold }}>{title}</Text>
+        <Text style={{ marginTop: space.x1, color: colors.textSecondary, fontSize: 12, lineHeight: 17 }}>{body}</Text>
+      </View>
+    </View>
+  );
+}
+
+function WeeklyReviewCard() {
+  return (
+    <Surface>
+      <Eyebrow>Weekly review</Eyebrow>
+      <View style={{ marginTop: space.x3, gap: space.x3 }}>
+        <ChecklistRow icon="pie-chart" title="Review allocation" body="Suggested check-in" />
+        <ChecklistRow icon="book-open" title="Explain one metric" body="Next healthy habit" />
+        <ChecklistRow icon="edit-3" title="Write a trade thesis" body="Reflection over frequency" />
+      </View>
+    </Surface>
+  );
+}
+
+function Allocation({ label, value, total, tone }: { label: string; value: number; total: number; tone: string }) {
+  const ratio = total > 0 ? value / total : 0;
+  const width = `${Math.max(value > 0 ? 4 : 0, Math.min(100, ratio * 100))}%` as `${number}%`;
+  return (
+    <View accessible accessibilityLabel={`${label}, ${usd(value, 0)}, ${Math.round(ratio * 100)} percent`} style={{ gap: space.x2 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space.x3 }}>
+        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{label}</Text>
+        <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{usd(value, 0)}</Text>
+      </View>
+      <View style={{ height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceMuted }}>
+        <View style={{ width, height: 8, borderRadius: radius.pill, backgroundColor: tone }} />
       </View>
     </View>
   );
 }
 
 function OrderLine({ order }: { order: Order }) {
-  const good = order.status === "filled";
+  const complete = order.status === "filled";
   return (
     <Row
       title={`${order.side === "buy" ? "Buy" : "Sell"} ${order.symbol}`}
-      sub={`${Number(order.qty).toFixed(4)} shares - ${order.type}`}
-      right={good ? "Filled" : order.status.replace(/_/g, " ")}
-      tone={order.side === "buy" ? colors.accent : colors.red}
+      sub={`${Number(order.qty).toFixed(4)} shares · ${order.type}`}
+      right={complete ? "Filled" : order.status.replace(/_/g, " ")}
+      tone={order.side === "buy" ? colors.bullish : colors.bearish}
       icon={order.side === "buy" ? "plus-circle" : "minus-circle"}
     />
   );
@@ -739,45 +1211,37 @@ function OrderLine({ order }: { order: Order }) {
 function FilterChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       style={({ pressed }) => ({
-        minHeight: 42,
+        minHeight: 44,
         justifyContent: "center",
-        paddingHorizontal: 18,
-        borderRadius: radius.md,
-        backgroundColor: active ? colors.text : "transparent",
+        paddingHorizontal: space.x4,
+        borderRadius: radius.pill,
+        backgroundColor: active ? colors.textPrimary : colors.surface,
         borderWidth: 1,
-        borderColor: active ? "transparent" : colors.line,
-        opacity: pressed ? 0.76 : 1,
+        borderColor: active ? colors.textPrimary : colors.border,
+        opacity: pressed ? 0.72 : 1,
       })}
     >
-      <Text style={{ color: active ? "#050606" : colors.muted, fontSize: 15, fontWeight: font.bold }}>{label}</Text>
+      <Text style={{ color: active ? colors.background : colors.textSecondary, fontSize: 14, fontWeight: font.bold }}>{label}</Text>
     </Pressable>
   );
 }
 
-function EmptyState({ title, body, compact }: { title: string; body: string; compact?: boolean }) {
+function PresetChip({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <View style={{ minHeight: compact ? 90 : 320, justifyContent: "center", gap: 8 }}>
-      <Text style={{ color: colors.text, fontSize: compact ? 18 : 24, fontWeight: font.bold }}>{title}</Text>
-      <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 21 }}>{body}</Text>
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Set amount to ${label}`}
+      onPress={onPress}
+      style={({ pressed }) => ({ minHeight: 44, minWidth: 72, alignItems: "center", justifyContent: "center", paddingHorizontal: space.x3, borderRadius: radius.md, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.7 : 1 })}
+    >
+      <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: font.bold }}>{label}</Text>
+    </Pressable>
   );
-}
-
-function fallbackSnapshots(account: NonNullable<Me["account"]>) {
-  const start = Number(account.starting_cash);
-  const end = Number(account.equity);
-  const values = [start, start * 1.004, start * 1.001, start * 1.012, start * 1.008, end * 0.995, end];
-  return values.map((equity, index) => ({ equity, created_at: new Date(Date.now() - (values.length - index) * 86400000).toISOString() }));
-}
-
-function fallbackStock(symbol: string) {
-  const seed = symbol.charCodeAt(0) % 30;
-  return [100, 104, 101, 108, 106, 113, 110, 116, 118, 115, 121, 119].map((value, index) => ({
-    value: value + seed,
-    label: `Point ${index + 1}`,
-  }));
 }
 
 function confirmAdmin(title: string, onConfirm: () => void) {
@@ -787,4 +1251,10 @@ function confirmAdmin(title: string, onConfirm: () => void) {
   ]);
 }
 
-export const screenBottomPadding = navHeight + 28;
+function formatOrderTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Recorded";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
+}
+
+export const screenBottomPadding = navHeight + space.x6;

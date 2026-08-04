@@ -88,6 +88,7 @@ create index if not exists idx_orders_account on orders(account_id);
 create index if not exists idx_orders_status on orders(status);
 create index if not exists idx_orders_symbol on orders(symbol);
 create index if not exists idx_orders_scheduled on orders(scheduled_at);
+create unique index if not exists idx_orders_account_client_order on orders(account_id, client_order_id) where client_order_id is not null;
 
 -- =====================================================================
 -- POSITIONS

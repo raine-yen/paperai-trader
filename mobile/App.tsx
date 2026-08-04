@@ -4,8 +4,9 @@ import * as ImagePicker from "expo-image-picker";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, NativeScrollEvent, NativeSyntheticEvent, RefreshControl, ScrollView, Text, useColorScheme, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, RefreshControl, ScrollView, Text, useColorScheme, useWindowDimensions, View } from "react-native";
 import { BottomNav } from "./src/bottom-nav";
+import { PREVIEW_BARS, PREVIEW_LEADERBOARD, PREVIEW_ME, PREVIEW_QUOTES, PREVIEW_SESSION } from "./src/preview-data";
 import {
   AdminScreen,
   AuthScreen,
@@ -15,8 +16,8 @@ import {
   ProfileScreen,
   screenBottomPadding,
 } from "./src/screens";
-import { applyTheme, colors, resolveTheme, type ThemePreference } from "./src/theme";
-import type { AdminData, AmountMode, ApiKey, Bar, DiscoverView, LeaderboardEntry, Me, Order, OrderType, Quote, Session, Side, Tab } from "./src/types";
+import { applyTheme, colors, contentMaxWidth, layoutBreakpoints, resolveTheme, space, tabletNavWidth, type ThemePreference } from "./src/theme";
+import type { AdminData, AmountMode, ApiKey, Bar, DiscoverView, LeaderboardEntry, Me, Order, OrderStage, OrderType, Quote, Session, Side, Tab } from "./src/types";
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -24,6 +25,7 @@ const API_URL =
   "http://127.0.0.1:3000";
 
 const starterSymbols = ["AAPL", "NVDA", "TSLA", "MSFT", "SPY", "QQQ", "AMD", "META", "AMZN", "GOOGL", "NFLX"];
+const APP_STORE_PREVIEW = process.env.EXPO_PUBLIC_APP_STORE_PREVIEW === "1";
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12000) {
   const controller = new AbortController();
@@ -37,8 +39,10 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
 
 export default function App() {
   const systemScheme = useColorScheme();
-  const [session, setSession] = useState<Session | null>(null);
-  const [checking, setChecking] = useState(true);
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
+  const [session, setSession] = useState<Session | null>(APP_STORE_PREVIEW ? PREVIEW_SESSION : null);
+  const [checking, setChecking] = useState(!APP_STORE_PREVIEW);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,24 +50,29 @@ export default function App() {
   const [tab, setTabState] = useState<Tab>("portfolio");
   const [discoverView, setDiscoverView] = useState<DiscoverView>("list");
   const [profileView, setProfileView] = useState<"settings" | "admin">("settings");
-  const [me, setMe] = useState<Me | null>(null);
-  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
-  const [bars, setBars] = useState<Bar[]>([]);
+  const [me, setMe] = useState<Me | null>(APP_STORE_PREVIEW ? PREVIEW_ME : null);
+  const [quotes, setQuotes] = useState<Record<string, Quote>>(APP_STORE_PREVIEW ? PREVIEW_QUOTES : {});
+  const [bars, setBars] = useState<Bar[]>(APP_STORE_PREVIEW ? PREVIEW_BARS : []);
   const [chartRange, setChartRange] = useState("1h");
-  const [selectedSymbol, setSelectedSymbol] = useState("NVDA");
+  const [selectedSymbol, setSelectedSymbol] = useState(APP_STORE_PREVIEW ? "AAPL" : "NVDA");
   const [search, setSearch] = useState("");
   const [searchResult, setSearchResult] = useState<{ symbol: string; quote: Quote } | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const [side, setSide] = useState<Side>("buy");
   const [orderType, setOrderType] = useState<OrderType>("market");
   const [amountMode, setAmountMode] = useState<AmountMode>("shares");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(APP_STORE_PREVIEW ? "10" : "");
   const [limitPrice, setLimitPrice] = useState("");
+  const [orderStage, setOrderStageState] = useState<OrderStage>("configure");
+  const [reviewQuotePrice, setReviewQuotePrice] = useState<number | null>(null);
+  const [reviewClientOrderId, setReviewClientOrderId] = useState<string | null>(null);
+  const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
   const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [themePreference, setThemePreferenceState] = useState<ThemePreference>("system");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(APP_STORE_PREVIEW ? PREVIEW_LEADERBOARD : []);
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(APP_STORE_PREVIEW ? "light" : "system");
   const [newSecret, setNewSecret] = useState("");
   const [adminData, setAdminData] = useState<AdminData | null>(null);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -71,10 +80,11 @@ export default function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [navTucked, setNavTucked] = useState(false);
-  const navX = useRef(new Animated.Value(0)).current;
-  const lastScrollY = useRef(0);
+  const scrollRef = useRef<ScrollView>(null);
   const inFlight = useRef(false);
+  const searchGeneration = useRef(0);
+  const marketDataGeneration = useRef(0);
+  const orderSubmitInFlight = useRef(false);
   const resolvedTheme = resolveTheme(themePreference, systemScheme);
   applyTheme(resolvedTheme);
 
@@ -82,24 +92,16 @@ export default function App() {
   const selectedPosition = useMemo(() => me?.positions.find((p) => p.symbol === selectedSymbol) ?? null, [me?.positions, selectedSymbol]);
 
   useEffect(() => {
-    restoreSession();
+    if (!APP_STORE_PREVIEW) restoreSession();
   }, []);
 
   useEffect(() => {
-    Animated.timing(navX, {
-      toValue: navTucked ? 126 : 0,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [navTucked, navX]);
-
-  useEffect(() => {
-    if (!session) return;
+    if (!session || APP_STORE_PREVIEW) return;
     refreshAll(true);
   }, [session]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || APP_STORE_PREVIEW) return;
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") refreshAll(false);
     });
@@ -114,28 +116,45 @@ export default function App() {
     if (!session || tab !== "discover") return;
     const symbol = search.trim().toUpperCase();
     if (!symbol) {
+      searchGeneration.current += 1;
       setSearchResult(null);
       setSearchLoading(false);
+      setSearchError("");
       return;
     }
+    if (APP_STORE_PREVIEW) {
+      const previewQuote = PREVIEW_QUOTES[symbol];
+      setSearchResult(previewQuote ? { symbol, quote: previewQuote } : null);
+      setSearchLoading(false);
+      setSearchError(previewQuote ? "" : "No preview symbol matches that search.");
+      return;
+    }
+    const generation = ++searchGeneration.current;
     const id = setTimeout(async () => {
       setSearchLoading(true);
+      setSearchError("");
       try {
         const quote = await api<Quote>(`/api/quote?symbol=${encodeURIComponent(symbol)}`);
+        if (generation !== searchGeneration.current) return;
         const parsed = normalizeQuote(quote, symbol);
         setQuotes((prev) => ({ ...prev, [symbol]: parsed }));
         setSearchResult({ symbol, quote: parsed });
-      } catch {
+      } catch (searchFailure) {
+        if (generation !== searchGeneration.current) return;
         setSearchResult(null);
+        setSearchError(searchFailure instanceof Error ? searchFailure.message : "Market search is unavailable. Try again.");
       } finally {
-        setSearchLoading(false);
+        if (generation === searchGeneration.current) setSearchLoading(false);
       }
     }, 320);
-    return () => clearTimeout(id);
+    return () => {
+      clearTimeout(id);
+      if (generation === searchGeneration.current) setSearchLoading(false);
+    };
   }, [search, session, tab]);
 
   useEffect(() => {
-    if (!session || tab !== "discover" || discoverView === "list") return;
+    if (!session || APP_STORE_PREVIEW || tab !== "discover" || discoverView === "list") return;
     refreshSelectedMarketData();
   }, [session, selectedSymbol, chartRange, tab, discoverView]);
 
@@ -144,16 +163,31 @@ export default function App() {
     setLimitPrice((current) => current || selectedQuote.price.toFixed(2));
   }, [selectedQuote?.price, selectedSymbol]);
 
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [tab, discoverView, orderStage]);
+
   async function restoreSession() {
-    const [stored, storedTheme] = await Promise.all([
-      SecureStore.getItemAsync("paper-trader-session").catch(() => null),
-      SecureStore.getItemAsync("paper-trader-theme").catch(() => null),
-    ]);
-    if (stored) setSession(JSON.parse(stored));
-    if (storedTheme && ["system", "light", "dark", "midnight"].includes(storedTheme)) {
-      setThemePreferenceState(storedTheme as ThemePreference);
+    try {
+      const [stored, storedTheme] = await Promise.all([
+        SecureStore.getItemAsync("paper-trader-session").catch(() => null),
+        SecureStore.getItemAsync("paper-trader-theme").catch(() => null),
+      ]);
+      if (stored) {
+        try {
+          setRefreshing(true);
+          setSession(JSON.parse(stored));
+        } catch {
+          setRefreshing(false);
+          await SecureStore.deleteItemAsync("paper-trader-session").catch(() => {});
+        }
+      }
+      if (storedTheme && ["system", "light", "dark", "midnight"].includes(storedTheme)) {
+        setThemePreferenceState(storedTheme as ThemePreference);
+      }
+    } finally {
+      setChecking(false);
     }
-    setChecking(false);
   }
 
   function setThemePreference(next: ThemePreference) {
@@ -162,6 +196,7 @@ export default function App() {
   }
 
   async function saveSession(next: Session | null) {
+    if (next && !me) setRefreshing(true);
     setSession(next);
     if (next) await SecureStore.setItemAsync("paper-trader-session", JSON.stringify(next));
     else await SecureStore.deleteItemAsync("paper-trader-session").catch(() => {});
@@ -256,6 +291,10 @@ export default function App() {
   }
 
   async function refreshAll(showSpinner = false) {
+    if (APP_STORE_PREVIEW) {
+      setRefreshing(false);
+      return;
+    }
     if (!session || inFlight.current) return;
     inFlight.current = true;
     if (showSpinner) setRefreshing(true);
@@ -284,54 +323,136 @@ export default function App() {
   }
 
   async function refreshSelectedMarketData() {
+    if (APP_STORE_PREVIEW) {
+      setBars(selectedSymbol === "AAPL" ? PREVIEW_BARS : []);
+      return;
+    }
+    const requestedSymbol = selectedSymbol;
+    const requestedRange = chartRange;
+    const generation = ++marketDataGeneration.current;
     try {
       const [quote, chart] = await Promise.all([
-        api<Quote>(`/api/quote?symbol=${encodeURIComponent(selectedSymbol)}`),
-        api<{ bars: Bar[] }>(`/api/chart?symbol=${encodeURIComponent(selectedSymbol)}&range=${encodeURIComponent(chartRange)}`),
+        api<Quote>(`/api/quote?symbol=${encodeURIComponent(requestedSymbol)}`),
+        api<{ bars: Bar[] }>(`/api/chart?symbol=${encodeURIComponent(requestedSymbol)}&range=${encodeURIComponent(requestedRange)}`),
       ]);
-      setQuotes((prev) => ({ ...prev, [selectedSymbol]: normalizeQuote(quote, selectedSymbol) }));
+      if (generation !== marketDataGeneration.current) return;
+      setQuotes((prev) => ({ ...prev, [requestedSymbol]: normalizeQuote(quote, requestedSymbol) }));
       setBars(chart.bars ?? []);
       setError("");
     } catch (e) {
+      if (generation !== marketDataGeneration.current) return;
       setBars([]);
       setError(e instanceof Error ? e.message : "Market data unavailable");
     }
   }
 
+  function changeOrderStage(next: OrderStage) {
+    if (next === "review") {
+      const nextPrice = orderType === "limit" ? Number(limitPrice) : Number(selectedQuote?.price ?? 0);
+      setReviewQuotePrice(Number.isFinite(nextPrice) && nextPrice > 0 ? nextPrice : null);
+      setReviewClientOrderId(`mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+    } else if (next === "configure") {
+      setReviewQuotePrice(null);
+      setReviewClientOrderId(null);
+    }
+    setOrderStageState(next);
+  }
+
+  function resetOrderDraft() {
+    setSide("buy");
+    setOrderType("market");
+    setAmountMode("shares");
+    setAmount(APP_STORE_PREVIEW ? "10" : "");
+    setLimitPrice("");
+    setReviewQuotePrice(null);
+    setReviewClientOrderId(null);
+    setOrderStageState("configure");
+    setOrderMessage("");
+    setLastOrder(null);
+  }
+
   async function submitOrder() {
-    const quotePrice = selectedQuote?.price ?? 0;
-    const price = orderType === "limit" && Number(limitPrice) > 0 ? Number(limitPrice) : quotePrice;
+    if (orderSubmitInFlight.current) return;
+    const quotePrice = Number(selectedQuote?.price ?? 0);
+    if (!Number.isFinite(quotePrice) || quotePrice <= 0) {
+      setOrderMessage("A verified quote is required before confirming this paper order.");
+      setOrderStageState("configure");
+      return;
+    }
+    if (orderType === "market" && reviewQuotePrice != null && Math.abs(quotePrice - reviewQuotePrice) >= 0.005) {
+      setOrderMessage(`The quote changed from ${reviewQuotePrice.toFixed(2)} to ${quotePrice.toFixed(2)}. Review the updated estimate before confirming.`);
+      setOrderStageState("configure");
+      setReviewQuotePrice(null);
+      return;
+    }
+    const price = orderType === "limit" && Number(limitPrice) > 0 ? Number(limitPrice) : reviewQuotePrice ?? quotePrice;
     const input = Number(amount) || 0;
     const qty = amountMode === "dollars" ? (price > 0 ? input / price : 0) : input;
     if (!qty || qty <= 0) {
       setOrderMessage("Enter an order amount first.");
+      setOrderStageState("configure");
       return;
     }
+    const normalizedQty = Math.floor(qty * 10000) / 10000;
+    const notional = normalizedQty * price;
+    const cash = Number(me?.account?.cash ?? 0);
+    const ownedQty = Number(selectedPosition?.qty ?? 0);
+    if (side === "buy" && notional > cash + 0.005) {
+      setOrderMessage("This estimate is above your current simulated buying power. Update the amount and review again.");
+      setOrderStageState("configure");
+      setReviewQuotePrice(null);
+      return;
+    }
+    if (side === "sell" && normalizedQty > ownedQty + 0.00005) {
+      setOrderMessage("This amount is above your current simulated holdings. Update the amount and review again.");
+      setOrderStageState("configure");
+      setReviewQuotePrice(null);
+      return;
+    }
+    orderSubmitInFlight.current = true;
     setOrderBusy(true);
     setOrderMessage("");
     try {
-      const order = await api<Order>("/api/trade", {
-        method: "POST",
-        body: JSON.stringify({
-          symbol: selectedSymbol,
-          qty: Math.floor(qty * 10000) / 10000,
-          side,
-          type: orderType,
-          limit_price: orderType === "limit" ? Number(limitPrice) : undefined,
-        }),
-      });
-      setOrderMessage(`${side === "buy" ? "Buy" : "Sell"} order ${order.status.replace(/_/g, " ")}.`);
+      const order = APP_STORE_PREVIEW
+        ? {
+            id: "preview-confirmed-order",
+            symbol: selectedSymbol,
+            qty: normalizedQty,
+            side,
+            type: orderType,
+            status: "filled",
+            filled_avg_price: price,
+            created_at: "2026-07-31T20:00:00.000Z",
+          } satisfies Order
+        : await api<Order>("/api/trade", {
+            method: "POST",
+            body: JSON.stringify({
+              symbol: selectedSymbol,
+              qty: normalizedQty,
+              side,
+              type: orderType,
+              limit_price: orderType === "limit" ? Number(limitPrice) : undefined,
+              client_order_id: reviewClientOrderId ?? undefined,
+            }),
+          });
+      setLastOrder(order);
+      setOrderMessage(`${side === "buy" ? "Buy" : "Sell"} paper order ${order.status.replace(/_/g, " ")}. Your simulated portfolio is ready to review.`);
+      setOrderStageState("receipt");
       setAmount("");
-      await refreshAll(false);
-      setDiscoverView("detail");
+      if (!APP_STORE_PREVIEW) await refreshAll(false);
     } catch (e) {
       setOrderMessage(e instanceof Error ? e.message : "Order failed");
     } finally {
+      orderSubmitInFlight.current = false;
       setOrderBusy(false);
     }
   }
 
   async function addWatch() {
+    if (APP_STORE_PREVIEW) {
+      Alert.alert("Watchlist updated", `${selectedSymbol} is already represented in this simulated preview.`);
+      return;
+    }
     try {
       await api("/api/watchlists", { method: "POST", body: JSON.stringify({ symbol: selectedSymbol }) });
       await refreshAll(false);
@@ -344,6 +465,10 @@ export default function App() {
   async function createAlert(direction: "above" | "below") {
     if (!selectedQuote?.price) return;
     const target = direction === "above" ? selectedQuote.price * 1.03 : selectedQuote.price * 0.97;
+    if (APP_STORE_PREVIEW) {
+      Alert.alert("Paper alert ready", `${selectedSymbol} ${direction} ${target.toFixed(2)} in this simulated preview.`);
+      return;
+    }
     try {
       await api("/api/alerts", { method: "POST", body: JSON.stringify({ symbol: selectedSymbol, direction, target_price: target.toFixed(2) }) });
       await refreshAll(false);
@@ -422,6 +547,13 @@ export default function App() {
 
   async function signOut() {
     await saveSession(null);
+    setRefreshing(false);
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
+    setSearch("");
+    setSearchResult(null);
+    setSearchError("");
     setMe(null);
     setKeys([]);
     setLeaderboard([]);
@@ -459,23 +591,21 @@ export default function App() {
 
   function setTab(next: Tab) {
     setTabState(next);
-    setNavTucked(false);
-    if (next !== "discover") setDiscoverView("list");
+    if (next !== "discover") {
+      setDiscoverView("list");
+      resetOrderDraft();
+    }
     if (next !== "profile") setProfileView("settings");
   }
 
   function openSymbol(symbol: string) {
-    setSelectedSymbol(symbol.toUpperCase());
+    const nextSymbol = symbol.toUpperCase();
+    marketDataGeneration.current += 1;
+    setSelectedSymbol(nextSymbol);
+    setBars(APP_STORE_PREVIEW && nextSymbol === "AAPL" ? PREVIEW_BARS : []);
     setTabState("discover");
     setDiscoverView("detail");
-    setNavTucked(false);
-  }
-
-  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const y = event.nativeEvent.contentOffset.y;
-    if (y > lastScrollY.current + 14 && y > 100) setNavTucked(true);
-    if (y < lastScrollY.current - 28 || y < 20) setNavTucked(false);
-    lastScrollY.current = y;
+    resetOrderDraft();
   }
 
   if (checking) {
@@ -509,76 +639,97 @@ export default function App() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style={resolvedTheme === "light" ? "dark" : "light"} />
       <ScrollView
+        ref={scrollRef}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
-        scrollEventThrottle={16}
-        onScroll={handleScroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => refreshAll(true)} tintColor={colors.accent} />}
-        contentContainerStyle={{ padding: 24, paddingTop: 52, paddingBottom: screenBottomPadding, gap: 20, backgroundColor: colors.bg }}
+        refreshControl={APP_STORE_PREVIEW ? undefined : <RefreshControl refreshing={refreshing} onRefresh={() => refreshAll(true)} tintColor={colors.brand} />}
+        contentContainerStyle={{
+          minHeight: "100%",
+          paddingLeft: isTablet ? tabletNavWidth + space.x8 : space.x4,
+          paddingRight: isTablet ? space.x8 : space.x4,
+          paddingTop: isTablet ? space.x12 : space.x8,
+          paddingBottom: isTablet ? space.x12 : screenBottomPadding,
+          backgroundColor: colors.background,
+        }}
       >
-        {error ? <Text selectable style={{ color: colors.red, fontSize: 13, lineHeight: 19 }}>{error}</Text> : null}
-        {tab === "portfolio" ? (
-          <PortfolioScreen me={me} quotes={quotes} openSymbol={openSymbol} refreshing={refreshing} />
-        ) : tab === "discover" ? (
-          <DiscoverScreen
-            view={discoverView}
-            setView={setDiscoverView}
-            me={me}
-            quotes={quotes}
-            selectedSymbol={selectedSymbol}
-            setSelectedSymbol={(symbol) => {
-              setSelectedSymbol(symbol.toUpperCase());
-              setLimitPrice("");
-            }}
-            bars={bars}
-            chartRange={chartRange}
-            setChartRange={setChartRange}
-            quote={selectedQuote}
-            position={selectedPosition}
-            search={search}
-            setSearch={setSearch}
-            searchResult={searchResult}
-            searchLoading={searchLoading}
-            side={side}
-            setSide={setSide}
-            orderType={orderType}
-            setOrderType={setOrderType}
-            amountMode={amountMode}
-            setAmountMode={setAmountMode}
-            amount={amount}
-            setAmount={setAmount}
-            limitPrice={limitPrice}
-            setLimitPrice={setLimitPrice}
-            submitOrder={submitOrder}
-            orderBusy={orderBusy}
-            orderMessage={orderMessage}
-            addWatch={addWatch}
-            createAlert={createAlert}
-          />
-        ) : tab === "compete" ? (
-          <CompeteScreen entries={leaderboard} currentAccountId={me?.account?.id} />
-        ) : profileView === "admin" ? (
-          <AdminScreen data={adminData} loading={adminLoading} error={adminError} back={() => setProfileView("settings")} runAction={runAdminAction} />
-        ) : (
-          <ProfileScreen
-            me={me}
-            keys={keys}
-            newSecret={newSecret}
-            createKey={createKey}
-            deleteAccount={deleteAccount}
-            pickAvatar={pickAvatar}
-            signOut={signOut}
-            openAdmin={openAdmin}
-            themePreference={themePreference}
-            setThemePreference={setThemePreference}
-            busy={busy}
-          />
-        )}
+        <View style={{ width: "100%", maxWidth: contentMaxWidth, alignSelf: "center", gap: space.x4 }}>
+          {error ? <Text selectable accessibilityRole="alert" style={{ color: colors.error, fontSize: 13, lineHeight: 19 }}>{error}</Text> : null}
+          {tab === "portfolio" ? (
+            <PortfolioScreen me={me} quotes={quotes} openSymbol={openSymbol} goDiscover={() => setTab("discover")} refreshing={refreshing} />
+          ) : tab === "discover" ? (
+            <DiscoverScreen
+              view={discoverView}
+              setView={setDiscoverView}
+              me={me}
+              quotes={quotes}
+              selectedSymbol={selectedSymbol}
+              setSelectedSymbol={(symbol) => {
+                const nextSymbol = symbol.toUpperCase();
+                marketDataGeneration.current += 1;
+                setSelectedSymbol(nextSymbol);
+                setBars(APP_STORE_PREVIEW && nextSymbol === "AAPL" ? PREVIEW_BARS : []);
+                resetOrderDraft();
+              }}
+              bars={bars}
+              chartRange={chartRange}
+              setChartRange={(nextRange) => {
+                marketDataGeneration.current += 1;
+                setBars([]);
+                setChartRange(nextRange);
+              }}
+              quote={selectedQuote}
+              position={selectedPosition}
+              search={search}
+              setSearch={setSearch}
+              searchResult={searchResult}
+              searchLoading={searchLoading}
+              searchError={searchError}
+              side={side}
+              setSide={setSide}
+              orderType={orderType}
+              setOrderType={setOrderType}
+              amountMode={amountMode}
+              setAmountMode={setAmountMode}
+              amount={amount}
+              setAmount={setAmount}
+              limitPrice={limitPrice}
+              setLimitPrice={setLimitPrice}
+              orderStage={orderStage}
+              setOrderStage={changeOrderStage}
+              reviewQuotePrice={reviewQuotePrice}
+              lastOrder={lastOrder}
+              submitOrder={submitOrder}
+              orderBusy={orderBusy}
+              orderMessage={orderMessage}
+              addWatch={addWatch}
+              createAlert={createAlert}
+              goPortfolio={() => setTab("portfolio")}
+            />
+          ) : tab === "compete" ? (
+            <CompeteScreen entries={leaderboard} currentAccountId={me?.account?.id} />
+          ) : profileView === "admin" ? (
+            <AdminScreen data={adminData} loading={adminLoading} error={adminError} back={() => setProfileView("settings")} runAction={runAdminAction} />
+          ) : (
+            <ProfileScreen
+              me={me}
+              keys={keys}
+              newSecret={newSecret}
+              createKey={createKey}
+              deleteAccount={deleteAccount}
+              pickAvatar={pickAvatar}
+              signOut={signOut}
+              openAdmin={openAdmin}
+              themePreference={themePreference}
+              setThemePreference={setThemePreference}
+              busy={busy}
+            />
+          )}
+        </View>
       </ScrollView>
-      <BottomNav tab={tab} setTab={setTab} tucked={navTucked} animatedX={navX} />
+      <BottomNav tab={tab} setTab={setTab} />
     </View>
   );
 }

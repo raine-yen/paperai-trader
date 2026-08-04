@@ -104,6 +104,15 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   }
 
   if (orderErr || !orderRow) {
+    if (orderErr?.code === "23505" && input.client_order_id) {
+      const { data: existing } = await db
+        .from("orders")
+        .select("*")
+        .eq("account_id", input.account.id)
+        .eq("client_order_id", input.client_order_id)
+        .maybeSingle();
+      if (existing) return { ok: true, order: existing as Order };
+    }
     return { ok: false, error: orderErr?.message ?? "failed to create order" };
   }
 

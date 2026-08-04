@@ -1,0 +1,4 @@
+interface:
+  display_name: "TradeCraft Fintech Redesign"
+  short_description: "Design and ship accessible fintech experiences"
+  default_prompt: "Use $redesign-fintech-product to redesign this paper-trading experience and verify it against the release rubric."

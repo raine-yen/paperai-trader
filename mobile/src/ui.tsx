@@ -1,9 +1,19 @@
 import { Feather } from "@expo/vector-icons";
-import type { ReactNode } from "react";
-import { Image, Pressable, StyleProp, Text, TextInput, TextInputProps, View, ViewStyle } from "react-native";
-import { colors, font, radius } from "./theme";
-import { getStockBrand, logoUrl } from "./market-data";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleProp,
+  Text,
+  TextInput,
+  TextInputProps,
+  View,
+  ViewStyle,
+} from "react-native";
 import { pct, signedPct, usd } from "./format";
+import { getStockBrand, logoUrl } from "./market-data";
+import { colors, font, radius, space, typeScale } from "./theme";
 import type { Position, Quote } from "./types";
 
 type ButtonVariant = "primary" | "secondary" | "danger" | "quiet";
@@ -13,39 +23,73 @@ export function Button({
   onPress,
   variant = "primary",
   disabled,
+  disabledReason,
+  loading,
   icon,
   style,
+  testID,
+  accessibilityHint,
 }: {
   label: string;
   onPress?: () => void;
   variant?: ButtonVariant;
   disabled?: boolean;
+  disabledReason?: string;
+  loading?: boolean;
   icon?: keyof typeof Feather.glyphMap;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
+  accessibilityHint?: string;
 }) {
-  const bg = variant === "primary" ? colors.accent : variant === "danger" ? colors.red : variant === "quiet" ? "transparent" : colors.panelAlt;
-  const fg = variant === "primary" ? "#00170f" : variant === "danger" ? "#fff" : colors.text;
+  const [focused, setFocused] = useState(false);
+  const inactive = Boolean(disabled || loading);
+  const backgroundColor =
+    variant === "primary"
+      ? colors.brand
+      : variant === "danger"
+        ? colors.bearish
+        : variant === "quiet"
+          ? "transparent"
+          : colors.surfaceMuted;
+  const foregroundColor =
+    variant === "primary"
+      ? colors.onBrand
+      : variant === "danger"
+        ? colors.textInverse
+        : colors.textPrimary;
+
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={inactive && disabledReason ? disabledReason : accessibilityHint}
+      accessibilityState={{ disabled: inactive, busy: Boolean(loading) }}
+      testID={testID}
       onPress={onPress}
-      disabled={disabled}
+      disabled={inactive}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       style={({ pressed }) => [
         {
           minHeight: 52,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
-          gap: 8,
-          paddingHorizontal: 18,
+          gap: space.x2,
+          paddingHorizontal: space.x4,
           borderRadius: radius.pill,
-          backgroundColor: bg,
-          opacity: disabled ? 0.45 : pressed ? 0.82 : 1,
+          backgroundColor,
+          borderWidth: focused || variant === "quiet" ? 2 : 1,
+          borderColor: focused ? colors.focusRing : variant === "quiet" ? colors.border : backgroundColor,
+          opacity: inactive ? 0.5 : pressed ? 0.78 : 1,
+          transform: [{ scale: pressed && !inactive ? 0.985 : 1 }],
         },
         style,
       ]}
     >
-      {icon ? <Feather name={icon} size={17} color={fg} /> : null}
-      <Text style={{ color: fg, fontSize: 15, fontWeight: font.bold }}>{label}</Text>
+      {loading ? <ActivityIndicator size="small" color={foregroundColor} /> : null}
+      {!loading && icon ? <Feather name={icon} size={17} color={foregroundColor} /> : null}
+      <Text style={{ color: foregroundColor, fontSize: typeScale.body, fontWeight: font.bold }}>{label}</Text>
     </Pressable>
   );
 }
@@ -56,62 +100,102 @@ export function IconButton({
   onPress,
   active,
   danger,
+  disabled,
+  testID,
+  accessibilityHint,
 }: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
   onPress?: () => void;
   active?: boolean;
   danger?: boolean;
+  disabled?: boolean;
+  testID?: string;
+  accessibilityHint?: string;
 }) {
+  const [focused, setFocused] = useState(false);
+  const backgroundColor = active ? colors.brand : danger ? colors.bearishSoft : colors.surfaceMuted;
+  const foregroundColor = active ? colors.onBrand : danger ? colors.bearish : colors.textPrimary;
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ selected: Boolean(active), disabled: Boolean(disabled) }}
+      testID={testID}
+      disabled={disabled}
       onPress={onPress}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       style={({ pressed }) => ({
         width: 50,
         height: 50,
-        borderRadius: 25,
+        borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: active ? colors.accent : danger ? colors.redSoft : colors.panelAlt,
-        opacity: pressed ? 0.78 : 1,
+        backgroundColor,
+        borderWidth: focused ? 2 : 1,
+        borderColor: focused ? colors.focusRing : active ? colors.brand : colors.border,
+        opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
+        transform: [{ scale: pressed && !disabled ? 0.96 : 1 }],
       })}
     >
-      <Feather name={icon} size={20} color={active ? "#00170f" : danger ? colors.red : colors.text} />
+      <Feather name={icon} size={20} color={foregroundColor} />
     </Pressable>
   );
 }
 
-export function Input(props: TextInputProps & { label?: string }) {
+export function Input({ label, helper, error, ...props }: TextInputProps & { label?: string; helper?: string; error?: string }) {
+  const [focused, setFocused] = useState(false);
   return (
-    <View style={{ gap: 8 }}>
-      {props.label ? <Text style={labelStyle()}>{props.label}</Text> : null}
+    <View style={{ gap: space.x2 }}>
+      {label ? <Text style={labelStyle()}>{label}</Text> : null}
       <TextInput
-        placeholderTextColor={colors.subtle}
+        placeholderTextColor={colors.textTertiary}
+        accessibilityLabel={props.accessibilityLabel ?? label}
+        accessibilityHint={props.accessibilityHint ?? helper}
         {...props}
+        onFocus={(event) => {
+          setFocused(true);
+          props.onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          props.onBlur?.(event);
+        }}
         style={[
           {
             minHeight: 54,
             borderRadius: radius.md,
-            backgroundColor: colors.panelAlt,
-            color: colors.text,
-            paddingHorizontal: 16,
+            backgroundColor: colors.surfaceMuted,
+            color: colors.textPrimary,
+            borderWidth: focused || error ? 2 : 1,
+            borderColor: error ? colors.error : focused ? colors.focusRing : colors.border,
+            paddingHorizontal: space.x4,
             fontSize: 16,
           },
           props.style,
         ]}
       />
+      {error || helper ? (
+        <Text accessibilityLiveRegion={error ? "polite" : "none"} style={{ color: error ? colors.error : colors.textSecondary, fontSize: typeScale.caption, lineHeight: 18 }}>
+          {error ?? helper}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
-export function Section({ title, action, children }: { title?: string; action?: ReactNode; children: ReactNode }) {
+export function Section({ title, eyebrow, action, children, testID, style }: { title?: string; eyebrow?: string; action?: ReactNode; children: ReactNode; testID?: string; style?: StyleProp<ViewStyle> }) {
   return (
-    <View style={{ gap: 12 }}>
+    <View style={[{ gap: space.x3 }, style]} testID={testID}>
       {title ? (
-        <View style={{ minHeight: 28, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Text style={{ color: colors.text, fontSize: 21, fontWeight: font.bold }}>{title}</Text>
+        <View style={{ minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.x3 }}>
+          <View style={{ flex: 1, gap: space.x1 }}>
+            {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
+            <Text style={{ color: colors.textPrimary, fontSize: typeScale.title, fontWeight: font.bold }}>{title}</Text>
+          </View>
           {action}
         </View>
       ) : null}
@@ -120,16 +204,38 @@ export function Section({ title, action, children }: { title?: string; action?: 
   );
 }
 
-export function Surface({ children, padded = true, tone }: { children: ReactNode; padded?: boolean; tone?: string }) {
+export function Surface({
+  children,
+  padded = true,
+  tone,
+  elevated,
+  style,
+  testID,
+}: {
+  children: ReactNode;
+  padded?: boolean;
+  tone?: string;
+  elevated?: boolean;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
   return (
     <View
-      style={{
-        borderRadius: radius.lg,
-        backgroundColor: tone ?? colors.card,
-        borderWidth: 1,
-        borderColor: colors.line,
-        padding: padded ? 16 : 0,
-      }}
+      testID={testID}
+      style={[
+        {
+          borderRadius: radius.lg,
+          backgroundColor: tone ?? (elevated ? colors.surfaceElevated : colors.surface),
+          borderWidth: 1,
+          borderColor: elevated ? colors.borderStrong : colors.border,
+          padding: padded ? space.x4 : 0,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: elevated ? 8 : 3 },
+          shadowOpacity: elevated ? 0.18 : 0.08,
+          shadowRadius: elevated ? 24 : 12,
+        },
+        style,
+      ]}
     >
       {children}
     </View>
@@ -140,9 +246,12 @@ export function Row({
   title,
   sub,
   right,
-  tone = colors.text,
+  tone = colors.textPrimary,
   icon,
   onPress,
+  testID,
+  accessibilityHint,
+  compact = false,
 }: {
   title: string;
   sub?: string;
@@ -150,45 +259,66 @@ export function Row({
   tone?: string;
   icon?: keyof typeof Feather.glyphMap;
   onPress?: () => void;
+  testID?: string;
+  accessibilityHint?: string;
+  compact?: boolean;
 }) {
   const content = (
-    <View style={{ minHeight: 60, flexDirection: "row", alignItems: "center", gap: 12 }}>
+    <View style={{ minHeight: compact ? 52 : 64, flexDirection: "row", alignItems: "center", gap: space.x3 }}>
       {icon ? (
-        <View style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: colors.panelAlt }}>
+        <View style={{ width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted }}>
           <Feather name={icon} size={18} color={tone} />
         </View>
       ) : null}
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: colors.text, fontSize: 16, fontWeight: font.bold }} numberOfLines={1}>{title}</Text>
-        {sub ? <Text style={{ marginTop: 3, color: colors.muted, fontSize: 13 }} numberOfLines={1}>{sub}</Text> : null}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ color: colors.textPrimary, fontSize: typeScale.body, fontWeight: font.semibold }} numberOfLines={1}>{title}</Text>
+        {sub ? <Text style={{ marginTop: compact ? 2 : space.x1, color: colors.textSecondary, fontSize: compact ? 12 : 13 }} numberOfLines={2}>{sub}</Text> : null}
       </View>
-      {right ? <Text style={{ color: tone, fontSize: 16, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{right}</Text> : null}
+      {right ? <Text style={{ color: tone, fontSize: typeScale.body, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{right}</Text> : null}
+      {onPress ? <Feather name="chevron-right" size={17} color={colors.textTertiary} /> : null}
     </View>
   );
-  if (!onPress) return content;
-  return <Pressable onPress={onPress}>{content}</Pressable>;
+  if (!onPress) return <View testID={testID}>{content}</View>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={[title, sub, right].filter(Boolean).join(", ")}
+      accessibilityHint={accessibilityHint}
+      testID={testID}
+      onPress={onPress}
+      style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}
+    >
+      {content}
+    </Pressable>
+  );
 }
 
 export function Divider() {
-  return <View style={{ height: 1, backgroundColor: colors.line }} />;
+  return <View style={{ height: 1, backgroundColor: colors.divider }} />;
 }
 
 export function Segment<T extends string>({
   value,
   options,
   onChange,
+  testID,
 }: {
   value: T;
-  options: Array<[T, string]>;
+  options: ReadonlyArray<readonly [T, string]>;
   onChange: (value: T) => void;
+  testID?: string;
 }) {
   return (
-    <View style={{ flexDirection: "row", gap: 6, padding: 4, borderRadius: radius.pill, backgroundColor: colors.panelAlt }}>
+    <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: space.x1, padding: space.x1, borderRadius: radius.pill, backgroundColor: colors.surfaceMuted }}>
       {options.map(([key, label]) => {
         const active = value === key;
         return (
           <Pressable
             key={key}
+            accessibilityRole="tab"
+            accessibilityLabel={label}
+            accessibilityState={{ selected: active }}
+            testID={testID ? `${testID}-${key}` : undefined}
             onPress={() => onChange(key)}
             style={({ pressed }) => ({
               flex: 1,
@@ -196,11 +326,11 @@ export function Segment<T extends string>({
               alignItems: "center",
               justifyContent: "center",
               borderRadius: radius.pill,
-              backgroundColor: active ? colors.text : "transparent",
-              opacity: pressed ? 0.8 : 1,
+              backgroundColor: active ? colors.textPrimary : "transparent",
+              opacity: pressed ? 0.75 : 1,
             })}
           >
-            <Text style={{ color: active ? "#050606" : colors.muted, fontWeight: font.bold }}>{label}</Text>
+            <Text style={{ color: active ? colors.background : colors.textSecondary, fontWeight: font.bold }}>{label}</Text>
           </Pressable>
         );
       })}
@@ -210,19 +340,27 @@ export function Segment<T extends string>({
 
 export function StockLogo({ symbol, size = 40 }: { symbol: string; size?: number }) {
   const brand = getStockBrand(symbol);
-  const uri = logoUrl(symbol);
+  const uri = process.env.EXPO_PUBLIC_APP_STORE_PREVIEW === "1" ? null : logoUrl(symbol);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [symbol, uri]);
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: brand.color, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-      {uri ? <Image source={{ uri }} style={{ width: size, height: size }} /> : <Text style={{ color: colors.text, fontSize: Math.max(11, size * 0.28), fontWeight: font.bold }}>{symbol.slice(0, 2)}</Text>}
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: brand.color, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
+      {uri && !failed ? (
+        <Image source={{ uri }} onError={() => setFailed(true)} style={{ width: size, height: size }} accessibilityIgnoresInvertColors />
+      ) : (
+        <Text style={{ color: "#FFFFFF", fontSize: Math.max(11, size * 0.28), fontWeight: font.bold, textShadowColor: "rgba(0,0,0,0.34)", textShadowRadius: 4 }}>{symbol.slice(0, 2)}</Text>
+      )}
     </View>
   );
 }
 
 export function Avatar({ uri, name, size = 48 }: { uri?: string | null; name: string; size?: number }) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "PT";
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [uri]);
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.panelAlt, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-      {uri ? <Image source={{ uri }} style={{ width: size, height: size }} /> : <Text style={{ color: colors.accent, fontSize: Math.max(13, size * 0.28), fontWeight: font.bold }}>{initials}</Text>}
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: colors.borderStrong }}>
+      {uri && !failed ? <Image source={{ uri }} onError={() => setFailed(true)} style={{ width: size, height: size }} /> : <Text style={{ color: colors.brand, fontSize: Math.max(13, size * 0.28), fontWeight: font.bold }}>{initials}</Text>}
     </View>
   );
 }
@@ -232,31 +370,41 @@ export function MarketRow({
   quote,
   position,
   onPress,
+  testID,
 }: {
   symbol: string;
   quote?: Quote | null;
   position?: Position | null;
   onPress?: () => void;
+  testID?: string;
 }) {
   const changePct = quote?.changePercent ?? (quote?.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null);
   const up = changePct == null || changePct >= 0;
+  const accessibleChange = changePct == null ? "change unavailable" : `${Math.abs(changePct).toFixed(2)} percent ${up ? "up" : "down"}`;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.78 : 1 })}>
-      <View style={{ minHeight: 74, flexDirection: "row", alignItems: "center", gap: 14 }}>
-        <StockLogo symbol={symbol} />
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={`${symbol}, ${quote?.name ?? getStockBrand(symbol).name}, ${quote ? usd(quote.price) : "price unavailable"}, ${accessibleChange}${position ? `, ${Number(position.qty).toFixed(4)} shares owned` : ""}`}
+      accessibilityHint={onPress ? `Open ${symbol} research and paper trading` : undefined}
+      testID={testID ?? `ticker-${symbol}`}
+      onPress={onPress}
+      style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}
+    >
+      <View style={{ minHeight: 76, flexDirection: "row", alignItems: "center", gap: space.x3 }}>
+        <StockLogo symbol={symbol} size={44} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-            <Text style={{ color: colors.text, fontSize: 19, fontWeight: font.bold }}>{symbol}</Text>
-            <Text style={{ color: colors.muted, fontSize: 13 }} numberOfLines={1}>{quote?.name ?? getStockBrand(symbol).name}</Text>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.x2 }}>
+            <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: font.bold }}>{symbol}</Text>
+            <Text style={{ flex: 1, color: colors.textSecondary, fontSize: 13 }} numberOfLines={1}>{quote?.name ?? getStockBrand(symbol).name}</Text>
           </View>
-          <Text style={{ marginTop: 4, color: colors.muted, fontSize: 12 }} numberOfLines={1}>
-            {position ? `${Number(position.qty).toFixed(4)} shares` : "Not owned"}
+          <Text style={{ marginTop: space.x1, color: colors.textSecondary, fontSize: typeScale.caption }} numberOfLines={1}>
+            {position ? `${Number(position.qty).toFixed(4)} shares · ${usd(position.market_value, 0)}` : "Research before you practice"}
           </Text>
         </View>
-        <View style={{ alignItems: "flex-end", minWidth: 96 }}>
-          <Text style={{ color: colors.text, fontSize: 17, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{quote ? usd(quote.price) : "--"}</Text>
-          <Text style={{ marginTop: 6, color: up ? colors.accent : colors.red, fontSize: 15, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>
-            {changePct == null ? pct(0) : signedPct(changePct)}
+        <View style={{ alignItems: "flex-end", minWidth: 98 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: typeScale.bodyLarge, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{quote ? usd(quote.price) : "—"}</Text>
+          <Text style={{ marginTop: space.x1, color: up ? colors.bullish : colors.bearish, fontSize: 14, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>
+            {changePct == null ? pct(null) : `${up ? "▲" : "▼"} ${signedPct(changePct)}`}
           </Text>
         </View>
       </View>
@@ -264,17 +412,102 @@ export function MarketRow({
   );
 }
 
-export function Metric({ label, value, tone = colors.text }: { label: string; value: string; tone?: string }) {
+export function Metric({ label, value, tone = colors.textPrimary, testID }: { label: string; value: string; tone?: string; testID?: string }) {
   return (
-    <View style={{ flex: 1, gap: 7 }}>
+    <View style={{ flex: 1, gap: space.x2 }} testID={testID}>
       <Text style={labelStyle()}>{label}</Text>
-      <Text style={{ color: tone, fontSize: 24, fontWeight: font.bold, fontVariant: ["tabular-nums"] }} numberOfLines={1}>{value}</Text>
+      <Text adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: tone, fontSize: 24, fontWeight: font.bold, fontVariant: ["tabular-nums"] }} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
 
+export function PaperBadge({ compact }: { compact?: boolean }) {
+  return (
+    <View accessibilityLabel="Paper trading, simulated money only" style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: space.x2, minHeight: compact ? 28 : 32, paddingHorizontal: compact ? space.x2 : space.x3, borderRadius: radius.pill, backgroundColor: colors.brandSoft, borderWidth: 1, borderColor: colors.borderStrong }}>
+      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand }} />
+      <Text style={{ color: colors.brand, fontSize: compact ? 10 : 11, fontWeight: font.bold, letterSpacing: 1.1 }}>PAPER · SIMULATED</Text>
+    </View>
+  );
+}
+
+export function Eyebrow({ children }: { children: ReactNode }) {
+  return <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: font.bold, letterSpacing: 1.25, textTransform: "uppercase" }}>{children}</Text>;
+}
+
+export function TrendPill({ value, label }: { value: number; label?: string }) {
+  const positive = value >= 0;
+  return (
+    <View accessibilityLabel={`${positive ? "Gain" : "Loss"}, ${signedPct(value)}${label ? `, ${label}` : ""}`} style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: space.x1, minHeight: 34, paddingHorizontal: space.x3, borderRadius: radius.pill, backgroundColor: positive ? colors.bullishSoft : colors.bearishSoft }}>
+      <Feather name={positive ? "trending-up" : "trending-down"} size={14} color={positive ? colors.bullish : colors.bearish} />
+      <Text style={{ color: positive ? colors.bullish : colors.bearish, fontSize: 13, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{signedPct(value)}{label ? ` ${label}` : ""}</Text>
+    </View>
+  );
+}
+
+export function InlineNotice({
+  title,
+  body,
+  tone = "info",
+  testID,
+}: {
+  title: string;
+  body?: string;
+  tone?: "info" | "success" | "warning" | "error";
+  testID?: string;
+}) {
+  const color = tone === "success" ? colors.success : tone === "warning" ? colors.warning : tone === "error" ? colors.error : colors.info;
+  const icon: keyof typeof Feather.glyphMap = tone === "success" ? "check-circle" : tone === "warning" ? "alert-triangle" : tone === "error" ? "alert-circle" : "info";
+  return (
+    <View accessibilityRole={tone === "error" ? "alert" : "summary"} accessibilityLiveRegion="polite" testID={testID} style={{ flexDirection: "row", gap: space.x3, padding: space.x4, borderRadius: radius.md, backgroundColor: colors.surfaceMuted, borderLeftWidth: 3, borderLeftColor: color }}>
+      <Feather name={icon} size={18} color={color} />
+      <View style={{ flex: 1, gap: space.x1 }}>
+        <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: font.bold }}>{title}</Text>
+        {body ? <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>{body}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+export function StatePanel({
+  icon = "inbox",
+  title,
+  body,
+  actionLabel,
+  onAction,
+  compact,
+  testID,
+}: {
+  icon?: keyof typeof Feather.glyphMap;
+  title: string;
+  body: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  compact?: boolean;
+  testID?: string;
+}) {
+  return (
+    <Surface testID={testID}>
+      <View style={{ minHeight: compact ? 112 : 220, alignItems: "center", justifyContent: "center", gap: space.x3, paddingVertical: space.x4 }}>
+        <View style={{ width: 48, height: 48, borderRadius: radius.lg, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center" }}>
+          <Feather name={icon} size={22} color={colors.brand} />
+        </View>
+        <View style={{ alignItems: "center", gap: space.x2 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: font.bold }}>{title}</Text>
+          <Text style={{ maxWidth: 360, color: colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: "center" }}>{body}</Text>
+        </View>
+        {actionLabel && onAction ? <Button label={actionLabel} onPress={onAction} variant="secondary" /> : null}
+      </View>
+    </Surface>
+  );
+}
+
+export function SkeletonBlock({ height, width = "100%", radiusValue = radius.md }: { height: number; width?: number | `${number}%`; radiusValue?: number }) {
+  return <View accessibilityLabel="Loading" style={{ width, height, borderRadius: radiusValue, backgroundColor: colors.surfaceMuted, opacity: 0.72 }} />;
+}
+
 const labelStyle = () => ({
-  color: colors.muted,
-  fontSize: 13,
-  fontWeight: font.medium,
+  color: colors.textSecondary,
+  fontSize: typeScale.caption,
+  fontWeight: font.semibold,
+  letterSpacing: 0.25,
 });

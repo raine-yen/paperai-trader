@@ -9,6 +9,7 @@ export type DiscoverView = "list" | "detail" | "order";
 export type Side = "buy" | "sell";
 export type OrderType = "market" | "limit";
 export type AmountMode = "shares" | "dollars";
+export type OrderStage = "configure" | "review" | "receipt";
 
 export type Account = {
   id: string;

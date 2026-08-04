@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Paper Trader",
+    "name": "PaperAI Trader",
     "slug": "paper-trader-mobile",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -16,7 +16,7 @@
       "bundleIdentifier": "com.papertrader.mobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Paper Trader uses your photo library so you can choose a profile picture."
+        "NSPhotoLibraryUsageDescription": "PaperAI Trader uses your photo library so you can choose a profile picture."
       }
     },
     "android": {
