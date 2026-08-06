@@ -4,6 +4,7 @@ import { fetchYahooPrices } from "@/lib/prices";
 import { getSessionUser } from "@/lib/session-user";
 import { isMissingTableError } from "@/lib/app-data";
 import { isAdminEmail } from "@/lib/admin";
+import { calculateInvestedPerformance } from "@/lib/performance";
 
 // Authenticated dashboard endpoint — returns the current user's account, positions, recent orders.
 export async function GET(req: NextRequest) {
@@ -79,6 +80,7 @@ export async function GET(req: NextRequest) {
 
   const positionsValue = positionsWithMarket.reduce((s, p) => s + p.market_value, 0);
   const equity = Number(account.cash) + positionsValue;
+  const performance = calculateInvestedPerformance(positionsWithMarket);
   const leaderboard = await db
     .from("accounts")
     .select("id, cash, starting_cash, status")
@@ -91,16 +93,20 @@ export async function GET(req: NextRequest) {
   const rankSymbols = Array.from(new Set(((rankPositions.data ?? []) as Array<{ symbol: string }>).map((p) => p.symbol)));
   const rankPrices = rankSymbols.length ? await fetchYahooPrices(rankSymbols) : new Map<string, { price: number }>();
   const positionValueByAccount = new Map<string, number>();
+  const positionCostByAccount = new Map<string, number>();
   for (const p of (rankPositions.data ?? []) as Array<{ account_id: string; symbol: string; qty: number; avg_entry_price: number }>) {
     const price = rankPrices.get(p.symbol)?.price ?? Number(p.avg_entry_price);
     positionValueByAccount.set(p.account_id, (positionValueByAccount.get(p.account_id) ?? 0) + Number(p.qty) * price);
+    positionCostByAccount.set(p.account_id, (positionCostByAccount.get(p.account_id) ?? 0) + Number(p.qty) * Number(p.avg_entry_price));
   }
   const ranked = ((leaderboard.data ?? []) as Array<{ id: string; cash: number; starting_cash: number }>).map((row) => {
     const liveEquity = Number(row.cash) + (positionValueByAccount.get(row.id) ?? 0);
+    const costBasis = positionCostByAccount.get(row.id) ?? 0;
+    const gainAmount = (positionValueByAccount.get(row.id) ?? 0) - costBasis;
     return {
       id: row.id,
       equity: liveEquity,
-      return_pct: Number(row.starting_cash) > 0 ? ((liveEquity - Number(row.starting_cash)) / Number(row.starting_cash)) * 100 : 0,
+      return_pct: costBasis > 0 ? (gainAmount / costBasis) * 100 : 0,
     };
   }).sort((a, b) => b.return_pct - a.return_pct);
   const rankIndex = ranked.findIndex((row) => row.id === account.id);
@@ -109,6 +115,7 @@ export async function GET(req: NextRequest) {
     user: { id: user.id, email: user.email },
     is_admin: isAdminEmail(user.email),
     account: { ...account, equity, positions_value: positionsValue },
+    performance,
     positions: positionsWithMarket,
     orders: orders ?? [],
     fills: fills ?? [],
@@ -121,7 +128,7 @@ export async function GET(req: NextRequest) {
     competition: {
       rank: rankIndex >= 0 ? rankIndex + 1 : null,
       participants: ranked.length,
-      return_pct: ranked[rankIndex]?.return_pct ?? (account.starting_cash > 0 ? ((equity - account.starting_cash) / account.starting_cash) * 100 : 0),
+      return_pct: ranked[rankIndex]?.return_pct ?? performance.growth_pct,
     },
   });
 }

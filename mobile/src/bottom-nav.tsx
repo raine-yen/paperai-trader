@@ -4,8 +4,8 @@ import { colors, font, layoutBreakpoints, navHeight, radius, space, tabletNavWid
 import type { Tab } from "./types";
 
 const navItems: Array<{ key: Tab; icon: keyof typeof Feather.glyphMap; label: string }> = [
-  { key: "portfolio", icon: "pie-chart", label: "Portfolio" },
-  { key: "discover", icon: "search", label: "Discover" },
+  { key: "portfolio", icon: "home", label: "Home" },
+  { key: "discover", icon: "bar-chart-2", label: "Markets" },
   { key: "compete", icon: "award", label: "Compete" },
   { key: "profile", icon: "user", label: "Profile" },
 ];
@@ -33,15 +33,15 @@ export function BottomNav({
           bottom: 0,
           width: tabletNavWidth,
           alignItems: "center",
-          paddingTop: 54,
-          paddingBottom: 28,
+          paddingTop: space.x8,
+          paddingBottom: space.x6,
           backgroundColor: colors.surface,
           borderRightWidth: 1,
           borderRightColor: colors.border,
         }}
       >
-        <View accessibilityLabel="PaperAI Trader" style={{ width: 48, height: 48, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand }}>
-          <Feather name="trending-up" size={22} color={colors.onBrand} />
+        <View accessibilityLabel="PaperAI Trader" style={{ width: 44, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.textPrimary }}>
+          <Feather name="trending-up" size={20} color={colors.textInverse} />
         </View>
         <View style={{ flex: 1, justifyContent: "center", gap: space.x3 }}>
           {navItems.map((item) => <NavItem key={item.key} item={item} active={tab === item.key} onPress={() => setTab(item.key)} tablet />)}
@@ -64,31 +64,22 @@ export function BottomNav({
         bottom: 0,
         height: navHeight,
         justifyContent: "flex-end",
-        paddingHorizontal: space.x4,
-        paddingBottom: space.x4,
-        backgroundColor: colors.background,
+        backgroundColor: colors.surface,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
       }}
     >
-      <View accessibilityLabel="Paper trading, simulated money only" style={{ height: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.x1 }}>
-        <View style={{ width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.brand }} />
-        <Text style={{ color: colors.textSecondary, fontSize: 9, fontWeight: font.bold, letterSpacing: 1 }}>PAPER · SIMULATED</Text>
-      </View>
       <View
         accessibilityRole="tablist"
         style={{
-          minHeight: 68,
-          borderRadius: radius.xl,
-          backgroundColor: colors.surfaceElevated,
-          borderWidth: 1,
-          borderColor: colors.borderStrong,
-          padding: space.x2,
+          minHeight: navHeight,
+          backgroundColor: colors.surface,
+          paddingHorizontal: space.x2,
+          paddingTop: space.x2,
+          paddingBottom: space.x3,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.24,
-          shadowRadius: 24,
         }}
       >
         {navItems.map((item) => <NavItem key={item.key} item={item} active={tab === item.key} onPress={() => setTab(item.key)} />)}
@@ -116,21 +107,21 @@ function NavItem({
       testID={`nav-${item.key}`}
       onPress={onPress}
       style={({ pressed }) => ({
-        width: tablet ? 72 : active ? 96 : 60,
-        minHeight: tablet ? 68 : 52,
-        borderRadius: radius.lg,
+        width: tablet ? 68 : 76,
+        minHeight: tablet ? 64 : 58,
+        borderRadius: radius.md,
         alignItems: "center",
         justifyContent: "center",
         gap: space.x1,
-        backgroundColor: active ? colors.brandSoft : "transparent",
-        borderWidth: active ? 1 : 0,
-        borderColor: active ? colors.borderStrong : "transparent",
+        backgroundColor: active ? colors.surfaceMuted : "transparent",
+        borderTopWidth: active && !tablet ? 2 : 0,
+        borderTopColor: active ? colors.brand : "transparent",
         opacity: pressed ? 0.7 : 1,
         transform: [{ scale: pressed ? 0.96 : 1 }],
       })}
     >
-      <Feather name={item.icon} size={20} color={active ? colors.brand : colors.textSecondary} />
-      <Text numberOfLines={1} style={{ color: active ? colors.brand : colors.textSecondary, fontSize: 10, fontWeight: active ? font.bold : font.semibold }}>{item.label}</Text>
+      <Feather name={item.icon} size={19} color={active ? colors.textPrimary : colors.textTertiary} />
+      <Text numberOfLines={1} style={{ color: active ? colors.textPrimary : colors.textSecondary, fontSize: 10, fontWeight: active ? font.bold : font.semibold }}>{item.label}</Text>
     </Pressable>
   );
 }

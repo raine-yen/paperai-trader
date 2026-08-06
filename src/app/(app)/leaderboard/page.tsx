@@ -9,6 +9,8 @@ interface Entry {
   display_name: string;
   equity: number;
   starting_cash: number;
+  cost_basis: number;
+  gain_amount: number;
   return_pct: number;
 }
 
@@ -78,7 +80,7 @@ export default function LeaderboardPage() {
             Reactive leaderboard
           </div>
           <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">Club rankings</h1>
-          <p className="mt-2 text-sm text-gray-400">Sorted by live return using current positions and quote data. Refreshes every 8 seconds.</p>
+          <p className="mt-2 text-sm text-gray-400">Sorted by live growth on the capital each trader currently has invested. Refreshes every 30 seconds.</p>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:min-w-[360px]">
           <Metric label="Traders" value={String(entries.length)} />
@@ -118,7 +120,7 @@ export default function LeaderboardPage() {
               </thead>
               <tbody>
                 {entries.map((entry, index) => {
-                  const pl = Number(entry.equity) - Number(entry.starting_cash);
+                  const pl = Number(entry.gain_amount);
                   const up = Number(entry.return_pct) >= 0;
                   const width = Math.max(4, Math.min(100, Math.abs(Number(entry.return_pct)) * 3));
                   return (
@@ -128,7 +130,7 @@ export default function LeaderboardPage() {
                         <td className="px-4 py-4">
                           <div className="font-semibold">{entry.display_name}</div>
                           <div className="text-xs text-gray-500">
-                            Starting {formatUSD(Number(entry.starting_cash))}
+                            Invested basis {formatUSD(Number(entry.cost_basis))}
                           </div>
                         </td>
                         <td className="px-4 py-4 text-right font-semibold tabular-nums">{formatUSD(Number(entry.equity))}</td>
@@ -189,7 +191,7 @@ export default function LeaderboardPage() {
 }
 
 function PodiumCard({ entry, rank }: { entry: Entry; rank: number }) {
-  const pl = Number(entry.equity) - Number(entry.starting_cash);
+  const pl = Number(entry.gain_amount);
   const up = Number(entry.return_pct) >= 0;
   const Icon = rank === 1 ? Trophy : rank === 2 ? Medal : Award;
   return (
@@ -208,7 +210,7 @@ function PodiumCard({ entry, rank }: { entry: Entry; rank: number }) {
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3">
         <Metric label="Equity" value={formatUSD(Number(entry.equity))} />
-        <Metric label="P/L" value={formatUSD(pl)} tone={up ? "text-accent-green" : "text-accent-red"} />
+        <Metric label="Open P/L" value={formatUSD(pl)} tone={up ? "text-accent-green" : "text-accent-red"} />
       </div>
     </div>
   );

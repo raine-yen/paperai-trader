@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fetchYahooPrices } from "@/lib/prices";
 import { getSessionUser } from "@/lib/session-user";
+import { calculateInvestedPerformance } from "@/lib/performance";
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser(req);
@@ -51,11 +52,14 @@ export async function GET(req: NextRequest) {
 
   // Build account_id -> positions market value map
   // Falls back to avg_entry_price when live price is unavailable so equity never shows as just cash
-  const posValueByAccount = new Map<string, number>();
+  const positionsByAccount = new Map<string, Array<{ qty: number; avg_entry_price: number; current_price: number }>>();
   for (const p of posRows) {
     const priceData = priceMap.get(p.symbol) as { price: number } | undefined;
     const price = priceData ? priceData.price : Number(p.avg_entry_price);
-    posValueByAccount.set(p.account_id, (posValueByAccount.get(p.account_id) ?? 0) + Number(p.qty) * price);
+    positionsByAccount.set(p.account_id, [
+      ...(positionsByAccount.get(p.account_id) ?? []),
+      { qty: Number(p.qty), avg_entry_price: Number(p.avg_entry_price), current_price: price },
+    ]);
   }
 
   type AccountRow = {
@@ -75,10 +79,9 @@ export async function GET(req: NextRequest) {
   // Compute live equity and return_pct, then sort
   const entries = (accounts as AccountRow[])
     .map((a) => {
-      const posValue = posValueByAccount.get(a.id) ?? 0;
+      const performance = calculateInvestedPerformance(positionsByAccount.get(a.id) ?? []);
+      const posValue = performance.market_value;
       const liveEquity = Number(a.cash) + posValue;
-      const startingCash = Number(a.starting_cash);
-      const returnPct = startingCash > 0 ? ((liveEquity - startingCash) / startingCash) * 100 : 0;
       const duplicateName = (duplicateNameCounts.get(a.display_name.trim().toLowerCase()) ?? 0) > 1;
       const safeSuffix = a.id.replace(/-/g, "").slice(0, 4).toUpperCase();
       return {
@@ -87,8 +90,10 @@ export async function GET(req: NextRequest) {
         display_name: duplicateName ? `${a.display_name} #${safeSuffix}` : a.display_name,
         raw_display_name: a.display_name,
         equity: liveEquity,
-        starting_cash: startingCash,
-        return_pct: returnPct,
+        starting_cash: Number(a.starting_cash),
+        cost_basis: performance.cost_basis,
+        gain_amount: performance.gain_amount,
+        return_pct: performance.growth_pct,
       };
     })
     .sort((a, b) => b.return_pct - a.return_pct);

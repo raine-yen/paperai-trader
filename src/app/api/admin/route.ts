@@ -4,6 +4,7 @@ import { fetchYahooPrices } from "@/lib/prices";
 import { getSessionUser } from "@/lib/session-user";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isMissingTableError } from "@/lib/app-data";
+import { calculateInvestedPerformance } from "@/lib/performance";
 
 async function verifyAdmin(req: NextRequest) {
   const user = await getSessionUser(req);
@@ -85,18 +86,19 @@ export async function GET(req: NextRequest) {
   type RawAccount = { id: string; user_id: string; cash: number; equity: number; starting_cash: number; [k: string]: unknown };
 
   const enriched = (accounts ?? []).map((a: RawAccount) => {
+    const accountPositions = positionsByAccount.get(a.id) ?? [];
+    const performance = calculateInvestedPerformance(accountPositions);
     const positionsValue = posValueMap.get(a.id) ?? 0;
     const liveEquity = Number(a.cash) + positionsValue;
-    const startingCash = Number(a.starting_cash);
     return {
       ...a,
       email: userMap.get(a.user_id) ?? "unknown",
       equity: liveEquity,
       positions_value: positionsValue,
-      positions: positionsByAccount.get(a.id) ?? [],
+      positions: accountPositions,
       position_count: posCountMap.get(a.id) ?? 0,
       order_count: orderCountMap.get(a.id) ?? 0,
-      return_pct: startingCash > 0 ? ((liveEquity - startingCash) / startingCash) * 100 : 0,
+      return_pct: performance.growth_pct,
     };
   });
 

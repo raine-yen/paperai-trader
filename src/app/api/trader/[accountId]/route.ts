@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchYahooPrices } from "@/lib/prices";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getCurrentAccount, isMissingTableError } from "@/lib/app-data";
+import { calculateInvestedPerformance } from "@/lib/performance";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ accountId: string }> }) {
   const { accountId } = await params;
@@ -37,10 +38,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ acco
   });
   const positionsValue = holdings.reduce((sum, p) => sum + p.market_value, 0);
   const equity = Number(account.cash) + positionsValue;
-  const returnPct = Number(account.starting_cash) > 0 ? ((equity - Number(account.starting_cash)) / Number(account.starting_cash)) * 100 : 0;
+  const performance = calculateInvestedPerformance(holdings);
 
   return NextResponse.json({
-    account: { ...account, equity, positions_value: positionsValue, return_pct: returnPct },
+    account: { ...account, equity, positions_value: positionsValue, return_pct: performance.growth_pct },
+    performance,
     profile: profileResult.error && isMissingTableError(profileResult.error) ? null : profileResult.data ?? null,
     achievements: achievementsResult.error && isMissingTableError(achievementsResult.error) ? [] : achievementsResult.data ?? [],
     positions: holdings,

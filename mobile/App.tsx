@@ -650,7 +650,7 @@ export default function App() {
           minHeight: "100%",
           paddingLeft: isTablet ? tabletNavWidth + space.x8 : space.x4,
           paddingRight: isTablet ? space.x8 : space.x4,
-          paddingTop: isTablet ? space.x12 : space.x8,
+          paddingTop: isTablet ? space.x8 : space.x6,
           paddingBottom: isTablet ? space.x12 : screenBottomPadding,
           backgroundColor: colors.background,
         }}

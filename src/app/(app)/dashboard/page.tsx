@@ -41,6 +41,7 @@ interface MeData {
   alerts?: Array<{ id: string; symbol: string; direction: string; target_price?: number | null; move_pct?: number | null; status: string }>;
   unread_messages?: number;
   competition?: { rank: number | null; participants: number; return_pct: number };
+  performance?: { cost_basis: number; market_value: number; gain_amount: number; growth_pct: number };
 }
 
 type Quest = {
@@ -117,13 +118,14 @@ export default function Dashboard() {
   }
 
   const { account, positions, orders, snapshots } = data;
-  const totalReturn = account.equity - account.starting_cash;
-  const totalReturnPct = account.starting_cash > 0 ? (totalReturn / account.starting_cash) * 100 : 0;
-  const isUp = totalReturn >= 0;
+  const costBasis = data.performance?.cost_basis ?? positions.reduce((sum, position) => sum + Number(position.qty) * Number(position.avg_entry_price), 0);
+  const investedGrowth = data.performance?.gain_amount ?? positions.reduce((sum, position) => sum + Number(position.unrealized_pl), 0);
+  const investedGrowthPct = data.performance?.growth_pct ?? (costBasis > 0 ? (investedGrowth / costBasis) * 100 : 0);
+  const isUp = investedGrowth >= 0;
   const allocationBase = Math.max(account.equity, 1);
   const rewardCycle = getRewardCycle();
   const quests = getQuests({
-    totalReturnPct,
+    totalReturnPct: investedGrowthPct,
     holdings: positions.length,
     orders: orders.length,
     scheduledOrders: orders.filter((o) => !!o.scheduled_at).length,
@@ -174,7 +176,7 @@ export default function Dashboard() {
               <div className="mt-3 text-5xl font-black tracking-tight tabular-nums md:text-6xl">{formatUSD(account.equity)}</div>
               <div className={cn("mt-2 flex items-center gap-1 text-sm font-semibold", isUp ? "text-accent-green" : "text-accent-red")}>
                 {isUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                {formatUSD(totalReturn)} ({formatPct(totalReturnPct)}) all time
+                {formatUSD(investedGrowth)} ({formatPct(investedGrowthPct)}) on invested capital
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:min-w-[360px]">
@@ -185,7 +187,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="p-5">
-            <EquityChart snapshots={snapshots} starting={account.starting_cash} />
+            <EquityChart snapshots={snapshots} starting={Number(snapshots[0]?.equity ?? account.equity)} />
           </div>
         </div>
 

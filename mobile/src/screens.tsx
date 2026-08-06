@@ -146,8 +146,9 @@ export function PortfolioScreen({
     ) : <StatePanel title="No practice account" body="Refresh after signing in or contact your club administrator." icon="alert-circle" />;
   }
 
-  const gain = Number(account.equity) - Number(account.starting_cash);
-  const gainPct = Number(account.starting_cash) > 0 ? (gain / Number(account.starting_cash)) * 100 : 0;
+  const costBasis = me?.performance?.cost_basis ?? (me?.positions ?? []).reduce((sum, position) => sum + Number(position.qty) * Number(position.avg_entry_price), 0);
+  const gain = me?.performance?.gain_amount ?? (me?.positions ?? []).reduce((sum, position) => sum + Number(position.unrealized_pl), 0);
+  const gainPct = me?.performance?.growth_pct ?? (costBasis > 0 ? (gain / costBasis) * 100 : 0);
   const snapshots = me?.snapshots ?? [];
   const allocationBase = Math.max(Number(account.cash) + Number(account.positions_value), 1);
   const positionsByValue = [...(me?.positions ?? [])].sort((a, b) => Number(b.market_value) - Number(a.market_value));
@@ -160,29 +161,27 @@ export function PortfolioScreen({
       <View style={{ gap: space.x4 }}>
         <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.x4 }}>
           <View style={{ flex: 1, gap: space.x2 }}>
-            <PaperBadge compact />
-            <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Total portfolio value</Text>
+            <Eyebrow>Portfolio value</Eyebrow>
             <Text
               adjustsFontSizeToFit
               minimumFontScale={0.62}
               numberOfLines={1}
-              style={{ color: colors.textPrimary, fontSize: isTablet ? 64 : 52, lineHeight: isTablet ? 68 : 58, fontWeight: font.semibold, fontVariant: ["tabular-nums"] }}
+              style={{ color: colors.textPrimary, fontSize: isTablet ? 56 : 42, lineHeight: isTablet ? 60 : 48, fontWeight: font.semibold, fontVariant: ["tabular-nums"] }}
             >
               {usd(account.equity)}
             </Text>
-            <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.x3 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 16, fontVariant: ["tabular-nums"] }}>{signedUsd(gain)} since start</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.x2 }}>
+              <Text style={{ color: gain >= 0 ? colors.bullish : colors.bearish, fontSize: 14, fontWeight: font.semibold, fontVariant: ["tabular-nums"] }}>{signedUsd(gain)} invested growth</Text>
               <TrendPill value={gainPct} />
             </View>
           </View>
-          <Avatar uri={me?.profile?.avatar_url} name={account.display_name} size={48} />
         </View>
         <InteractiveLineChart
           testID="portfolio-chart"
           chartLabel="Portfolio equity"
-          height={isTablet ? 320 : 250}
+          height={isTablet ? 286 : 210}
           points={snapshots.map((snapshot) => ({ value: Number(snapshot.equity), label: new Date(snapshot.created_at).toLocaleDateString([], { month: "short", day: "numeric" }) }))}
-          baseline={Number(account.starting_cash)}
+          baseline={Number(snapshots[0]?.equity ?? account.equity)}
           negative={gain < 0}
           formatValue={(value) => usd(value, 0)}
           compareEnabled={compare}
@@ -224,14 +223,28 @@ export function PortfolioScreen({
   );
 
   return (
-    <View testID="screen-portfolio-ready" style={{ gap: space.x8 }}>
+    <View testID="screen-portfolio-ready" style={{ gap: space.x6 }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.x4 }}>
         <View style={{ flex: 1, gap: space.x1 }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Welcome back, {firstName(account.display_name) || "Trader"}</Text>
-          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 38 : 32, fontWeight: font.bold }}>Portfolio overview</Text>
+          <Eyebrow>PaperAI Trader</Eyebrow>
+          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 36 : 28, fontWeight: font.bold }}>Good morning, {firstName(account.display_name) || "Trader"}</Text>
         </View>
+        <Avatar uri={me?.profile?.avatar_url} name={account.display_name} size={44} />
         {refreshing ? <ActivityIndicator accessibilityLabel="Refreshing market data" color={colors.brand} /> : null}
       </View>
+
+      <Surface style={{ paddingVertical: space.x3 }}>
+        <View accessibilityLabel={`${account.display_name}'s simulated practice portfolio`} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: space.x3 }}>
+          <View style={{ width: 36, height: 36, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandSoft }}>
+            <Feather name="briefcase" size={17} color={colors.brand} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 14, fontWeight: font.bold }}>Practice Portfolio</Text>
+            <Text numberOfLines={1} style={{ marginTop: 2, color: colors.textSecondary, fontSize: 11 }}>{account.display_name} · Simulated account</Text>
+          </View>
+          <PaperBadge compact />
+        </View>
+      </Surface>
 
       <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "stretch", gap: space.x4 }}>
         {hero}
@@ -363,12 +376,12 @@ function DiscoverListScreen({
   );
 
   return (
-    <View testID="screen-discover-ready" style={{ gap: space.x8 }}>
+    <View testID="screen-discover-ready" style={{ gap: space.x6 }}>
       <View style={{ flexDirection: isTablet ? "row" : "column", justifyContent: "space-between", alignItems: isTablet ? "flex-end" : "flex-start", gap: space.x4 }}>
         <View style={{ maxWidth: 620, gap: space.x2 }}>
-          <PaperBadge compact />
-          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 42 : 34, lineHeight: isTablet ? 46 : 38, fontWeight: font.bold }}>Find your next practice idea</Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 22 }}>Research first. A paper order is always reviewed before it is submitted.</Text>
+          <Eyebrow>PaperAI Trader</Eyebrow>
+          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 38 : 30, lineHeight: isTablet ? 42 : 34, fontWeight: font.bold }}>Markets</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}>Research ideas and review every simulated order before submitting.</Text>
         </View>
         <View style={{ width: isTablet ? 360 : "100%" }}>
           <Input
@@ -378,7 +391,7 @@ function DiscoverListScreen({
             onChangeText={(value) => setSearch(value.toUpperCase())}
             autoCapitalize="characters"
             autoCorrect={false}
-            placeholder="Search symbol, for example AAPL"
+            placeholder="Search ticker or company"
           />
         </View>
       </View>
@@ -904,7 +917,7 @@ export function CompeteScreen({
               </View>
               <View style={{ alignItems: "flex-end", gap: space.x1 }}>
                 <Text style={{ color: entry.return_pct >= 0 ? colors.bullish : colors.bearish, fontSize: 15, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{signedPct(entry.return_pct)}</Text>
-                <Text style={{ color: colors.textTertiary, fontSize: 10 }}>SINCE START</Text>
+                <Text style={{ color: colors.textTertiary, fontSize: 10 }}>INVESTED</Text>
               </View>
             </View>
             {index < entries.length - 1 ? <Divider /> : null}

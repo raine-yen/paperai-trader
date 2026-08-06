@@ -9,15 +9,25 @@ export async function GET(req: NextRequest) {
   let query = ctx.db
     .from("direct_messages")
     .select("id, sender_account_id, recipient_account_id, body, hidden_by_admin, read_at, created_at")
-    .or(`sender_account_id.eq.${ctx.account.id},recipient_account_id.eq.${ctx.account.id}`)
     .eq("hidden_by_admin", false)
     .order("created_at", { ascending: false })
     .limit(80);
 
   if (other) {
-    query = query.or(
-      `and(sender_account_id.eq.${ctx.account.id},recipient_account_id.eq.${other}),and(sender_account_id.eq.${other},recipient_account_id.eq.${ctx.account.id})`
-    );
+    const { data: recipient } = await ctx.db
+      .from("accounts")
+      .select("id")
+      .eq("id", other)
+      .eq("competition_id", ctx.account.competition_id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!recipient) return NextResponse.json({ error: "conversation not found" }, { status: 404 });
+
+    query = query
+      .in("sender_account_id", [ctx.account.id, other])
+      .in("recipient_account_id", [ctx.account.id, other]);
+  } else {
+    query = query.or(`sender_account_id.eq.${ctx.account.id},recipient_account_id.eq.${ctx.account.id}`);
   }
 
   const { data, error } = await query;
@@ -47,6 +57,16 @@ export async function POST(req: NextRequest) {
   const text = String(body.body ?? "").trim();
   if (!recipient || recipient === ctx.account.id) return NextResponse.json({ error: "valid recipient required" }, { status: 400 });
   if (text.length < 1 || text.length > 500) return NextResponse.json({ error: "message must be 1-500 characters" }, { status: 400 });
+
+  const { data: recipientAccount, error: recipientError } = await ctx.db
+    .from("accounts")
+    .select("id")
+    .eq("id", recipient)
+    .eq("competition_id", ctx.account.competition_id)
+    .eq("status", "active")
+    .maybeSingle();
+  if (recipientError) return NextResponse.json({ error: recipientError.message }, { status: 500 });
+  if (!recipientAccount) return NextResponse.json({ error: "recipient is not available in this competition" }, { status: 404 });
 
   const { data: blocked, error: blockError } = await ctx.db
     .from("blocked_users")

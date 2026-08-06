@@ -119,7 +119,8 @@ export function InteractiveLineChart({
     selectIndex(indexFromX(x));
   }
 
-  const selected = computed.xy[selectedIndex ?? computed.xy.length - 1];
+  const selected = selectedIndex == null ? null : computed.xy[selectedIndex];
+  const accessibleSelected = selected ?? computed.xy[computed.xy.length - 1];
   const start = computed.xy[Math.min(compareStart, compareEnd)];
   const end = computed.xy[Math.max(compareStart, compareEnd)];
   const compareDelta = start && end ? end.value - start.value : 0;
@@ -136,7 +137,7 @@ export function InteractiveLineChart({
         accessible
         accessibilityRole="adjustable"
         accessibilityLabel={summary}
-        accessibilityValue={{ text: selected ? `${selected.label ?? `Point ${selected.index + 1}`}, ${formatValue(selected.value)}` : undefined }}
+        accessibilityValue={{ text: accessibleSelected ? `${accessibleSelected.label ?? `Point ${accessibleSelected.index + 1}`}, ${formatValue(accessibleSelected.value)}` : undefined }}
         accessibilityActions={[{ name: "increment", label: "Next chart point" }, { name: "decrement", label: "Previous chart point" }]}
         onAccessibilityAction={(event) => selectIndex((selectedIndex ?? source.length - 1) + (event.nativeEvent.actionName === "increment" ? 1 : -1))}
         style={{ height, width: "100%" }}
@@ -177,7 +178,7 @@ export function InteractiveLineChart({
               <Circle cx={end.x} cy={end.y} r={6} fill={colors.surface} stroke={stroke} strokeWidth={4} />
             </>
           ) : null}
-          <Path d={computed.pathLine} fill="none" stroke={stroke} strokeWidth={4} strokeLinejoin="round" strokeLinecap="round" />
+          <Path d={computed.pathLine} fill="none" stroke={stroke} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
           {selected ? (
             <>
               <Line x1={selected.x} x2={selected.x} y1={padTop} y2={height - padBottom} stroke={colors.chartCrosshair} strokeOpacity={0.72} />

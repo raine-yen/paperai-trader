@@ -161,7 +161,13 @@ export const PREVIEW_ME: Me = {
   competition: {
     rank: 3,
     participants: 125,
-    return_pct: 12.48632,
+    return_pct: 13.6934,
+  },
+  performance: {
+    cost_basis: 73_655.2,
+    market_value: 83_741.07,
+    gain_amount: 10_085.87,
+    growth_pct: 13.6934,
   },
   profile: {
     avatar_url: null,

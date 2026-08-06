@@ -94,6 +94,7 @@ export type Me = {
   alerts?: PriceAlert[];
   unread_messages?: number;
   competition?: { rank: number | null; participants: number; return_pct: number };
+  performance?: { cost_basis: number; market_value: number; gain_amount: number; growth_pct: number };
   profile?: TraderProfile | null;
   transfers?: Array<Record<string, unknown>>;
   is_admin?: boolean;
@@ -145,6 +146,8 @@ export type LeaderboardEntry = {
   display_name: string;
   equity: number;
   starting_cash: number;
+  cost_basis?: number;
+  gain_amount?: number;
   return_pct: number;
 };
 

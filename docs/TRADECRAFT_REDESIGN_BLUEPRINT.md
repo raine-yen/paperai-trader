@@ -6,7 +6,7 @@
 - **Core loop:** Review portfolio → discover a symbol → configure and review a paper order → inspect receipt and portfolio impact → reflect or compare in the club.
 - **Platforms:** Expo SDK 54 on iPhone and iPad, with the current API and authentication contracts preserved.
 - **Release promise:** All money is simulated, account deletion remains accessible, screenshots are captured from the real native UI, and no unfinished feature is presented as shipped.
-- **Visual direction:** An original “precision editorial” trading cockpit: quiet layered surfaces, emerald decision accents, tabular financial numbers, concise educational context, and deliberate regular-width iPad composition.
+- **Visual direction:** A warm editorial market journal: paper-toned canvas, navy financial typography, hairline cards, restrained emerald and red semantics, compact native navigation, and deliberate regular-width iPad composition.
 
 ## Exactly 25 product and design improvements
 
@@ -81,8 +81,8 @@ configure → local validation → review → API submission → receipt
 
 Each theme defines background, surface, elevated surface, muted surface, border, strong border, primary/secondary/tertiary/inverse text, brand/pressed/soft/on-brand, bullish/soft, bearish/soft, warning, info, focus ring, chart grid/crosshair, scrim, and shadow.
 
-- **Light:** mineral-white canvas, white elevated cards, ink text, forest brand.
-- **Dark:** near-black green canvas, graphite surfaces, warm-white text, bright mint brand.
+- **Light:** warm paper canvas, white cards, navy ink text, forest brand, and amber editorial labels.
+- **Dark:** neutral charcoal canvas, graphite surfaces, warm-white text, and soft mint brand.
 - **Midnight:** blue-black canvas, navy graphite surfaces, cool-white text, electric mint brand.
 - **System:** resolves to Light or Dark and updates status-bar contrast.
 

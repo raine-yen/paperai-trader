@@ -71,13 +71,13 @@ export function Button({
       onBlur={() => setFocused(false)}
       style={({ pressed }) => [
         {
-          minHeight: 52,
+          minHeight: 50,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
           gap: space.x2,
           paddingHorizontal: space.x4,
-          borderRadius: radius.pill,
+          borderRadius: radius.md,
           backgroundColor,
           borderWidth: focused || variant === "quiet" ? 2 : 1,
           borderColor: focused ? colors.focusRing : variant === "quiet" ? colors.border : backgroundColor,
@@ -129,9 +129,9 @@ export function IconButton({
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       style={({ pressed }) => ({
-        width: 50,
-        height: 50,
-        borderRadius: radius.pill,
+        width: 44,
+        height: 44,
+        borderRadius: radius.md,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor,
@@ -166,14 +166,14 @@ export function Input({ label, helper, error, ...props }: TextInputProps & { lab
         }}
         style={[
           {
-            minHeight: 54,
+            minHeight: 50,
             borderRadius: radius.md,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.surface,
             color: colors.textPrimary,
             borderWidth: focused || error ? 2 : 1,
             borderColor: error ? colors.error : focused ? colors.focusRing : colors.border,
-            paddingHorizontal: space.x4,
-            fontSize: 16,
+            paddingHorizontal: space.x3,
+            fontSize: 15,
           },
           props.style,
         ]}
@@ -230,9 +230,9 @@ export function Surface({
           borderColor: elevated ? colors.borderStrong : colors.border,
           padding: padded ? space.x4 : 0,
           shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: elevated ? 8 : 3 },
-          shadowOpacity: elevated ? 0.18 : 0.08,
-          shadowRadius: elevated ? 24 : 12,
+          shadowOffset: { width: 0, height: elevated ? 5 : 2 },
+          shadowOpacity: elevated ? 0.1 : 0.04,
+          shadowRadius: elevated ? 14 : 6,
         },
         style,
       ]}
@@ -309,7 +309,7 @@ export function Segment<T extends string>({
   testID?: string;
 }) {
   return (
-    <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: space.x1, padding: space.x1, borderRadius: radius.pill, backgroundColor: colors.surfaceMuted }}>
+    <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: space.x1, padding: space.x1, borderRadius: radius.md, backgroundColor: colors.surfaceMuted }}>
       {options.map(([key, label]) => {
         const active = value === key;
         return (
@@ -325,12 +325,14 @@ export function Segment<T extends string>({
               minHeight: 44,
               alignItems: "center",
               justifyContent: "center",
-              borderRadius: radius.pill,
-              backgroundColor: active ? colors.textPrimary : "transparent",
+              borderRadius: radius.sm,
+              backgroundColor: active ? colors.surface : "transparent",
+              borderWidth: active ? 1 : 0,
+              borderColor: active ? colors.border : "transparent",
               opacity: pressed ? 0.75 : 1,
             })}
           >
-            <Text style={{ color: active ? colors.background : colors.textSecondary, fontWeight: font.bold }}>{label}</Text>
+            <Text style={{ color: active ? colors.textPrimary : colors.textSecondary, fontWeight: font.bold }}>{label}</Text>
           </Pressable>
         );
       })}
@@ -390,11 +392,11 @@ export function MarketRow({
       onPress={onPress}
       style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}
     >
-      <View style={{ minHeight: 76, flexDirection: "row", alignItems: "center", gap: space.x3 }}>
-        <StockLogo symbol={symbol} size={44} />
+      <View style={{ minHeight: 68, flexDirection: "row", alignItems: "center", gap: space.x3 }}>
+        <StockLogo symbol={symbol} size={40} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.x2 }}>
-            <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: font.bold }}>{symbol}</Text>
+            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: font.bold }}>{symbol}</Text>
             <Text style={{ flex: 1, color: colors.textSecondary, fontSize: 13 }} numberOfLines={1}>{quote?.name ?? getStockBrand(symbol).name}</Text>
           </View>
           <Text style={{ marginTop: space.x1, color: colors.textSecondary, fontSize: typeScale.caption }} numberOfLines={1}>
@@ -416,28 +418,28 @@ export function Metric({ label, value, tone = colors.textPrimary, testID }: { la
   return (
     <View style={{ flex: 1, gap: space.x2 }} testID={testID}>
       <Text style={labelStyle()}>{label}</Text>
-      <Text adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: tone, fontSize: 24, fontWeight: font.bold, fontVariant: ["tabular-nums"] }} numberOfLines={1}>{value}</Text>
+      <Text adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: tone, fontSize: 21, fontWeight: font.bold, fontVariant: ["tabular-nums"] }} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
 
 export function PaperBadge({ compact }: { compact?: boolean }) {
   return (
-    <View accessibilityLabel="Paper trading, simulated money only" style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: space.x2, minHeight: compact ? 28 : 32, paddingHorizontal: compact ? space.x2 : space.x3, borderRadius: radius.pill, backgroundColor: colors.brandSoft, borderWidth: 1, borderColor: colors.borderStrong }}>
+    <View accessibilityLabel="Paper trading, simulated money only" style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: space.x2, minHeight: compact ? 24 : 28, paddingHorizontal: compact ? space.x2 : space.x3, borderRadius: radius.sm, backgroundColor: colors.brandSoft }}>
       <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand }} />
-      <Text style={{ color: colors.brand, fontSize: compact ? 10 : 11, fontWeight: font.bold, letterSpacing: 1.1 }}>PAPER · SIMULATED</Text>
+      <Text style={{ color: colors.brand, fontSize: compact ? 9 : 11, fontWeight: font.bold, letterSpacing: 1.1 }}>{compact ? "SIMULATED" : "PAPER · SIMULATED"}</Text>
     </View>
   );
 }
 
 export function Eyebrow({ children }: { children: ReactNode }) {
-  return <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: font.bold, letterSpacing: 1.25, textTransform: "uppercase" }}>{children}</Text>;
+  return <Text style={{ color: colors.warning, fontSize: 10, fontWeight: font.bold, letterSpacing: 1.35, textTransform: "uppercase" }}>{children}</Text>;
 }
 
 export function TrendPill({ value, label }: { value: number; label?: string }) {
   const positive = value >= 0;
   return (
-    <View accessibilityLabel={`${positive ? "Gain" : "Loss"}, ${signedPct(value)}${label ? `, ${label}` : ""}`} style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: space.x1, minHeight: 34, paddingHorizontal: space.x3, borderRadius: radius.pill, backgroundColor: positive ? colors.bullishSoft : colors.bearishSoft }}>
+    <View accessibilityLabel={`${positive ? "Gain" : "Loss"}, ${signedPct(value)}${label ? `, ${label}` : ""}`} style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: space.x1, minHeight: 28, paddingHorizontal: space.x2, borderRadius: radius.pill, backgroundColor: positive ? colors.bullishSoft : colors.bearishSoft }}>
       <Feather name={positive ? "trending-up" : "trending-down"} size={14} color={positive ? colors.bullish : colors.bearish} />
       <Text style={{ color: positive ? colors.bullish : colors.bearish, fontSize: 13, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{signedPct(value)}{label ? ` ${label}` : ""}</Text>
     </View>

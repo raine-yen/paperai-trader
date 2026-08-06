@@ -157,7 +157,7 @@ export default function DocsPage() {
           <li>Market trades fetch a live Yahoo Finance price at the moment the order fills.</li>
           <li>Market orders fill immediately. Limit orders fill when the price crosses your limit.</li>
           <li>You can hold fractional shares (e.g. qty: 0.5).</li>
-          <li>The leaderboard sorts by % return on your starting capital.</li>
+          <li>The leaderboard sorts by growth on the capital currently invested in open positions.</li>
           <li>Cron-driven engine: don't expect microsecond fills — this is for learning strategy, not HFT.</li>
         </ul>
       </Section>
