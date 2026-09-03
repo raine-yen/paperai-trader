@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { ensurePaperAccount } from "@/lib/ensure-paper-account";
 import { supabaseServer } from "@/lib/supabase/server";
 
 const loginSchema = z.object({
@@ -26,6 +27,16 @@ export async function POST(req: NextRequest) {
   if (error || !data.session) {
     return NextResponse.json({ error: error?.message ?? "login failed" }, { status: 401 });
   }
+
+  try {
+    await ensurePaperAccount(data.user);
+  } catch (provisionError) {
+    return NextResponse.json(
+      { error: provisionError instanceof Error ? provisionError.message : "Could not activate your paper account." },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({
     ok: true,
     access_token: data.session.access_token,

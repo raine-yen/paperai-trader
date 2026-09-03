@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/session-user";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isMissingTableError } from "@/lib/app-data";
 import { calculateInvestedPerformance } from "@/lib/performance";
+import { ensureAllPaperAccounts } from "@/lib/ensure-paper-account";
 
 async function verifyAdmin(req: NextRequest) {
   const user = await getSessionUser(req);
@@ -17,6 +18,14 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const db = supabaseAdmin();
+  try {
+    await ensureAllPaperAccounts();
+  } catch (provisionError) {
+    return NextResponse.json(
+      { error: provisionError instanceof Error ? provisionError.message : "Could not activate paper accounts." },
+      { status: 500 }
+    );
+  }
 
   const [{ data: accounts }, { data: { users } }, reportsResult, transfersResult, blocksResult] = await Promise.all([
     db.from("accounts").select("*").order("equity", { ascending: false }),

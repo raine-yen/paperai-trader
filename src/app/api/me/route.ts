@@ -5,11 +5,21 @@ import { getSessionUser } from "@/lib/session-user";
 import { isMissingTableError } from "@/lib/app-data";
 import { isAdminEmail } from "@/lib/admin";
 import { calculateInvestedPerformance } from "@/lib/performance";
+import { ensurePaperAccount } from "@/lib/ensure-paper-account";
 
 // Authenticated dashboard endpoint — returns the current user's account, positions, recent orders.
 export async function GET(req: NextRequest) {
   const user = await getSessionUser(req);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  try {
+    await ensurePaperAccount(user);
+  } catch (provisionError) {
+    return NextResponse.json(
+      { error: provisionError instanceof Error ? provisionError.message : "Could not activate your paper account." },
+      { status: 500 }
+    );
+  }
 
   const db = supabaseAdmin();
 
