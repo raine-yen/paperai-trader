@@ -120,21 +120,21 @@ const dark = defineTheme({
   textSecondary: "#B3B3B3",
   textTertiary: "#8C8C8C",
   textInverse: "#000000",
-  brand: "#78C5A3",
-  brandPressed: "#5AAE8B",
-  brandSoft: "#29463A",
-  onBrand: "#102A20",
-  bullish: "#79C7A4",
-  bullishSoft: "#29463A",
+  brand: "#C8FF00",
+  brandPressed: "#B2E600",
+  brandSoft: "#263300",
+  onBrand: "#080A00",
+  bullish: "#C8FF00",
+  bullishSoft: "#263300",
   bearish: "#FF7B8B",
   bearishSoft: "#4B292E",
   success: "#79C7A4",
   warning: "#F2C66D",
   error: "#FF7B8B",
   info: "#8ABCE8",
-  focusRing: "#74A9FF",
+  focusRing: "#C8FF00",
   chartGrid: "#262626",
-  chartCrosshair: "#8C8C8C",
+  chartCrosshair: "#C8FF00",
   scrim: "rgba(0, 0, 0, 0.68)",
   shadow: "rgba(0, 0, 0, 0.36)",
 });
@@ -151,21 +151,21 @@ const midnight = defineTheme({
   textSecondary: "#B1C1CB",
   textTertiary: "#8296A3",
   textInverse: "#03130D",
-  brand: "#58E1AE",
-  brandPressed: "#3BC895",
-  brandSoft: "#103A31",
-  onBrand: "#031A12",
-  bullish: "#65E2AE",
-  bullishSoft: "#103A31",
+  brand: "#C8FF00",
+  brandPressed: "#B2E600",
+  brandSoft: "#263300",
+  onBrand: "#080A00",
+  bullish: "#C8FF00",
+  bullishSoft: "#263300",
   bearish: "#FF8090",
   bearishSoft: "#3C1C29",
   success: "#65E2AE",
   warning: "#F5CA73",
   error: "#FF8090",
   info: "#80C7FF",
-  focusRing: "#7AABFF",
+  focusRing: "#C8FF00",
   chartGrid: "#242424",
-  chartCrosshair: "#6E8799",
+  chartCrosshair: "#C8FF00",
   scrim: "rgba(0, 3, 9, 0.72)",
   shadow: "rgba(0, 0, 0, 0.42)",
 });
@@ -187,13 +187,13 @@ export function applyTheme(theme: ResolvedTheme) {
 
 export const themeOptions: Array<{ value: ThemePreference; label: string; description: string }> = [
   { value: "system", label: "System", description: "Follow your device appearance" },
-  { value: "light", label: "Light", description: "Mineral white with forest accents" },
+  { value: "light", label: "Light", description: "High-contrast light surfaces with Vanta lime actions" },
   { value: "dark", label: "Dark", description: "Pure black with high-contrast surfaces" },
   { value: "midnight", label: "Midnight", description: "Pure black with deep neutral surfaces" },
 ];
 
 export const space = { x1: 4, x2: 8, x3: 12, x4: 16, x6: 24, x8: 32, x12: 48, x16: 64 } as const;
-export const radius = { sm: 6, md: 10, lg: 14, xl: 18, pill: 999 } as const;
+export const radius = { sm: 3, md: 5, lg: 6, xl: 8, pill: 999 } as const;
 export const typeScale = { caption: 11, body: 14, bodyLarge: 16, title: 21, display: 36, hero: 48 } as const;
 export const navHeight = 86;
 export const tabletNavWidth = 88;

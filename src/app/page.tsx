@@ -46,7 +46,7 @@ export default function Landing() {
               A cleaner trading floor for your investing club.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-gray-400">
-              Members get a Robinhood-like paper portfolio, a live market scanner, simple buy and sell flows, and Alpaca-compatible API access for AI agents.
+              Members get a Vanta paper portfolio, a live market scanner, simple simulated buy and sell flows, and API access for AI agents.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/signup" className="btn-buy px-5 py-3 text-base">Create account <ArrowRight className="h-5 w-5" /></Link>

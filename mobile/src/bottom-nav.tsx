@@ -35,13 +35,13 @@ export function BottomNav({
           alignItems: "center",
           paddingTop: space.x8,
           paddingBottom: space.x6,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.background,
           borderRightWidth: 1,
           borderRightColor: colors.border,
         }}
       >
-        <View accessibilityLabel="PaperAI Trader" style={{ width: 44, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.textPrimary }}>
-          <Feather name="trending-up" size={20} color={colors.textInverse} />
+        <View accessibilityLabel="Vanta paper trading" style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.textPrimary }}>
+          <Text style={{ color: colors.textInverse, fontWeight: font.bold }}>V</Text>
         </View>
         <View style={{ flex: 1, justifyContent: "center", gap: space.x3 }}>
           {navItems.map((item) => <NavItem key={item.key} item={item} active={tab === item.key} onPress={() => setTab(item.key)} tablet />)}
@@ -64,7 +64,7 @@ export function BottomNav({
         bottom: 0,
         height: navHeight,
         justifyContent: "flex-end",
-        backgroundColor: colors.surface,
+        backgroundColor: colors.background,
         borderTopWidth: 1,
         borderTopColor: colors.border,
       }}
@@ -73,7 +73,7 @@ export function BottomNav({
         accessibilityRole="tablist"
         style={{
           minHeight: navHeight,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.background,
           paddingHorizontal: space.x2,
           paddingTop: space.x2,
           paddingBottom: space.x3,
@@ -109,7 +109,7 @@ function NavItem({
       style={({ pressed }) => ({
         width: tablet ? 68 : 76,
         minHeight: tablet ? 64 : 58,
-        borderRadius: radius.md,
+        borderRadius: radius.sm,
         alignItems: "center",
         justifyContent: "center",
         gap: space.x1,

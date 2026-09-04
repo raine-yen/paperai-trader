@@ -15,7 +15,7 @@ export type OrderReceipt = {
 };
 
 /**
- * Robinhood-style purchase flow: after an order is accepted the success state
+ * Restrained purchase flow: after an order is accepted the success state
  * resolves with a check-mark draw, a short "processing" dwell, and the receipt
  * panel sliding up into place. Purely presentational — the caller owns the API
  * call and only mounts this after a verified successful response.

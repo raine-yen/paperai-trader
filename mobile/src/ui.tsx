@@ -71,18 +71,18 @@ export function Button({
       onBlur={() => setFocused(false)}
       style={({ pressed }) => [
         {
-          minHeight: 50,
+          minHeight: 44,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
           gap: space.x2,
           paddingHorizontal: space.x4,
-          borderRadius: radius.md,
+          borderRadius: radius.sm,
           backgroundColor,
           borderWidth: focused || variant === "quiet" ? 2 : 1,
           borderColor: focused ? colors.focusRing : variant === "quiet" ? colors.border : backgroundColor,
           opacity: inactive ? 0.5 : pressed ? 0.78 : 1,
-          transform: [{ scale: pressed && !inactive ? 0.985 : 1 }],
+          transform: [{ scale: pressed && !inactive ? 0.99 : 1 }],
         },
         style,
       ]}
@@ -166,9 +166,9 @@ export function Input({ label, helper, error, ...props }: TextInputProps & { lab
         }}
         style={[
           {
-            minHeight: 50,
-            borderRadius: radius.md,
-            backgroundColor: colors.surface,
+            minHeight: 44,
+            borderRadius: radius.sm,
+            backgroundColor: colors.background,
             color: colors.textPrimary,
             borderWidth: focused || error ? 2 : 1,
             borderColor: error ? colors.error : focused ? colors.focusRing : colors.border,
@@ -224,15 +224,12 @@ export function Surface({
       testID={testID}
       style={[
         {
-          borderRadius: radius.lg,
+          borderRadius: radius.sm,
           backgroundColor: tone ?? (elevated ? colors.surfaceElevated : colors.surface),
-          borderWidth: 1,
+          borderTopWidth: 1,
           borderColor: elevated ? colors.borderStrong : colors.border,
           padding: padded ? space.x4 : 0,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: elevated ? 5 : 2 },
-          shadowOpacity: elevated ? 0.1 : 0.04,
-          shadowRadius: elevated ? 14 : 6,
+          shadowOpacity: 0,
         },
         style,
       ]}

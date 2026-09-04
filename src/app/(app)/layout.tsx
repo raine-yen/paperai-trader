@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen bg-bg lg:flex">
       <Nav email={data.user.email ?? undefined} />
-      <main className="mx-auto w-full max-w-[1540px] px-4 py-5 lg:ml-72 lg:px-7 lg:py-7">{children}</main>
+      <main className="vanta-app-main">{children}</main>
     </div>
   );
 }

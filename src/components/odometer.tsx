@@ -2,7 +2,7 @@
 
 // Per-digit odometer animation: each digit lives in a vertical column of 0-9 and
 // slides to its new value. Digits that don't change don't move. Direction (and
-// color) follows the price change. This mirrors how Robinhood animates its price.
+// color) follows the price change.
 //
 // Structure per glyph slot:
 //   <span class="odometer-digit">        overflow:hidden, height = 1em
@@ -19,7 +19,7 @@ interface Props {
   value: string;
   /** "up" | "down" picks color + initial entry direction. */
   dir?: 1 | -1 | 0;
-  /** ms for a digit to settle. Robinhood feels like ~110-150ms. */
+  /** Milliseconds for a digit to settle. */
   durationMs?: number;
   className?: string;
   digitClassName?: string;
