@@ -21,7 +21,7 @@ export default function Landing() {
       <nav className="sticky top-0 z-20 border-b border-bg-border bg-bg/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5">
           <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-green font-black text-black">V</div>
+            <div className="grid h-9 w-9 place-items-center rounded-full bg-white text-sm font-black text-black">V</div>
                         <div>
                           <div className="font-semibold tracking-tight">Vanta</div>
                           <div className="text-[11px] uppercase tracking-[0.22em] text-gray-500">Paper markets</div>
@@ -54,7 +54,7 @@ export default function Landing() {
             </div>
             <div className="mt-10 grid max-w-lg grid-cols-3 gap-3">
               {metrics.map((m) => (
-                <div key={m.label} className="surface p-4">
+                <div key={m.label} className="border border-bg-border p-4">
                   <div className="font-mono text-xl font-bold text-gray-50">{m.value}</div>
                   <div className="mt-1 text-xs text-gray-500">{m.label}</div>
                 </div>
@@ -62,18 +62,18 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="card overflow-hidden">
+          <div className="border border-bg-border bg-bg-soft overflow-hidden">
             <div className="border-b border-bg-border p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs uppercase tracking-wider text-gray-500">Club portfolio</div>
                   <div className="mt-1 text-4xl font-bold tabular-nums">$124,982.44</div>
                 </div>
-                <div className="rounded-full bg-accent-green/15 px-3 py-1 text-sm font-semibold text-accent-green">+8.2%</div>
+                <div className="border border-accent-green/30 px-2 py-0.5 text-sm font-semibold text-accent-green">+8.2%</div>
               </div>
-              <div className="mt-8 h-44 rounded-lg border border-bg-border bg-[linear-gradient(180deg,rgba(0,200,83,.18),rgba(0,200,83,0))] p-4">
-                <div className="h-full rounded-md border-b-2 border-accent-green" />
-              </div>
+              <div className="mt-8 h-44 border border-bg-border bg-[linear-gradient(180deg,rgba(200,255,0,.14),rgba(200,255,0,0))] p-4">
+                              <div className="h-full border-b-2 border-accent-green" />
+                            </div>
             </div>
             <div className="divide-y divide-bg-border">
               {["AAPL", "NVDA", "SPY", "TSLA"].map((s, i) => (
@@ -96,7 +96,7 @@ export default function Landing() {
           {features.map((f) => {
             const Icon = f.icon;
             return (
-              <div key={f.title} className="card p-5">
+              <div key={f.title} className="border-t border-bg-border p-5">
                 <Icon className="mb-4 h-5 w-5 text-accent-green" />
                 <h2 className="font-semibold">{f.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-gray-400">{f.body}</p>

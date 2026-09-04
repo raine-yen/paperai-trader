@@ -41,10 +41,10 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <Link href="/" className="flex items-center gap-2 mb-8 justify-center">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-green flex items-center justify-center font-bold text-black">V</div>
+          <div className="grid h-9 w-9 place-items-center rounded-full bg-white text-sm font-black text-black">V</div>
           <span className="font-semibold tracking-tight text-lg">Vanta</span>
         </Link>
-        <div className="card p-6">
+        <div className="border border-bg-border bg-bg-soft p-6">
           <h1 className="text-xl font-semibold mb-1">Create your account</h1>
           <p className="text-sm text-gray-400 mb-6">Start with $10,000 in paper money.</p>
           <form onSubmit={submit} className="space-y-4">
@@ -70,7 +70,7 @@ export default function SignupPage() {
               <p className="text-xs text-gray-500 mt-1">Minimum 6 characters.</p>
             </div>
             {error && <p className="text-sm text-accent-red">{error}</p>}
-            <button type="submit" disabled={loading} className="btn-primary w-full">
+            <button type="submit" disabled={loading} className="btn-buy w-full">
               {loading ? "Creating..." : "Create account"}
             </button>
           </form>

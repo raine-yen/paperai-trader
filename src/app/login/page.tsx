@@ -38,11 +38,11 @@ export default function LoginPage() {
 
   return (
     <main className="relative grid min-h-screen overflow-hidden bg-bg text-gray-50 lg:grid-cols-[1.05fr_.95fr]">
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_8%,rgba(52,211,153,.17),transparent_28rem),radial-gradient(circle_at_85%_90%,rgba(56,189,248,.1),transparent_28rem)]" />
+
 
       <section className="relative flex min-h-screen flex-col px-6 py-6 sm:px-10 lg:px-16 lg:py-10">
         <Link href="/" className="inline-flex w-fit items-center gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent-green">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent-green text-lg font-black text-black shadow-[0_0_34px_rgba(52,211,153,.32)]">V</span>
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-white text-lg font-black text-black">V</span>
           <span>
             <span className="block text-lg font-black tracking-tight">Vanta</span>
             <span className="block text-[10px] font-semibold uppercase tracking-[.24em] text-gray-500">Paper markets</span>
@@ -50,7 +50,7 @@ export default function LoginPage() {
         </Link>
 
         <div className="my-auto w-full max-w-md py-14 lg:py-0">
-          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-accent-green/20 bg-accent-green/10 px-3 py-1.5 text-xs font-semibold text-accent-green">
+          <div className="mb-8 inline-flex items-center gap-2 border-l-2 border-accent-green px-3 py-1 text-xs font-semibold uppercase tracking-[.14em] text-accent-green">
             <Sparkles className="h-3.5 w-3.5" />
             Your paper portfolio, in motion
           </div>
@@ -78,13 +78,13 @@ export default function LoginPage() {
         <p className="flex items-center gap-2 text-xs text-gray-500"><LockKeyhole className="h-3.5 w-3.5" /> Simulation only — no deposits, withdrawals, or real-money trading.</p>
       </section>
 
-      <aside className="relative hidden border-l border-bg-border/70 bg-black/20 p-10 lg:flex lg:flex-col lg:justify-center">
+      <aside className="relative hidden border-l border-bg-border bg-black p-10 lg:flex lg:flex-col lg:justify-center">
         <div className="max-w-md">
           <p className="text-xs font-bold uppercase tracking-[.24em] text-accent-green">The Vanta terminal</p>
           <h2 className="mt-5 text-5xl font-black leading-[.98] tracking-[-.055em]">See every move.<br />Keep the stakes virtual.</h2>
-          <div className="mt-12 overflow-hidden rounded-2xl border border-bg-border bg-bg-card/80 shadow-2xl shadow-black/40">
-            <div className="flex items-center justify-between border-b border-bg-border px-5 py-4"><span className="text-sm font-semibold">Portfolio value</span><span className="rounded-full bg-accent-green/10 px-2.5 py-1 text-xs font-bold text-accent-green">PAPER</span></div>
-            <div className="p-5"><div className="font-mono text-4xl font-bold tracking-tight">$10,000.00</div><div className="mt-2 text-sm font-semibold text-accent-green">Starting allocation · simulated</div><div className="mt-7 flex h-28 items-end gap-1.5">{[22,31,27,40,35,54,48,61,56,72,67,82].map((h, i) => <span key={i} className="flex-1 rounded-t bg-accent-green/80" style={{ height: `${h}%`, opacity: 0.35 + i / 20 }} />)}</div></div>
+          <div className="mt-12 border border-bg-border bg-bg-soft">
+            <div className="flex items-center justify-between border-b border-bg-border px-5 py-4"><span className="text-sm font-semibold">Portfolio value</span><span className="border border-accent-green/30 px-2 py-0.5 text-[10px] font-bold tracking-[.16em] text-accent-green">PAPER</span></div>
+            <div className="p-5"><div className="font-mono text-4xl font-bold tracking-tight">$10,000.00</div><div className="mt-2 text-sm font-semibold text-accent-green">Starting allocation · simulated</div><div className="mt-7 flex h-28 items-end gap-1.5">{[22,31,27,40,35,54,48,61,56,72,67,82].map((h, i) => <span key={i} className="flex-1 bg-accent-green" style={{ height: `${h}%`, opacity: 0.35 + i / 20 }} />)}</div></div>
           </div>
         </div>
       </aside>
