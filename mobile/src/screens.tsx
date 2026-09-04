@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { InteractiveLineChart } from "./charts";
 import { compactMoney, compactNumber, firstName, maybeUsd, metric, rangeLabel, signedPct, signedUsd, timeAgo, usd } from "./format";
 import { getCompanyName, MARKET_GROUPS } from "./market-data";
@@ -845,11 +845,40 @@ function OrderReceiptScreen({
   backToSymbol: () => void;
 }) {
   const successful = Boolean(order);
+  // Purchase animation: receipt settles in with a scale/fade spring after a
+  // short beat, echoing the market-style order confirmation.
+  const entrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.sequence([
+      Animated.delay(120),
+      Animated.spring(entrance, { toValue: 1, useNativeDriver: true, friction: 6, tension: 60 }),
+    ]).start();
+  }, [entrance]);
   return (
-    <View testID="screen-order-receipt-ready" style={{ alignSelf: "center", width: "100%", maxWidth: 720, gap: space.x6 }}>
+    <Animated.View
+      testID="screen-order-receipt-ready"
+      style={{
+        alignSelf: "center",
+        width: "100%",
+        maxWidth: 720,
+        gap: space.x6,
+        opacity: entrance,
+        transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }],
+      }}
+    >
       <Surface elevated style={{ padding: space.x8 }}>
         <View style={{ alignItems: "center", gap: space.x4 }}>
-          <View style={{ width: 72, height: 72, borderRadius: radius.xl, alignItems: "center", justifyContent: "center", backgroundColor: successful ? colors.bullishSoft : colors.bearishSoft }}>
+          <View
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: radius.xl,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: successful ? colors.bullishSoft : colors.bearishSoft,
+              transform: [{ scale: entrance.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.4, 1.12, 1] }) }],
+            }}
+          >
             <Feather name={successful ? "check" : "alert-circle"} size={32} color={successful ? colors.bullish : colors.bearish} />
           </View>
           <PaperBadge />
@@ -883,7 +912,7 @@ function OrderReceiptScreen({
           </View>
         </View>
       </Surface>
-    </View>
+    </Animated.View>
   );
 }
 

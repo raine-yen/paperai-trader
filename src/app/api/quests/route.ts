@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/session-user";
 
-const REWARD_AMOUNT = 200;
+const REWARD_POINTS = 200; // recognition points only — never account cash
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser(req);
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   if (!account) return NextResponse.json({ claims: [] });
 
   const { data, error } = await db
-    .from("reward_claims")
+    .from("quest_points")
     .select("quest_id, cycle_id")
     .eq("account_id", account.id);
 
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
   const { data: account } = await db
     .from("accounts")
-    .select("id, cash, equity")
+    .select("id")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -51,32 +51,24 @@ export async function POST(req: NextRequest) {
 
   if (!account) return NextResponse.json({ error: "no account" }, { status: 400 });
 
-  const { error: claimError } = await db.from("reward_claims").insert({
+  const { error: claimError } = await db.from("quest_points").insert({
     account_id: account.id,
     quest_id: questId,
     cycle_id: cycleId,
-    amount: REWARD_AMOUNT,
+    points: REWARD_POINTS,
   });
 
   const message = claimError?.message?.toLowerCase() ?? "";
   const duplicate = claimError?.code === "23505" || message.includes("duplicate");
-  const missingTable = message.includes("reward_claims") || message.includes("schema cache");
+  const missingTable = message.includes("quest_points") || message.includes("schema cache");
   if (duplicate) return NextResponse.json({ error: "reward already claimed" }, { status: 409 });
   if (claimError && !missingTable) return NextResponse.json({ error: claimError.message }, { status: 500 });
 
-  const nextCash = Number(account.cash) + REWARD_AMOUNT;
-  const nextEquity = Number(account.equity ?? account.cash) + REWARD_AMOUNT;
-  const { error: updateError } = await db
-    .from("accounts")
-    .update({ cash: nextCash, equity: nextEquity })
-    .eq("id", account.id);
-
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
-
+  // Vanta compliance: quests award recognition points only. Account cash is set
+  // exactly once ($10,000) at account creation and is never topped up.
   return NextResponse.json({
     ok: true,
-    amount: REWARD_AMOUNT,
-    cash: nextCash,
+    points: REWARD_POINTS,
     claim: `${cycleId}:${questId}`,
     untracked: Boolean(missingTable),
   });

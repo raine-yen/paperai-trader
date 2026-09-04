@@ -94,7 +94,7 @@ export default function Dashboard() {
   useEffect(() => {
     let active = true;
     async function fetchRewards() {
-      const r = await fetch("/api/rewards", { cache: "no-store" });
+      const r = await fetch("/api/quests", { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
       if (active && Array.isArray(j.claims)) {
@@ -132,34 +132,26 @@ export default function Dashboard() {
     cash: account.cash,
   }, rewardCycle.week);
 
-  async function claimReward(quest: { id: string }) {
+  async function recordQuestPoints(quest: { id: string }) {
     const claimKey = `${rewardCycle.id}:${quest.id}`;
     if (claimedRewards.includes(claimKey)) return;
     setClaimingReward(claimKey);
     setRewardMessage("");
-    const r = await fetch("/api/rewards", {
-      method: "POST",
+    const r = await fetch("/api/quests", {
+          method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ quest_id: quest.id, cycle_id: rewardCycle.id }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      setRewardMessage(j.error ?? "Could not add practice credits");
+      setRewardMessage(j.error ?? "Could not record quest progress.");
       setClaimingReward(null);
       return;
     }
     const next = [...claimedRewards, claimKey];
     setClaimedRewards(next);
     window.localStorage.setItem(`paper-trader:rewards:${account.id}`, JSON.stringify(next));
-    setData((prev) => prev?.account ? {
-      ...prev,
-      account: {
-        ...prev.account,
-        cash: Number(j.cash ?? prev.account.cash + 200),
-        equity: Number(prev.account.equity) + Number(j.amount ?? 200),
-      },
-    } : prev);
-    setRewardMessage(`Added ${formatUSD(Number(j.amount ?? 200))} in practice credits.`);
+    setRewardMessage(`Quest complete — ${Number(j.points ?? 200)} recognition points. Your $10,000 paper allocation is unchanged.`);
     setClaimingReward(null);
   }
 
@@ -255,7 +247,7 @@ export default function Dashboard() {
               <Trophy className="h-3.5 w-3.5 text-accent-green" />
               Quests
             </div>
-            <h2 className="mt-2 font-semibold">Learning goals and practice credits</h2>
+            <h2 className="mt-2 font-semibold">Learning goals and recognition</h2>
           </div>
           <div className="text-sm text-gray-400">Week {rewardCycle.week} cycle - {quests.filter((q) => claimedRewards.includes(`${rewardCycle.id}:${q.id}`)).length}/{quests.length} complete</div>
         </div>
@@ -291,8 +283,8 @@ export default function Dashboard() {
                   <div className="text-xs text-gray-500">
                     {quest.reward}
                   </div>
-                  <button type="button" onClick={() => claimReward(quest)} disabled={!complete || claimed || claimingReward === claimKey} className="btn-primary px-3 py-1.5 text-xs">
-                    {claimingReward === claimKey ? "Adding" : claimed ? "Added" : "Add"}
+                  <button type="button" onClick={() => recordQuestPoints(quest)} disabled={!complete || claimed || claimingReward === claimKey} className="btn-primary px-3 py-1.5 text-xs">
+                    {claimingReward === claimKey ? "Saving" : claimed ? "Earned" : "Claim"}
                   </button>
                 </div>
               </div>

@@ -4,67 +4,67 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
-    --color-bg: 5 6 7;
-    --color-card: 12 15 18;
-    --color-elevated: 19 24 32;
-    --color-border: 32 38 45;
-    --color-soft: 15 20 25;
-    --color-text: 238 242 241;
+      color-scheme: dark;
+      --color-bg: 0 0 0;
+      --color-card: 10 10 10;
+      --color-elevated: 20 20 20;
+      --color-border: 38 38 38;
+      --color-soft: 14 14 14;
+      --color-text: 245 245 245;
     --color-accent: 110 231 183;
     --color-green: 52 211 153;
     --color-red: 255 90 103;
     --color-yellow: 244 196 48;
     --color-blue: 56 189 248;
     --color-violet: 167 139 250;
-    --color-gray-50: 248 250 249;
-    --color-gray-100: 238 242 241;
-    --color-gray-200: 218 224 221;
-    --color-gray-300: 183 194 188;
-    --color-gray-400: 148 163 155;
-    --color-gray-500: 113 128 120;
-    --color-gray-600: 88 101 94;
-    --page-glow: rgba(52, 211, 153, 0.14);
-    --page-gradient-end: 2 3 3;
+    --color-gray-50: 250 250 250;
+        --color-gray-100: 240 240 240;
+        --color-gray-200: 214 214 214;
+        --color-gray-300: 178 178 178;
+        --color-gray-400: 145 145 145;
+        --color-gray-500: 115 115 115;
+        --color-gray-600: 89 89 89;
+    --page-glow: rgba(52, 211, 153, 0.1);
+        --page-gradient-end: 0 0 0;
   }
 
   [data-theme="light"] {
-    color-scheme: light;
-    --color-bg: 246 248 247;
-    --color-card: 255 255 255;
-    --color-elevated: 235 240 237;
-    --color-border: 205 214 209;
-    --color-soft: 240 244 242;
-    --color-text: 20 29 25;
+      color-scheme: light;
+      --color-bg: 255 255 255;
+      --color-card: 250 250 250;
+      --color-elevated: 240 240 240;
+      --color-border: 226 226 226;
+      --color-soft: 245 245 245;
+      --color-text: 17 17 17;
     --color-accent: 5 118 79;
     --color-green: 4 120 87;
     --color-red: 190 24 45;
     --color-yellow: 161 98 7;
     --color-blue: 3 105 161;
     --color-violet: 109 40 217;
-    --color-gray-50: 20 29 25;
-    --color-gray-100: 28 39 34;
-    --color-gray-200: 45 59 52;
-    --color-gray-300: 61 77 69;
-    --color-gray-400: 74 91 82;
-    --color-gray-500: 91 107 99;
-    --color-gray-600: 116 131 123;
+    --color-gray-50: 17 17 17;
+              --color-gray-100: 34 34 34;
+              --color-gray-200: 64 64 64;
+              --color-gray-300: 96 96 96;
+              --color-gray-400: 115 115 115;
+              --color-gray-500: 115 115 115;
+              --color-gray-600: 140 140 140;
     --page-glow: rgba(5, 150, 105, 0.1);
     --page-gradient-end: 240 244 242;
   }
 
   [data-theme="midnight"] {
-    color-scheme: dark;
-    --color-bg: 2 6 12;
-    --color-card: 5 12 20;
-    --color-elevated: 9 19 31;
-    --color-border: 30 47 64;
-    --color-soft: 6 16 27;
-    --color-text: 241 248 245;
+      color-scheme: dark;
+      --color-bg: 0 0 0;
+      --color-card: 8 8 8;
+      --color-elevated: 16 16 16;
+      --color-border: 34 34 34;
+      --color-soft: 12 12 12;
+      --color-text: 245 245 245;
     --color-green: 45 230 157;
     --color-blue: 91 192 250;
-    --page-glow: rgba(45, 230, 157, 0.17);
-    --page-gradient-end: 0 2 6;
+    --page-glow: rgba(45, 230, 157, 0.12);
+        --page-gradient-end: 0 0 0;
   }
 
   html,
@@ -188,6 +188,29 @@
   height: 1em;
   line-height: 1em;
 }
+
+/* Purchase success flow: scrim fade, sheet slide-up, check-mark draw.
+   Reduced motion is handled globally below plus a JS fast-path in order-flow.tsx. */
+.order-overlay { animation: order-scrim 180ms ease-out; }
+@keyframes order-scrim { from { opacity: 0; } to { opacity: 1; } }
+.order-sheet {
+  opacity: 0;
+  transform: translateY(24px) scale(0.98);
+  transition: opacity 240ms ease-out, transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.order-sheet.is-done { opacity: 1; transform: translateY(0) scale(1); }
+.order-check-ring {
+  stroke-dasharray: 107;
+  stroke-dashoffset: 107;
+  animation: order-ring-draw 420ms ease-out forwards;
+}
+@keyframes order-ring-draw { to { stroke-dashoffset: 0; } }
+.order-check-path {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: order-check-draw 260ms 320ms ease-out forwards;
+}
+@keyframes order-check-draw { to { stroke-dashoffset: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   *,

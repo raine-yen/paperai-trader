@@ -37,7 +37,6 @@ interface AdminStats {
   total_equity: number;
   avg_return_pct: number;
   open_reports?: number;
-  transfers?: number;
 }
 
 interface AdminData {
@@ -45,7 +44,6 @@ interface AdminData {
   stats: AdminStats;
   moderation?: {
     reports: Array<{ id: string; status: string; reason: string; message_id: string; created_at: string; direct_messages?: { body?: string; sender_account_id?: string; recipient_account_id?: string } }>;
-    transfers: Array<{ id: string; sender_account_id: string; recipient_account_id: string; amount: number; status: string; created_at: string }>;
     blocks: Array<{ id: string; blocker_account_id: string; blocked_account_id: string; created_at: string }>;
   };
 }
@@ -193,11 +191,7 @@ export default function AdminPage() {
           icon={AlertTriangle}
           valueColor={(stats.open_reports ?? 0) > 0 ? "text-accent-red" : "text-accent-green"}
         />
-        <StatCard
-          label="Transfers"
-          value={String(stats.transfers ?? 0)}
-          icon={DollarSign}
-        />
+
       </div>
 
       {/* Accounts table */}
@@ -396,28 +390,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="card overflow-hidden">
-          <div className="border-b border-bg-border p-5">
-            <h2 className="font-semibold">Practice Credit Ledger</h2>
-            <p className="mt-1 text-xs text-gray-500">Educational simulation ledger. Review or reverse completed practice-credit activity when needed.</p>
-          </div>
-          <div className="divide-y divide-bg-border">
-            {(data.moderation?.transfers ?? []).length === 0 ? (
-              <div className="p-8 text-sm text-gray-500">No transfers yet.</div>
-            ) : (
-              data.moderation!.transfers.slice(0, 8).map((transfer) => (
-                <div key={transfer.id} className="flex items-center justify-between gap-3 p-4">
-                  <div>
-                    <div className="font-mono text-sm font-semibold">{formatUSD(Number(transfer.amount))}</div>
-                    <div className="mt-1 text-xs text-gray-500">{transfer.status} - {new Date(transfer.created_at).toLocaleString()}</div>
-                  </div>
-                  <button disabled={transfer.status !== "completed"} className="btn-ghost border border-bg-border px-3 py-1.5 text-xs" onClick={() => runAction("", "reverse_transfer", { transfer_id: transfer.id })}>Reverse</button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
+              </div>
 
       {/* Confirm action modal */}
       {pendingAction && (

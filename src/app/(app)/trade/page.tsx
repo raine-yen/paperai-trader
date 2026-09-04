@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, Clock3, Loader2, Search } from "lucide-react";
 import { getCompanyName } from "@/lib/market-data";
 import { cn, formatPct, formatUSD } from "@/lib/utils";
+import { OrderSuccessOverlay, type OrderReceipt } from "@/components/order-flow";
 
 interface Position {
   symbol: string;
@@ -29,6 +30,7 @@ export default function TradePage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
 
   const upperSymbol = symbol.trim().toUpperCase();
   const position = useMemo(() => positions.find((p) => p.symbol === upperSymbol) ?? null, [positions, upperSymbol]);
@@ -65,6 +67,12 @@ export default function TradePage() {
   useEffect(() => {
     setResult(null);
   }, [side, symbol, qty, orderType, limitPrice]);
+
+  useEffect(() => {
+    if (!receipt) return;
+    const id = setTimeout(() => setReceipt(null), 4000);
+    return () => clearTimeout(id);
+  }, [receipt]);
 
   const quantity = Number(qty) || 0;
   const orderPrice = orderType === "limit" && Number(limitPrice) > 0 ? Number(limitPrice) : quote?.price ?? 0;
@@ -107,7 +115,20 @@ export default function TradePage() {
     });
     const j = await res.json();
     if (res.ok) {
-      setResult({ ok: true, msg: `${side.toUpperCase()} order for ${quantity} ${upperSymbol} ${j.status === "filled" ? `filled at ${formatUSD(Number(j.filled_avg_price))}` : timing === "scheduled" ? "scheduled" : "submitted"}` });
+      const status = (j.status === "filled" ? "filled" : timing === "scheduled" ? "scheduled" : "submitted") as OrderReceipt["status"];
+      setReceipt({
+        ok: true,
+        title: status === "filled" ? "Order filled" : status === "scheduled" ? "Order scheduled" : "Order submitted",
+        detail: status === "filled"
+          ? `${quantity} ${upperSymbol} filled at ${formatUSD(Number(j.filled_avg_price))}.`
+          : status === "scheduled"
+            ? `${quantity} ${upperSymbol} will be sent at ${scheduledTime?.toLocaleString([], { dateStyle: "short", timeStyle: "short" })}.`
+            : `${quantity} ${upperSymbol} is working. Fills appear in your portfolio shortly.`,
+        status,
+        side,
+        symbol: upperSymbol,
+        amount: quantity.toFixed(4),
+      });
       refreshAccount();
     } else {
       setResult({ ok: false, msg: j.error ?? "Order failed" });
@@ -270,6 +291,14 @@ export default function TradePage() {
           <Link href="/api-keys" className="btn-ghost border border-bg-border">Manage API keys</Link>
         </div>
       </aside>
+
+      {receipt && (
+        <OrderSuccessOverlay
+          receipt={receipt}
+          onDismiss={() => setReceipt(null)}
+          onOpenOrders={() => { window.location.href = "/dashboard"; }}
+        />
+      )}
     </div>
   );
 }

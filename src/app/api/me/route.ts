@@ -41,7 +41,6 @@ export async function GET(req: NextRequest) {
     watchlistResult,
     alertsResult,
     profileResult,
-    transfersResult,
     messagesResult,
   ] = await Promise.all([
     db.from("positions").select("*").eq("account_id", account.id),
@@ -66,7 +65,7 @@ export async function GET(req: NextRequest) {
     db.from("watchlists").select("id, symbol, note, created_at").eq("account_id", account.id).order("created_at", { ascending: false }).limit(12),
     db.from("price_alerts").select("id, symbol, direction, target_price, move_pct, status, created_at").eq("account_id", account.id).neq("status", "deleted").order("created_at", { ascending: false }).limit(12),
     db.from("trader_profiles").select("*").eq("account_id", account.id).maybeSingle(),
-    db.from("paper_transfers").select("*").or(`sender_account_id.eq.${account.id},recipient_account_id.eq.${account.id}`).order("created_at", { ascending: false }).limit(12),
+
     db.from("direct_messages").select("id").eq("recipient_account_id", account.id).is("read_at", null).eq("hidden_by_admin", false),
   ]);
 
@@ -133,7 +132,6 @@ export async function GET(req: NextRequest) {
     watchlist: watchlistResult.error && isMissingTableError(watchlistResult.error) ? [] : watchlistResult.data ?? [],
     alerts: alertsResult.error && isMissingTableError(alertsResult.error) ? [] : alertsResult.data ?? [],
     profile: profileResult.error && isMissingTableError(profileResult.error) ? null : profileResult.data ?? null,
-    transfers: transfersResult.error && isMissingTableError(transfersResult.error) ? [] : transfersResult.data ?? [],
     unread_messages: messagesResult.error && isMissingTableError(messagesResult.error) ? 0 : messagesResult.data?.length ?? 0,
     competition: {
       rank: rankIndex >= 0 ? rankIndex + 1 : null,

@@ -241,18 +241,20 @@ create table if not exists achievements (
 create index if not exists idx_achievements_account on achievements(account_id);
 
 -- =====================================================================
--- REWARD CLAIMS — optional milestone rewards (e.g., badge unlocks)
+-- QUEST POINTS — optional milestone recognition (points only, never cash)
 -- =====================================================================
 
-create table if not exists reward_claims (
+create table if not exists quest_points (
   id uuid primary key default gen_random_uuid(),
   account_id uuid not null references accounts(id) on delete cascade,
-  reward_type text not null default 'badge' check (reward_type in ('badge','cash')),
-  amount numeric not null default 0,
-  claimed_at timestamptz not null default now()
+  quest_id text not null,
+  cycle_id text not null,
+  points integer not null default 200 check (points >= 0),
+  claimed_at timestamptz not null default now(),
+  unique(account_id, quest_id, cycle_id)
 );
 
-create index if not exists idx_reward_claims_account on reward_claims(account_id, cycle_id);
+-- The legacy claims table is retired: recognition is points-only, never cash.
 
 -- =====================================================================
 -- PRICES — historical price snapshots (for charting/P&L)

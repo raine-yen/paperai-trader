@@ -27,11 +27,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const [{ data: accounts }, { data: { users } }, reportsResult, transfersResult, blocksResult] = await Promise.all([
+  const [{ data: accounts }, { data: { users } }, reportsResult, blocksResult] = await Promise.all([
     db.from("accounts").select("*").order("equity", { ascending: false }),
     db.auth.admin.listUsers({ perPage: 1000 }),
     db.from("message_reports").select("*, direct_messages(*)").order("created_at", { ascending: false }).limit(50),
-    db.from("paper_transfers").select("*").order("created_at", { ascending: false }).limit(50),
     db.from("blocked_users").select("*").order("created_at", { ascending: false }).limit(50),
   ]);
 
@@ -123,11 +122,9 @@ export async function GET(req: NextRequest) {
       total_equity: totalEquity,
       avg_return_pct: avgReturn,
       open_reports: reportsResult.error && isMissingTableError(reportsResult.error) ? 0 : (reportsResult.data ?? []).filter((r: { status: string }) => r.status === "open").length,
-      transfers: transfersResult.error && isMissingTableError(transfersResult.error) ? 0 : transfersResult.data?.length ?? 0,
     },
     moderation: {
       reports: reportsResult.error && isMissingTableError(reportsResult.error) ? [] : reportsResult.data ?? [],
-      transfers: transfersResult.error && isMissingTableError(transfersResult.error) ? [] : transfersResult.data ?? [],
       blocks: blocksResult.error && isMissingTableError(blocksResult.error) ? [] : blocksResult.data ?? [],
     },
   });
@@ -156,27 +153,6 @@ export async function POST(req: NextRequest) {
     const { error } = await db.from("message_reports").update({ status: "dismissed", reviewed_at: new Date().toISOString() }).eq("id", report_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, message: "Report dismissed" });
-  }
-
-  if (action === "reverse_transfer") {
-    const { transfer_id } = body as { transfer_id?: string };
-    if (!transfer_id) return NextResponse.json({ error: "transfer_id required" }, { status: 400 });
-    const { data: transfer, error } = await db.from("paper_transfers").select("*").eq("id", transfer_id).maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!transfer || transfer.status !== "completed") return NextResponse.json({ error: "transfer not reversible" }, { status: 400 });
-    const [{ data: sender }, { data: recipient }] = await Promise.all([
-      db.from("accounts").select("id, cash").eq("id", transfer.sender_account_id).maybeSingle(),
-      db.from("accounts").select("id, cash").eq("id", transfer.recipient_account_id).maybeSingle(),
-    ]);
-    if (!sender || !recipient || Number(recipient.cash) < Number(transfer.amount)) {
-      return NextResponse.json({ error: "recipient lacks cash to reverse" }, { status: 422 });
-    }
-    await Promise.all([
-      db.from("accounts").update({ cash: Number(sender.cash) + Number(transfer.amount) }).eq("id", sender.id),
-      db.from("accounts").update({ cash: Number(recipient.cash) - Number(transfer.amount) }).eq("id", recipient.id),
-      db.from("paper_transfers").update({ status: "reversed", reversed_at: new Date().toISOString() }).eq("id", transfer.id),
-    ]);
-    return NextResponse.json({ ok: true, message: "Transfer reversed" });
   }
 
   if (!account_id) return NextResponse.json({ error: "account_id required" }, { status: 400 });
