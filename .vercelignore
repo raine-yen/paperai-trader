@@ -2,5 +2,7 @@
 .vercel/output
 node_modules
 ios
+.env
+.env*
 mobile/node_modules
 mobile/.expo

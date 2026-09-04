@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "PaperAI Trader",
+    "name": "Vanta",
     "slug": "paper-trader-mobile",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon-v2.png",
     "userInterfaceStyle": "automatic",
@@ -35,7 +35,7 @@
       "expo-font"
     ],
     "extra": {
-      "apiUrl": "https://paper-trader-lac.vercel.app",
+      "apiUrl": "https://paper-trader-clean.vercel.app",
       "eas": {
         "projectId": "0c09d383-ef50-4df0-b7ab-5a77cd306f6d"
       }

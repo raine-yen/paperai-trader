@@ -12,3 +12,4 @@ next-env.d.ts
 mobile/.expo
 mobile/dist
 mobile/node_modules
+.env*

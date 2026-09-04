@@ -63,9 +63,9 @@ export function Nav({ email }: { email?: string }) {
             <Menu className="h-5 w-5" />
           </button>
           <Link href="/dashboard" className="flex min-w-fit items-center gap-3 lg:px-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-green font-black text-black">P</div>
-            <div className="hidden sm:block lg:block">
-              <div className="font-black leading-tight tracking-tight">Paper <span className="text-accent-green">Trader</span></div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-green font-black text-black">V</div>
+                        <div className="hidden sm:block lg:block">
+                          <div className="font-black leading-tight tracking-tight">Vanta <span className="text-accent-green">Markets</span></div>
               <div className="text-[10px] uppercase tracking-[0.24em] text-gray-500">Simulate. Compete.</div>
             </div>
           </Link>

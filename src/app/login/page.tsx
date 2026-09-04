@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight, LockKeyhole, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,63 +16,78 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      setError(j.error ?? "login failed");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setError(j.error ?? "We could not sign you in. Try again.");
+        return;
+      }
+      router.replace("/dashboard");
+      router.refresh();
+    } catch {
+      setError("Network issue. Check your connection and try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <Link href="/" className="flex items-center gap-2 mb-8 justify-center">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-green flex items-center justify-center font-bold text-black">P</div>
-          <span className="font-semibold tracking-tight text-lg">Paper Trader</span>
+    <main className="relative grid min-h-screen overflow-hidden bg-bg text-gray-50 lg:grid-cols-[1.05fr_.95fr]">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_8%,rgba(52,211,153,.17),transparent_28rem),radial-gradient(circle_at_85%_90%,rgba(56,189,248,.1),transparent_28rem)]" />
+
+      <section className="relative flex min-h-screen flex-col px-6 py-6 sm:px-10 lg:px-16 lg:py-10">
+        <Link href="/" className="inline-flex w-fit items-center gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent-green">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent-green text-lg font-black text-black shadow-[0_0_34px_rgba(52,211,153,.32)]">V</span>
+          <span>
+            <span className="block text-lg font-black tracking-tight">Vanta</span>
+            <span className="block text-[10px] font-semibold uppercase tracking-[.24em] text-gray-500">Paper markets</span>
+          </span>
         </Link>
-        <div className="card p-6">
-          <h1 className="text-xl font-semibold mb-1">Welcome back</h1>
-          <p className="text-sm text-gray-400 mb-6">Log in to access your portfolio.</p>
-          <form onSubmit={submit} className="space-y-4">
+
+        <div className="my-auto w-full max-w-md py-14 lg:py-0">
+          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-accent-green/20 bg-accent-green/10 px-3 py-1.5 text-xs font-semibold text-accent-green">
+            <Sparkles className="h-3.5 w-3.5" />
+            Your paper portfolio, in motion
+          </div>
+          <h1 className="text-4xl font-black tracking-[-.045em] sm:text-5xl">Welcome back.</h1>
+          <p className="mt-4 max-w-sm text-base leading-7 text-gray-400">Sign in to see your simulated portfolio, live market scanner, and watchlists.</p>
+
+          <form onSubmit={submit} className="mt-9 space-y-5" noValidate>
             <div>
-              <label className="label">Email</label>
-              <input
-                type="email"
-                className="input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoFocus
-              />
+              <label htmlFor="email" className="label">Email address</label>
+              <input id="email" name="email" type="email" autoComplete="email" className="input h-12" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
             </div>
             <div>
-              <label className="label">Password</label>
-              <input
-                type="password"
-                className="input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <label htmlFor="password" className="label">Password</label>
+              <input id="password" name="password" type="password" autoComplete="current-password" className="input h-12" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
-            {error && <p className="text-sm text-accent-red">{error}</p>}
-            <button type="submit" disabled={loading} className="btn-primary w-full">
-              {loading ? "Signing in..." : "Sign in"}
+            {error && <p role="alert" className="rounded-lg border border-accent-red/30 bg-accent-red/10 px-3 py-2.5 text-sm text-red-200">{error}</p>}
+            <button type="submit" disabled={loading} className="btn-buy h-12 w-full text-base">
+              {loading ? "Signing in…" : <>Sign in to Vanta <ArrowRight className="h-4 w-4" /></>}
             </button>
           </form>
-          <p className="text-center text-sm text-gray-400 mt-6">
-            New here? <Link href="/signup" className="text-accent hover:underline">Create an account</Link>
-          </p>
+
+          <p className="mt-7 text-sm text-gray-400">New to Vanta? <Link href="/signup" className="font-semibold text-accent-green hover:text-green-300 focus-visible:outline-none focus-visible:underline">Create a paper account</Link></p>
         </div>
-      </div>
-    </div>
+
+        <p className="flex items-center gap-2 text-xs text-gray-500"><LockKeyhole className="h-3.5 w-3.5" /> Simulation only — no deposits, withdrawals, or real-money trading.</p>
+      </section>
+
+      <aside className="relative hidden border-l border-bg-border/70 bg-black/20 p-10 lg:flex lg:flex-col lg:justify-center">
+        <div className="max-w-md">
+          <p className="text-xs font-bold uppercase tracking-[.24em] text-accent-green">The Vanta terminal</p>
+          <h2 className="mt-5 text-5xl font-black leading-[.98] tracking-[-.055em]">See every move.<br />Keep the stakes virtual.</h2>
+          <div className="mt-12 overflow-hidden rounded-2xl border border-bg-border bg-bg-card/80 shadow-2xl shadow-black/40">
+            <div className="flex items-center justify-between border-b border-bg-border px-5 py-4"><span className="text-sm font-semibold">Portfolio value</span><span className="rounded-full bg-accent-green/10 px-2.5 py-1 text-xs font-bold text-accent-green">PAPER</span></div>
+            <div className="p-5"><div className="font-mono text-4xl font-bold tracking-tight">$10,000.00</div><div className="mt-2 text-sm font-semibold text-accent-green">Starting allocation · simulated</div><div className="mt-7 flex h-28 items-end gap-1.5">{[22,31,27,40,35,54,48,61,56,72,67,82].map((h, i) => <span key={i} className="flex-1 rounded-t bg-accent-green/80" style={{ height: `${h}%`, opacity: 0.35 + i / 20 }} />)}</div></div>
+          </div>
+        </div>
+      </aside>
+    </main>
   );
 }

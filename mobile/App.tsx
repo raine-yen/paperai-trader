@@ -24,7 +24,7 @@ const API_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
   "http://127.0.0.1:3000";
 
-const starterSymbols = ["AAPL", "NVDA", "TSLA", "MSFT", "SPY", "QQQ", "AMD", "META", "AMZN", "GOOGL", "NFLX"];
+const starterSymbols = ["AAPL", "NVDA", "TSLA", "MSFT", "SPY", "QQQ", "AMD", "META", "AMZN", "GOOGL", "GME", "RKLB", "BTC-USD", "ETH-USD", "DOGE-USD", "PEPE-USD"];
 const APP_STORE_PREVIEW = process.env.EXPO_PUBLIC_APP_STORE_PREVIEW === "1";
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12000) {

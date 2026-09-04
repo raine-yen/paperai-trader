@@ -1,5 +1,7 @@
 export const MARKET_GROUPS: Record<string, string[]> = {
   Popular: ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "SPY", "NFLX", "AMD"],
+  "Active traders": ["GME", "AMC", "SOFI", "PLTR", "RKLB", "IONQ", "MARA", "RIOT", "HOOD", "BBAI"],
+  Crypto: ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "DOGE-USD", "SHIB-USD", "PEPE-USD", "BONK-USD"],
   Tech: ["AAPL", "MSFT", "NVDA", "AMD", "INTC", "ORCL", "CRM", "SNOW", "PLTR", "UBER"],
   Finance: ["JPM", "BAC", "GS", "MS", "V", "MA", "BRK-B", "WFC", "AXP", "C"],
   ETFs: ["SPY", "QQQ", "VTI", "IWM", "GLD", "TLT", "ARKK", "DIA", "XLK", "XLF"],
@@ -73,6 +75,23 @@ export const COMPANY_NAMES: Record<string, string> = {
   COST: "Costco Wholesale",
   LOW: "Lowe's Cos.",
   DG: "Dollar General",
+  GME: "GameStop Corp.",
+  AMC: "AMC Entertainment",
+  SOFI: "SoFi Technologies",
+  RKLB: "Rocket Lab",
+  IONQ: "IonQ",
+  MARA: "MARA Holdings",
+  RIOT: "Riot Platforms",
+  HOOD: "Robinhood Markets",
+  BBAI: "BigBear.ai",
+  "BTC-USD": "Bitcoin",
+  "ETH-USD": "Ethereum",
+  "SOL-USD": "Solana",
+  "XRP-USD": "XRP",
+  "DOGE-USD": "Dogecoin",
+  "SHIB-USD": "Shiba Inu",
+  "PEPE-USD": "Pepe",
+  "BONK-USD": "Bonk",
 };
 
 export function getCompanyName(symbol: string) {

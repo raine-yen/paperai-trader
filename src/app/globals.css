@@ -167,6 +167,28 @@
   100% { background-color: transparent; }
 }
 
+/* Odometer price digits (Robinhood-style roll). Reel is a 10-cell column;
+   translateY(-d * 10%) lands digit d in view. Transitions run on GPU transforms. */
+.odometer-digit {
+  display: inline-block;
+  overflow: hidden;
+  height: 1em;
+  line-height: 1em;
+  vertical-align: bottom;
+}
+.odometer-reel {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.odometer-cell {
+  display: block;
+  height: 1em;
+  line-height: 1em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

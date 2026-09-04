@@ -41,12 +41,12 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <Link href="/" className="flex items-center gap-2 mb-8 justify-center">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-green flex items-center justify-center font-bold text-black">P</div>
-          <span className="font-semibold tracking-tight text-lg">Paper Trader</span>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-green flex items-center justify-center font-bold text-black">V</div>
+          <span className="font-semibold tracking-tight text-lg">Vanta</span>
         </Link>
         <div className="card p-6">
           <h1 className="text-xl font-semibold mb-1">Create your account</h1>
-          <p className="text-sm text-gray-400 mb-6">Start with $100,000 in paper money.</p>
+          <p className="text-sm text-gray-400 mb-6">Start with $10,000 in paper money.</p>
           <form onSubmit={submit} className="space-y-4">
             <div>
               <label className="label">Display name</label>

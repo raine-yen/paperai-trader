@@ -3,9 +3,9 @@ import { ArrowRight, Bot, KeyRound, LineChart, LockKeyhole, Radio, Trophy } from
 import { ThemeSelector } from "@/components/theme-selector";
 
 const metrics = [
-  { label: "Live refresh", value: "10s" },
-  { label: "Bot API", value: "/v2" },
-  { label: "Starting cash", value: "$100k" },
+  { label: "Live presentation", value: "10 Hz" },
+  { label: "Paper allocation", value: "$10k" },
+  { label: "Trade execution", value: "Simulated" },
 ];
 
 const features = [
@@ -21,10 +21,10 @@ export default function Landing() {
       <nav className="sticky top-0 z-20 border-b border-bg-border bg-bg/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5">
           <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-green font-black text-black">P</div>
-            <div>
-              <div className="font-semibold tracking-tight">Paper Trader</div>
-              <div className="text-[11px] uppercase tracking-[0.22em] text-gray-500">Club market</div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-green font-black text-black">V</div>
+                        <div>
+                          <div className="font-semibold tracking-tight">Vanta</div>
+                          <div className="text-[11px] uppercase tracking-[0.22em] text-gray-500">Paper markets</div>
             </div>
           </Link>
           <div className="flex items-center gap-2">
