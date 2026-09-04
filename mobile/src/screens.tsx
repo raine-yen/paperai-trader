@@ -612,17 +612,19 @@ function OrderScreen(props: DiscoverScreenProps) {
   const sellTooMuch = side === "sell" && desiredShares > ownedQty + 0.00001;
   const buyTooMuch = side === "buy" && notional > cash + 0.01;
   const invalidLimit = orderType === "limit" && (!Number.isFinite(Number(limitPrice)) || Number(limitPrice) <= 0);
-  const canReview = desiredShares > 0 && price > 0 && !sellTooMuch && !buyTooMuch && !invalidLimit;
+  // Account, position, and quote are refreshed before review, so this draft
+  // cannot disable a legitimate ticket merely because background state is old.
+  const canReview = numAmount > 0 && !invalidLimit;
   const validationMessage = sellTooMuch
-    ? `You can sell up to ${ownedQty.toFixed(4)} shares.`
+    ? `Current estimate: up to ${ownedQty.toFixed(4)} shares. The latest position will be checked before review.`
     : buyTooMuch
-      ? "This practice order is above your available buying power."
+      ? "Current estimate is above buying power. The latest account will be checked before review."
       : invalidLimit
         ? "Enter a valid limit price before review."
         : desiredShares <= 0
           ? "Enter a share or dollar amount to continue."
           : price <= 0
-            ? "A verified quote is required before review."
+            ? "The latest verified quote will be loaded before review."
             : "Ready for a final simulated-order review.";
 
   function setMax() {
@@ -709,10 +711,10 @@ function OrderScreen(props: DiscoverScreenProps) {
       <InlineNotice tone={canReview ? "success" : "warning"} title={canReview ? "Ready to review" : "Review is locked"} body={validationMessage} />
       <Button
         testID="order-review"
-        label="Review simulated order"
+        label={orderBusy ? "Checking latest order details…" : "Review simulated order"}
         icon="arrow-right"
         onPress={() => setOrderStage("review")}
-        disabled={!canReview}
+        disabled={!canReview || orderBusy}
         disabledReason={validationMessage}
       />
       <Text style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 18, textAlign: "center" }}>No order is sent until you confirm on the next screen.</Text>

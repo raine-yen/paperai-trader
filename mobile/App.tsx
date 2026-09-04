@@ -346,12 +346,60 @@ export default function App() {
     }
   }
 
-  function changeOrderStage(next: OrderStage) {
+  async function refreshOrderState() {
+    if (APP_STORE_PREVIEW) return { me, quote: selectedQuote };
+    const requestedSymbol = selectedSymbol;
+    const [nextMe, nextQuote] = await Promise.all([
+      api<Me>("/api/me"),
+      api<Quote>(`/api/quote?symbol=${encodeURIComponent(requestedSymbol)}`),
+    ]);
+    const quote = normalizeQuote(nextQuote, requestedSymbol);
+    setMe(nextMe);
+    setQuotes((previous) => ({ ...previous, [requestedSymbol]: quote }));
+    return { me: nextMe, quote };
+  }
+
+  function orderValidationError(snapshot: { me: Me | null; quote: Quote | null }) {
+    const quotePrice = Number(snapshot.quote?.price ?? 0);
+    const price = orderType === "limit" ? Number(limitPrice) : quotePrice;
+    const input = Number(amount) || 0;
+    const qty = amountMode === "dollars" ? (price > 0 ? input / price : 0) : input;
+    const normalizedQty = Math.floor(qty * 10000) / 10000;
+    if (!Number.isFinite(quotePrice) || quotePrice <= 0) return "A verified quote is required before reviewing this paper order.";
+    if (orderType === "limit" && (!Number.isFinite(price) || price <= 0)) return "Enter a limit price above zero.";
+    if (!normalizedQty || normalizedQty <= 0) return "Enter an order amount first.";
+    const cash = Number(snapshot.me?.account?.cash ?? 0);
+    const ownedQty = Number(snapshot.me?.positions.find((position) => position.symbol === selectedSymbol)?.qty ?? 0);
+    if (side === "buy" && normalizedQty * price > cash + 0.005) return "This estimate is above your current simulated buying power. Update the amount and review again.";
+    if (side === "sell" && normalizedQty > ownedQty + 0.00005) return "This amount is above your current simulated holdings. Update the amount and review again.";
+    return "";
+  }
+
+  async function changeOrderStage(next: OrderStage) {
     if (next === "review") {
-      const nextPrice = orderType === "limit" ? Number(limitPrice) : Number(selectedQuote?.price ?? 0);
-      setReviewQuotePrice(Number.isFinite(nextPrice) && nextPrice > 0 ? nextPrice : null);
-      setReviewClientOrderId(`mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
-    } else if (next === "configure") {
+      setOrderBusy(true);
+      setOrderMessage("");
+      try {
+        const fresh = await refreshOrderState();
+        const validationError = orderValidationError(fresh);
+        if (validationError) {
+          setOrderMessage(validationError);
+          setOrderStageState("configure");
+          return;
+        }
+        const nextPrice = orderType === "limit" ? Number(limitPrice) : Number(fresh.quote?.price ?? 0);
+        setReviewQuotePrice(nextPrice);
+        setReviewClientOrderId(`mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+        setOrderStageState("review");
+      } catch (e) {
+        setOrderMessage(e instanceof Error ? e.message : "Could not refresh order details.");
+        setOrderStageState("configure");
+      } finally {
+        setOrderBusy(false);
+      }
+      return;
+    }
+    if (next === "configure") {
       setReviewQuotePrice(null);
       setReviewClientOrderId(null);
     }
@@ -373,46 +421,29 @@ export default function App() {
 
   async function submitOrder() {
     if (orderSubmitInFlight.current) return;
-    const quotePrice = Number(selectedQuote?.price ?? 0);
-    if (!Number.isFinite(quotePrice) || quotePrice <= 0) {
-      setOrderMessage("A verified quote is required before confirming this paper order.");
-      setOrderStageState("configure");
-      return;
-    }
-    if (orderType === "market" && reviewQuotePrice != null && Math.abs(quotePrice - reviewQuotePrice) >= 0.005) {
-      setOrderMessage(`The quote changed from ${reviewQuotePrice.toFixed(2)} to ${quotePrice.toFixed(2)}. Review the updated estimate before confirming.`);
-      setOrderStageState("configure");
-      setReviewQuotePrice(null);
-      return;
-    }
-    const price = orderType === "limit" && Number(limitPrice) > 0 ? Number(limitPrice) : reviewQuotePrice ?? quotePrice;
-    const input = Number(amount) || 0;
-    const qty = amountMode === "dollars" ? (price > 0 ? input / price : 0) : input;
-    if (!qty || qty <= 0) {
-      setOrderMessage("Enter an order amount first.");
-      setOrderStageState("configure");
-      return;
-    }
-    const normalizedQty = Math.floor(qty * 10000) / 10000;
-    const notional = normalizedQty * price;
-    const cash = Number(me?.account?.cash ?? 0);
-    const ownedQty = Number(selectedPosition?.qty ?? 0);
-    if (side === "buy" && notional > cash + 0.005) {
-      setOrderMessage("This estimate is above your current simulated buying power. Update the amount and review again.");
-      setOrderStageState("configure");
-      setReviewQuotePrice(null);
-      return;
-    }
-    if (side === "sell" && normalizedQty > ownedQty + 0.00005) {
-      setOrderMessage("This amount is above your current simulated holdings. Update the amount and review again.");
-      setOrderStageState("configure");
-      setReviewQuotePrice(null);
-      return;
-    }
     orderSubmitInFlight.current = true;
     setOrderBusy(true);
     setOrderMessage("");
     try {
+      const fresh = await refreshOrderState();
+      const validationError = orderValidationError(fresh);
+      if (validationError) {
+        setOrderMessage(validationError);
+        setOrderStageState("configure");
+        setReviewQuotePrice(null);
+        return;
+      }
+      const quotePrice = Number(fresh.quote?.price ?? 0);
+      if (orderType === "market" && reviewQuotePrice != null && Math.abs(quotePrice - reviewQuotePrice) >= 0.005) {
+        setOrderMessage(`The quote changed from ${reviewQuotePrice.toFixed(2)} to ${quotePrice.toFixed(2)}. Review the updated estimate before confirming.`);
+        setOrderStageState("configure");
+        setReviewQuotePrice(null);
+        return;
+      }
+      const price = orderType === "limit" ? Number(limitPrice) : quotePrice;
+      const input = Number(amount) || 0;
+      const qty = amountMode === "dollars" ? input / price : input;
+      const normalizedQty = Math.floor(qty * 10000) / 10000;
       const order = APP_STORE_PREVIEW
         ? {
             id: "preview-confirmed-order",
@@ -435,11 +466,11 @@ export default function App() {
               client_order_id: reviewClientOrderId ?? undefined,
             }),
           });
+      if (!APP_STORE_PREVIEW) await refreshAll(false);
       setLastOrder(order);
       setOrderMessage(`${side === "buy" ? "Buy" : "Sell"} paper order ${order.status.replace(/_/g, " ")}. Your simulated portfolio is ready to review.`);
       setOrderStageState("receipt");
       setAmount("");
-      if (!APP_STORE_PREVIEW) await refreshAll(false);
     } catch (e) {
       setOrderMessage(e instanceof Error ? e.message : "Order failed");
     } finally {

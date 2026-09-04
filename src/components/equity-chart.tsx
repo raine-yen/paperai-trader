@@ -50,9 +50,9 @@ export function EquityChart({ snapshots, starting }: { snapshots: Snapshot[]; st
           />
           <ReferenceLine y={starting} stroke="#6b7280" strokeDasharray="3 3" />
           <Line
-            type="monotone"
+            type="linear"
             dataKey="equity"
-            stroke={isUp ? "#22c55e" : "#ef4444"}
+            stroke={isUp ? "#c8ff00" : "#ef4444"}
             strokeWidth={2}
             dot={false}
           />

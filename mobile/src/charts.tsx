@@ -1,4 +1,4 @@
-import { area as d3Area, line as d3Line } from "d3-shape";
+import { area as d3Area, curveLinear, line as d3Line } from "d3-shape";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LayoutChangeEvent, Pressable, Text, View } from "react-native";
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from "react-native-svg";
@@ -75,11 +75,12 @@ export function InteractiveLineChart({
       x: padX + (index / Math.max(source.length - 1, 1)) * usableWidth,
       y: padTop + (1 - (point.value - paddedMin) / range) * chartHeight,
     }));
-    const pathLine = d3Line<XYPoint>().x((point) => point.x).y((point) => point.y)(xy) ?? "";
+    const pathLine = d3Line<XYPoint>().x((point) => point.x).y((point) => point.y).curve(curveLinear)(xy) ?? "";
     const pathArea = d3Area<XYPoint>()
       .x((point) => point.x)
       .y0(height - padBottom)
-      .y1((point) => point.y)(xy) ?? "";
+      .y1((point) => point.y)
+      .curve(curveLinear)(xy) ?? "";
     const baselineY = baseline == null ? null : padTop + (1 - (baseline - paddedMin) / range) * chartHeight;
     return { xy, pathLine, pathArea, baselineY };
   }, [baseline, chartHeight, height, source, width]);
@@ -178,7 +179,7 @@ export function InteractiveLineChart({
               <Circle cx={end.x} cy={end.y} r={6} fill={colors.surface} stroke={stroke} strokeWidth={4} />
             </>
           ) : null}
-          <Path d={computed.pathLine} fill="none" stroke={stroke} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
+          <Path d={computed.pathLine} fill="none" stroke={stroke} strokeWidth={3} strokeLinejoin="miter" strokeLinecap="square" />
           {selected ? (
             <>
               <Line x1={selected.x} x2={selected.x} y1={padTop} y2={height - padBottom} stroke={colors.chartCrosshair} strokeOpacity={0.72} />

@@ -16,6 +16,8 @@
 import { decimalsFor } from "@/lib/price-precision";
 
 export const TICK_MS = 100;
+/** Real equity anchors are batched through one request, never per symbol. */
+export const EQUITY_ANCHOR_MS = 750;
 
 export interface LiveQuote {
   symbol: string;
@@ -126,7 +128,7 @@ class MarketFeed {
       this.pollTimer = null;
       void this.refreshAnchors();
       this.scheduleAnchorPoll();
-    }, 2_000);
+    }, EQUITY_ANCHOR_MS);
   }
 
   private async refreshAnchors() {
