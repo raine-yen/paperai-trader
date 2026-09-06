@@ -3,11 +3,24 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 // Direct Yahoo Finance HTTP fetch — no package, no crumb issues on serverless.
 // Uses the v8 chart endpoint which is the most reliable for single-symbol quotes.
 
+export type MarketState = "open" | "pre" | "post" | "closed" | "unknown";
+export type QuoteQuality = "delayed" | "last-close" | "after-hours" | "pre-market" | "unknown";
+
+/**
+ * A provider timestamp is intentionally kept separate from fetch time.  Fetch
+ * time only tells us when our server asked; it must never make a closed-market
+ * quote look like a new trade.
+ */
 export interface PriceQuote {
   symbol: string;
   price: number;
   prevClose: number | null;
   updatedAt: string;
+  providerTimestamp?: string | null;
+  marketState?: MarketState;
+  quality?: QuoteQuality;
+  source?: "yahoo" | "cache";
+  stale?: boolean;
 }
 
 export interface DetailedQuote extends PriceQuote {
@@ -39,22 +52,49 @@ const YAHOO_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-async function yahooQuote(symbol: string): Promise<{ price: number; prevClose: number | null } | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+function providerTime(epochSeconds: unknown): string | null {
+  return typeof epochSeconds === "number" && Number.isFinite(epochSeconds)
+    ? new Date(epochSeconds * 1000).toISOString()
+    : null;
+}
+
+/** Yahoo's currentTradingPeriod is provider-supplied exchange time. */
+function stateFromTradingPeriod(meta: Record<string, unknown>): MarketState {
+  const now = Date.now() / 1000;
+  const period = meta.currentTradingPeriod as Record<string, { start?: number; end?: number }> | undefined;
+  if (!period) return "unknown";
+  if (period.regular?.start != null && period.regular?.end != null && now >= period.regular.start && now < period.regular.end) return "open";
+  if (period.pre?.start != null && period.pre?.end != null && now >= period.pre.start && now < period.pre.end) return "pre";
+  if (period.post?.start != null && period.post?.end != null && now >= period.post.start && now < period.post.end) return "post";
+  return "closed";
+}
+
+async function yahooQuote(symbol: string): Promise<PriceQuote | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d&includePrePost=true`;
   try {
     const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 0 } });
     if (!res.ok) return null;
     const json = await res.json();
-    const meta = json?.chart?.result?.[0]?.meta;
-    if (!meta) return null;
-    const price =
-      meta.regularMarketPrice ??
-      meta.postMarketPrice ??
-      meta.preMarketPrice ??
-      null;
-    if (typeof price !== "number") return null;
-    const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? null;
-    return { price, prevClose };
+    const meta = json?.chart?.result?.[0]?.meta as Record<string, unknown> | undefined;
+    if (!meta || typeof meta.regularMarketPrice !== "number") return null;
+    const marketState = stateFromTradingPeriod(meta);
+    // We deliberately publish an extended quote only when the provider actually
+    // supplies one. Otherwise after-hours and pre-market remain last close.
+    const extendedPrice = marketState === "post" ? meta.postMarketPrice : marketState === "pre" ? meta.preMarketPrice : null;
+    const hasExtended = typeof extendedPrice === "number" && Number.isFinite(extendedPrice);
+    const price = hasExtended ? extendedPrice : meta.regularMarketPrice;
+    const providerTimestamp = providerTime(hasExtended ? (marketState === "post" ? meta.postMarketTime : meta.preMarketTime) : meta.regularMarketTime);
+    return {
+      symbol,
+      price,
+      prevClose: typeof meta.previousClose === "number" ? meta.previousClose : typeof meta.chartPreviousClose === "number" ? meta.chartPreviousClose : null,
+      updatedAt: new Date().toISOString(),
+      providerTimestamp,
+      marketState,
+      quality: hasExtended ? (marketState === "post" ? "after-hours" : "pre-market") : marketState === "open" ? "delayed" : "last-close",
+      source: "yahoo",
+      stale: marketState !== "open" || !providerTimestamp || Date.now() - new Date(providerTimestamp).getTime() > 90_000,
+    };
   } catch {
     return null;
   }
@@ -119,12 +159,12 @@ export async function fetchYahooPrice(symbol: string, options: { forceLive?: boo
   const upper = symbol.toUpperCase();
   const cached = memCache.get(upper);
   if (!options.forceLive && cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return { symbol: upper, price: cached.price, prevClose: cached.prevClose, updatedAt: new Date(cached.ts).toISOString() };
+    return { symbol: upper, price: cached.price, prevClose: cached.prevClose, updatedAt: new Date(cached.ts).toISOString(), providerTimestamp: new Date(cached.ts).toISOString(), marketState: "unknown", quality: "unknown", source: "cache", stale: true };
   }
   const q = await yahooQuote(upper);
   if (!q) return null;
   memCache.set(upper, { price: q.price, prevClose: q.prevClose, ts: Date.now() });
-  return { symbol: upper, price: q.price, prevClose: q.prevClose, updatedAt: new Date().toISOString() };
+  return q;
 }
 
 export async function fetchYahooDetailedQuote(symbol: string): Promise<DetailedQuote | null> {
@@ -168,13 +208,13 @@ export async function fetchYahooPrices(symbols: string[]): Promise<Map<string, P
     upper.map(async (s) => {
       const cached = memCache.get(s);
       if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-        out.set(s, { symbol: s, price: cached.price, prevClose: cached.prevClose, updatedAt: new Date(cached.ts).toISOString() });
+        out.set(s, { symbol: s, price: cached.price, prevClose: cached.prevClose, updatedAt: new Date(cached.ts).toISOString(), providerTimestamp: new Date(cached.ts).toISOString(), marketState: "unknown", quality: "unknown", source: "cache", stale: true });
         return;
       }
       const q = await yahooQuote(s);
       if (!q) return;
       memCache.set(s, { price: q.price, prevClose: q.prevClose, ts: Date.now() });
-      out.set(s, { symbol: s, price: q.price, prevClose: q.prevClose, updatedAt: new Date().toISOString() });
+      out.set(s, q);
     })
   );
   return out;

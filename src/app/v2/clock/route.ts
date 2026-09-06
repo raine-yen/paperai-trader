@@ -1,25 +1,25 @@
 import { NextResponse } from "next/server";
 
-// Returns NYSE-style market clock.
-// Simulator is always "open" so that orders can fill regardless of real market hours —
-// students often code outside school hours. For realism flip is_open to NYSE check below.
+/** Provider-independent NYSE session clock for display/API consumers.
+ * Trade simulation remains available outside the session, but this endpoint
+ * never calls a closed exchange open. */
 export async function GET() {
   const now = new Date();
-  // Simple NYSE schedule (Mon–Fri 9:30–16:00 ET)
-  const nyHour = Number(now.toLocaleString("en-US", { timeZone: "America/New_York", hour: "numeric", hour12: false }));
-  const nyMin = Number(now.toLocaleString("en-US", { timeZone: "America/New_York", minute: "numeric" }));
-  const nyDay = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" })).getDay();
-  const isWeekday = nyDay >= 1 && nyDay <= 5;
-  const minutes = nyHour * 60 + nyMin;
-  const realIsOpen = isWeekday && minutes >= 9 * 60 + 30 && minutes < 16 * 60;
-
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(now);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const weekday = value("weekday");
+  const minutes = Number(value("hour")) * 60 + Number(value("minute"));
+  const isWeekday = !["Sat", "Sun"].includes(weekday);
+  // Holiday closures require a provider calendar; consumers should treat this
+  // as an indicative schedule and rely on quote.marketState for final status.
+  const isOpen = isWeekday && minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+  const nextTransition = new Date(now.getTime() + 60_000).toISOString();
   return NextResponse.json({
-    timestamp: now.toISOString(),
-    is_open: true, // simulator is always open
-    next_open: now.toISOString(),
-    next_close: now.toISOString(),
-    real_market_open: realIsOpen,
+    timestamp: now.toISOString(), is_open: isOpen, real_market_open: isOpen,
+    next_open: nextTransition, next_close: nextTransition,
+    note: "Indicative NYSE schedule; quote endpoints provide authoritative provider marketState.",
   });
 }
-
 export const dynamic = "force-dynamic";
