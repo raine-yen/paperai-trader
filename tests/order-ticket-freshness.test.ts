@@ -42,9 +42,8 @@ test("paper-account provisioning never rewrites an existing portfolio", () => {
   const provisioning = read("src/lib/ensure-paper-account.ts");
   const ensureBlock = provisioning.match(/export async function ensurePaperAccount[\s\S]*?\n}\n/)?.[0] ?? "";
 
-  assert.match(ensureBlock, /\.select\("id"\)[\s\S]*\.eq\("user_id", user\.id\)[\s\S]*\.eq\("competition_id", competition\.id\)[\s\S]*\.maybeSingle\(\)/);
-  assert.match(ensureBlock, /if \(existing\) return/);
-  assert.doesNotMatch(ensureBlock, /\.upsert\(/);
+  assert.match(ensureBlock, /\.upsert\([\s\S]*onConflict:\s*"user_id,competition_id"[\s\S]*ignoreDuplicates:\s*true/);
+  assert.doesNotMatch(ensureBlock, /\.update\(/);
   assert.doesNotMatch(provisioning, /status: "active"/);
 });
 
@@ -72,6 +71,7 @@ test("sign in and sign up provision through the authenticated client", () => {
   const login = read("src/app/api/auth/login/route.ts");
   const signup = read("src/app/api/auth/signup/route.ts");
   const me = read("src/app/api/me/route.ts");
+  const sessionUser = read("src/lib/session-user.ts");
 
   assert.match(provisioning, /ensurePaperAccount\(user: PaperUser, db: SupabaseClient\)/);
   assert.match(login, /await ensurePaperAccount\(data\.user, sb\)/);
@@ -80,4 +80,6 @@ test("sign in and sign up provision through the authenticated client", () => {
   assert.doesNotMatch(signup, /from\("accounts"\)\.insert/);
   assert.match(me, /const db = await supabaseForRequest\(req\)/);
   assert.match(me, /await ensurePaperAccount\(user, db\)/);
+  assert.match(sessionUser, /const sb = await supabaseForRequest\(req\)/);
+  assert.doesNotMatch(sessionUser, /supabaseAdmin/);
 });

@@ -1,11 +1,12 @@
 import type { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { supabaseForRequest } from "@/lib/supabase/request";
 
 export async function getSessionUser(req?: NextRequest) {
   const token = req?.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (token) {
-    const { data } = await supabaseAdmin().auth.getUser(token);
+    const sb = await supabaseForRequest(req);
+    const { data } = await sb.auth.getUser(token);
     return data.user ?? null;
   }
 

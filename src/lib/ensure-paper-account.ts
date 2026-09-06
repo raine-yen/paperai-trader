@@ -61,17 +61,10 @@ async function getActivePaperCompetition(db: SupabaseClient): Promise<Competitio
 /** Provision one missing account without modifying an existing portfolio. */
 export async function ensurePaperAccount(user: PaperUser, db: SupabaseClient) {
   const competition = await getActivePaperCompetition(db);
-  const { data: existing, error: lookupError } = await db
-    .from("accounts")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("competition_id", competition.id)
-    .maybeSingle();
-
-  if (lookupError) throw new Error("Could not verify your paper account.");
-  if (existing) return;
-
-  const { error } = await db.from("accounts").insert(accountRow(user, competition));
+  const { error } = await db.from("accounts").upsert(accountRow(user, competition), {
+    onConflict: "user_id,competition_id",
+    ignoreDuplicates: true,
+  });
 
   if (error) throw new Error("Could not activate your paper account.");
 }
