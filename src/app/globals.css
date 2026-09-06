@@ -297,7 +297,7 @@
 .vanta-order-content { display: grid; gap: 14px; padding: 22px; }
 .vanta-order-content > h2 { margin: 0 0 3px; font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
 .vanta-segment { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border-subtle); }
-.vanta-segment button { min-height: 42px; background: #0b0b0b; color: var(--content-secondary); font-size: 12px; font-weight: 700; }
+.vanta-segment button { min-height: 44px; background: #0b0b0b; color: var(--content-secondary); font-size: 12px; font-weight: 700; }
 .vanta-segment button.is-active { background: white; color: black; }
 .vanta-amount { display: flex; align-items: center; min-height: 74px; border-bottom: 1px solid var(--border-strong); }
 .vanta-amount span { color: var(--content-secondary); font-size: 24px; }
