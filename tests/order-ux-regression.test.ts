@@ -38,3 +38,30 @@ test("Expo has a real submitting-paper-order stage before its receipt", () => {
   assert.match(screens, /orderStage === "processing"/);
   assert.match(screens, /Submitting paper order…|Submitting paper orderâ€¦/);
 });
+
+test("order UI preserves the flat black-lime rail and neutral sell treatment", () => {
+  const market = read("src/app/(app)/market/page.tsx");
+  const css = read("src/app/globals.css");
+  const flow = read("src/components/order-flow.tsx");
+  const mobile = read("mobile/src/screens.tsx");
+
+  assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+284px/);
+  assert.match(market, /label="Order side"/);
+  assert.match(market, /label="Order type"/);
+  assert.match(market, /label="Amount mode"/);
+  assert.match(market, /role="tablist" aria-label=\{label\}/);
+  assert.match(market, />Max<|>Max\s*</);
+  assert.match(css, /\.vanta-amount input[^}]*font-size:\s*30px/s);
+  assert.doesNotMatch(flow, /bullish\s*\?\s*"bg-accent-green\/15"\s*:\s*"bg-accent-red\/15"/);
+  assert.doesNotMatch(flow, /order-sheet card/);
+  assert.doesNotMatch(mobile, /side === "buy" \? colors\.bullishSoft : colors\.bearishSoft/);
+});
+
+test("new visitors default to the canonical midnight Vanta canvas", () => {
+  const layout = read("src/app/layout.tsx");
+  const provider = read("src/components/theme-provider.tsx");
+
+  assert.match(layout, /getItem\("paper-trader-theme"\)\|\|"midnight"/);
+  assert.match(provider, /useState<ThemePreference>\("midnight"\)/);
+  assert.match(provider, /\? stored : "midnight"/);
+});

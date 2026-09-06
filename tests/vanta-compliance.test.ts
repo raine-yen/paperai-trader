@@ -26,3 +26,10 @@ test("Vanta source has no reward, refill, or transfer cash pathways", () => {
 
   assert.doesNotMatch(source, /\b(reward_claims|paper_transfers|practice credits|claimReward)\b/i);
 });
+
+test("Vanta safety rail states the canonical $10,000 starting balance", () => {
+  const nav = readFileSync(join(root, "src", "components", "nav.tsx"), "utf8");
+
+  assert.match(nav, /Starting balance<\/span><strong>\$10,000<\/strong>/);
+  assert.doesNotMatch(nav, /\$0,000/);
+});

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { supabaseForRequest } from "@/lib/supabase/request";
 import { fetchYahooPrices } from "@/lib/prices";
 import { getSessionUser } from "@/lib/session-user";
 import { isMissingTableError } from "@/lib/app-data";
@@ -12,16 +12,16 @@ export async function GET(req: NextRequest) {
   const user = await getSessionUser(req);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  const db = await supabaseForRequest(req);
+
   try {
-    await ensurePaperAccount(user);
+    await ensurePaperAccount(user, db);
   } catch (provisionError) {
     return NextResponse.json(
       { error: provisionError instanceof Error ? provisionError.message : "Could not activate your paper account." },
       { status: 500 }
     );
   }
-
-  const db = supabaseAdmin();
 
   const { data: account } = await db
     .from("accounts")

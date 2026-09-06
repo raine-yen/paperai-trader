@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { ensurePaperAccount } from "@/lib/ensure-paper-account";
 import { supabaseServer } from "@/lib/supabase/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const signupSchema = z.object({
   email: z.string().email(),
@@ -32,23 +32,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message ?? "signup failed" }, { status: 400 });
   }
 
-  // Create the user's account in the default competition
-  const admin = supabaseAdmin();
-  const { data: comp } = await admin
-    .from("competitions")
-    .select("id, starting_cash")
-    .eq("is_default", true)
-    .maybeSingle();
-
-  if (comp) {
-    await admin.from("accounts").insert({
-      user_id: data.user.id,
-      competition_id: comp.id,
-      display_name: parsed.data.display_name,
-      cash: Number(comp.starting_cash),
-      starting_cash: Number(comp.starting_cash),
-      equity: Number(comp.starting_cash),
-    });
+  // If email confirmation is disabled, provision immediately through the new
+  // authenticated session. Otherwise the first successful login provisions it.
+  if (data.session) {
+    try {
+      await ensurePaperAccount(data.user, sb);
+    } catch (provisionError) {
+      return NextResponse.json(
+        { error: provisionError instanceof Error ? provisionError.message : "Could not activate your paper account." },
+        { status: 500 }
+      );
+    }
   }
 
   return NextResponse.json({ ok: true, user_id: data.user.id });

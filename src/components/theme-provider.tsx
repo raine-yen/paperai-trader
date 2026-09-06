@@ -20,12 +20,12 @@ function resolveTheme(preference: ThemePreference): ResolvedTheme {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>("system");
+  const [preference, setPreferenceState] = useState<ThemePreference>("midnight");
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
-    const initial = stored && ["system", "light", "dark", "midnight"].includes(stored) ? stored : "system";
+    const initial = stored && ["system", "light", "dark", "midnight"].includes(stored) ? stored : "midnight";
     setPreferenceState(initial);
   }, []);
 

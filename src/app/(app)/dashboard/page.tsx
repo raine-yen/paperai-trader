@@ -56,6 +56,7 @@ type Quest = {
 
 export default function Dashboard() {
   const [data, setData] = useState<MeData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [claimedRewards, setClaimedRewards] = useState<string[]>([]);
   const [claimingReward, setClaimingReward] = useState<string | null>(null);
@@ -64,12 +65,21 @@ export default function Dashboard() {
   useEffect(() => {
     let active = true;
     async function fetchMe() {
-      const r = await fetch("/api/me", { cache: "no-store" });
-      if (!r.ok) return;
-      const j = await r.json();
-      if (active) {
-        setData(j);
-        setLastUpdated(new Date());
+      try {
+        const r = await fetch("/api/me", { cache: "no-store" });
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          if (active) setLoadError(body.error ?? "Could not load your paper portfolio.");
+          return;
+        }
+        const j = await r.json();
+        if (active) {
+          setData(j);
+          setLoadError(null);
+          setLastUpdated(new Date());
+        }
+      } catch {
+        if (active) setLoadError("Could not load your paper portfolio.");
       }
     }
     fetchMe();
@@ -107,6 +117,16 @@ export default function Dashboard() {
     };
   }, [data?.account?.id]);
 
+  if (!data && loadError) {
+    return (
+      <section role="alert" className="border border-bg-border bg-bg-soft p-6">
+        <p className="text-xs font-bold uppercase tracking-[.18em] text-accent-green">Portfolio unavailable</p>
+        <h1 className="mt-3 text-2xl font-black tracking-tight">Could not load your paper portfolio</h1>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-gray-400">{loadError} Your paper balance and positions have not been changed.</p>
+        <button type="button" className="btn-buy mt-5" onClick={() => window.location.reload()}>Try again</button>
+      </section>
+    );
+  }
   if (!data) return <DashboardSkeleton />;
   if (!data.account) {
     return (

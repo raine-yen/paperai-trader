@@ -55,7 +55,8 @@ export function OrderSuccessOverlay({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onDismiss]);
 
-  const bullish = receipt.side === "buy";
+  const isBuy = receipt.side === "buy";
+  const successTone = receipt.ok ? "rgb(var(--color-green))" : "rgb(var(--color-red))";
 
   return (
     <div
@@ -66,21 +67,21 @@ export function OrderSuccessOverlay({
       onClick={onDismiss}
     >
       <div
-        className={cn("order-sheet card w-full max-w-md p-6 text-center", stage === "done" && "is-done")}
+        className={cn("order-sheet w-full max-w-md border border-bg-border bg-black p-6 text-center", stage === "done" && "is-done")}
         onClick={(e) => e.stopPropagation()}
       >
         {stage === "processing" ? (
           <div className="flex flex-col items-center gap-4 py-6">
             <Loader2 className="h-10 w-10 animate-spin text-accent-green" aria-hidden />
-            <p className="text-sm font-semibold text-gray-300">Submitting your {bullish ? "buy" : "sell"} order…</p>
+            <p className="text-sm font-semibold text-gray-300">Submitting your {isBuy ? "buy" : "sell"} order…</p>
           </div>
         ) : (
           <>
-            <div className={cn("mx-auto flex h-14 w-14 items-center justify-center rounded-full", bullish ? "bg-accent-green/15" : "bg-accent-red/15")}>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center border border-accent-green/40 bg-black">
               <svg viewBox="0 0 40 40" className="h-8 w-8" aria-hidden>
-                <circle cx="20" cy="20" r="17" className="order-check-ring" fill="none" strokeWidth="2" stroke={bullish ? "rgb(var(--color-green))" : "rgb(var(--color-red))"} />
+                <circle cx="20" cy="20" r="17" className="order-check-ring" fill="none" strokeWidth="2" stroke={successTone} />
                 {receipt.ok ? (
-                  <path d="M12.5 20.5 L18 26 L28 15" className="order-check-path" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" stroke={bullish ? "rgb(var(--color-green))" : "rgb(var(--color-red))"} />
+                  <path d="M12.5 20.5 L18 26 L28 15" className="order-check-path" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" stroke={successTone} />
                 ) : (
                   <path d="M14 14 L26 26 M26 14 L14 26" className="order-check-path" fill="none" strokeWidth="3" strokeLinecap="round" stroke="rgb(var(--color-red))" />
                 )}
@@ -90,7 +91,7 @@ export function OrderSuccessOverlay({
             <h2 id="order-receipt-title" className="mt-1 text-2xl font-black tracking-tight">{receipt.title}</h2>
             <p className="mt-2 text-sm text-gray-400" aria-live="polite">{receipt.detail}</p>
 
-            <dl className="mt-5 space-y-2 rounded-lg border border-bg-border/70 bg-bg-elevated/60 p-4 text-left text-sm">
+            <dl className="mt-5 space-y-2 border-y border-bg-border/70 py-4 text-left text-sm">
               <div className="flex justify-between gap-3">
                 <dt className="text-gray-500">Order</dt>
                 <dd className="font-semibold tabular-nums text-gray-50">

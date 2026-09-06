@@ -48,7 +48,7 @@ export function Nav({ email }: { email?: string }) {
         </div>
         <div className="vanta-rail-links">{links}</div>
         <div className="vanta-rail-bottom">
-          <div className="vanta-safety-card" aria-label="Paper account safety status"><span>Starting balance</span><strong>$0,000</strong><small>Paper funds only</small></div>
+          <div className="vanta-safety-card" aria-label="Paper account safety status"><span>Starting balance</span><strong>$10,000</strong><small>Paper funds only</small></div>
           <div className="flex items-center justify-between gap-2 px-2"><ThemeSelector compact /><button onClick={logout} className="vanta-icon-button" aria-label="Sign out"><LogOut className="h-4 w-4" /></button></div>
           {email ? <span className="truncate px-2 text-[10px] text-gray-500" title={email}>{email}</span> : null}
         </div>

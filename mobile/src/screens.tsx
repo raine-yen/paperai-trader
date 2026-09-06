@@ -635,7 +635,7 @@ function OrderScreen(props: DiscoverScreenProps) {
   if (orderStage === "processing") {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: space.x4, padding: space.x6, backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={side === "buy" ? colors.bullish : colors.bearish} accessibilityLabel="Submitting paper order" />
+        <ActivityIndicator size="large" color={colors.brand} accessibilityLabel="Submitting paper order" />
         <Text accessibilityLiveRegion="polite" style={{ color: colors.textPrimary, fontSize: 17, fontWeight: font.semibold }}>Submitting paper order…</Text>
         <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{side === "buy" ? "Buying" : "Selling"} {selectedSymbol} with simulated funds</Text>
       </View>
@@ -804,9 +804,9 @@ function OrderReviewScreen({
                 <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{side === "buy" ? "Simulated buy" : "Simulated sell"}</Text>
                 <Text style={{ marginTop: space.x1, color: colors.textPrimary, fontSize: isTablet ? 30 : 26, fontWeight: font.bold }}>{symbol}</Text>
               </View>
-              <View accessibilityLabel={`${side === "buy" ? "Buy" : "Sell"} side`} style={{ minHeight: 34, flexDirection: "row", alignItems: "center", gap: space.x1, paddingHorizontal: space.x3, borderRadius: radius.pill, backgroundColor: side === "buy" ? colors.bullishSoft : colors.bearishSoft }}>
-                <Feather name={side === "buy" ? "arrow-up-right" : "arrow-down-right"} size={14} color={side === "buy" ? colors.bullish : colors.bearish} />
-                <Text style={{ color: side === "buy" ? colors.bullish : colors.bearish, fontSize: 13, fontWeight: font.bold }}>{side === "buy" ? "BUY" : "SELL"}</Text>
+              <View accessibilityLabel={`${side === "buy" ? "Buy" : "Sell"} side`} style={{ minHeight: 34, flexDirection: "row", alignItems: "center", gap: space.x1, paddingHorizontal: space.x3, borderWidth: 1, borderColor: side === "buy" ? colors.brand : colors.borderStrong, backgroundColor: side === "buy" ? colors.brandSoft : colors.background }}>
+                <Feather name={side === "buy" ? "arrow-up-right" : "arrow-down-right"} size={14} color={side === "buy" ? colors.brand : colors.textSecondary} />
+                <Text style={{ color: side === "buy" ? colors.brand : colors.textPrimary, fontSize: 13, fontWeight: font.bold }}>{side === "buy" ? "BUY" : "SELL"}</Text>
               </View>
             </View>
             <View>

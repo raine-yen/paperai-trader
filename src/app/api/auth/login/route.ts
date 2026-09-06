@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await ensurePaperAccount(data.user);
+    await ensurePaperAccount(data.user, sb);
   } catch (provisionError) {
     return NextResponse.json(
       { error: provisionError instanceof Error ? provisionError.message : "Could not activate your paper account." },
