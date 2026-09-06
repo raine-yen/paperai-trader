@@ -632,6 +632,16 @@ function OrderScreen(props: DiscoverScreenProps) {
     else setAmount(amountMode === "shares" && price > 0 ? (Math.floor((cash / price) * 10000) / 10000).toFixed(4) : cash.toFixed(2));
   }
 
+  if (orderStage === "processing") {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: space.x4, padding: space.x6, backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={side === "buy" ? colors.bullish : colors.bearish} accessibilityLabel="Submitting paper order" />
+        <Text accessibilityLiveRegion="polite" style={{ color: colors.textPrimary, fontSize: 17, fontWeight: font.semibold }}>Submitting paper order…</Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{side === "buy" ? "Buying" : "Selling"} {selectedSymbol} with simulated funds</Text>
+      </View>
+    );
+  }
+
   if (orderStage === "receipt") {
     return (
       <OrderReceiptScreen

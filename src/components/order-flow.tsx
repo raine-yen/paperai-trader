@@ -31,6 +31,7 @@ export function OrderSuccessOverlay({
 }) {
   const [stage, setStage] = useState<"processing" | "done">("processing");
   const timers = useRef<number[]>([]);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -42,13 +43,26 @@ export function OrderSuccessOverlay({
     return () => timers.current.forEach(clearTimeout);
   }, []);
 
+  useEffect(() => {
+    if (stage === "done") closeRef.current?.focus();
+  }, [stage]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onDismiss();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss]);
+
   const bullish = receipt.side === "buy";
 
   return (
     <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center order-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="order-receipt-title"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm order-overlay sm:items-center"
       onClick={onDismiss}
     >
       <div
@@ -73,8 +87,8 @@ export function OrderSuccessOverlay({
               </svg>
             </div>
             <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Simulated order</p>
-            <h2 className="mt-1 text-2xl font-black tracking-tight">{receipt.title}</h2>
-            <p className="mt-2 text-sm text-gray-400">{receipt.detail}</p>
+            <h2 id="order-receipt-title" className="mt-1 text-2xl font-black tracking-tight">{receipt.title}</h2>
+            <p className="mt-2 text-sm text-gray-400" aria-live="polite">{receipt.detail}</p>
 
             <dl className="mt-5 space-y-2 rounded-lg border border-bg-border/70 bg-bg-elevated/60 p-4 text-left text-sm">
               <div className="flex justify-between gap-3">
@@ -102,7 +116,7 @@ export function OrderSuccessOverlay({
                   View orders
                 </button>
               )}
-              <button type="button" onClick={onDismiss} className={cn("btn w-full", !onOpenOrders && "col-span-2", "border border-bg-border text-gray-200 hover:bg-bg-elevated")}>
+              <button ref={closeRef} type="button" onClick={onDismiss} className={cn("btn w-full", !onOpenOrders && "col-span-2", "border border-bg-border text-gray-200 hover:bg-bg-elevated")}>
                 <X className="h-4 w-4" aria-hidden />
                 Close
               </button>

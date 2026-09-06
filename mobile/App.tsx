@@ -455,7 +455,9 @@ export default function App() {
             filled_avg_price: price,
             created_at: "2026-07-31T20:00:00.000Z",
           } satisfies Order
-        : await api<Order>("/api/trade", {
+        : await (async () => {
+            setOrderStageState("processing");
+            return api<Order>("/api/trade", {
             method: "POST",
             body: JSON.stringify({
               symbol: selectedSymbol,
@@ -466,6 +468,7 @@ export default function App() {
               client_order_id: reviewClientOrderId ?? undefined,
             }),
           });
+          })();
       if (!APP_STORE_PREVIEW) await refreshAll(false);
       setLastOrder(order);
       setOrderMessage(`${side === "buy" ? "Buy" : "Sell"} paper order ${order.status.replace(/_/g, " ")}. Your simulated portfolio is ready to review.`);
