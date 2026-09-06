@@ -44,6 +44,18 @@ interface Bar {
   c: number;
 }
 
+interface InstrumentSearchResult {
+  symbol: string;
+  displaySymbol: string;
+  name: string;
+  assetClass: "stock" | "etf" | "crypto";
+  exchange: string | null;
+  market: string;
+  tradable: boolean;
+  displayMarket: string;
+  matchTier: string;
+}
+
 type Side = "buy" | "sell";
 
 const CHART_RANGES = [
@@ -61,15 +73,18 @@ export default function MarketPage() {
   const [quotes, setQuotes] = useState<Map<string, Quote>>(new Map());
   const [loadingSymbols, setLoadingSymbols] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResult, setSearchResult] = useState<{ symbol: string; quote: Quote } | null>(null);
+  const [searchResults, setSearchResults] = useState<InstrumentSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [searchHasSearched, setSearchHasSearched] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [initialSide, setInitialSide] = useState<Side>("buy");
   const [cash, setCash] = useState(0);
   const [positions, setPositions] = useState<Position[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchAbort = useRef<AbortController | null>(null);
 
   const positionBySymbol = useMemo(() => new Map(positions.map((p) => [p.symbol.toUpperCase(), p])), [positions]);
   const categories = useMemo(() => ["Owned", ...Object.keys(MARKET_GROUPS)], []);
@@ -140,35 +155,76 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
-    const sym = searchQuery.trim().toUpperCase();
-    if (!sym) {
-      setSearchResult(null);
+    searchAbort.current?.abort();
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults([]);
       setSearchError("");
+      setSearchLoading(false);
+      setSearchHasSearched(false);
+      setActiveSearchIndex(-1);
       return;
     }
     searchDebounce.current = setTimeout(async () => {
+      const controller = new AbortController();
+      searchAbort.current = controller;
       setSearchLoading(true);
       setSearchError("");
-      setSearchResult(null);
-      const r = await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`, { cache: "no-store" });
-      setSearchLoading(false);
-      if (!r.ok) {
-        setSearchError(`No quote found for ${sym}`);
-        return;
+      setSearchHasSearched(false);
+      try {
+        const r = await fetch(`/api/instruments/search?q=${encodeURIComponent(query)}&limit=8`, { cache: "no-store", signal: controller.signal });
+        if (!r.ok) throw new Error("search unavailable");
+        const j = await r.json();
+        if (controller.signal.aborted) return;
+        const results = (j.results ?? []) as InstrumentSearchResult[];
+        setSearchResults(results);
+        setSearchHasSearched(true);
+        setActiveSearchIndex(results.length ? 0 : -1);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setSearchResults([]);
+        setSearchHasSearched(true);
+        setActiveSearchIndex(-1);
+        setSearchError("Search is temporarily unavailable. Try again.");
+      } finally {
+        if (!controller.signal.aborted) setSearchLoading(false);
       }
-      const j = await r.json();
-      const quote = parseQuote(j, sym);
-      setQuotes((prev) => new Map(prev).set(sym, quote));
-      setSearchResult({ symbol: sym, quote });
     }, 350);
+    return () => {
+      if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    };
   }, [searchQuery]);
+
+  function openInstrument(instrument: InstrumentSearchResult) {
+    if (!instrument.tradable) return;
+    openSymbol(instrument.symbol);
+  }
+
+  function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!searchResults.length) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSearchIndex((index) => (index + 1) % searchResults.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSearchIndex((index) => (index <= 0 ? searchResults.length - 1 : index - 1));
+    } else if (event.key === "Enter" && activeSearchIndex >= 0) {
+      event.preventDefault();
+      openInstrument(searchResults[activeSearchIndex]);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setSearchQuery("");
+    }
+  }
 
   function openSymbol(symbol: string, side: Side = "buy") {
     setInitialSide(side);
     setSelectedSymbol(symbol);
     setSearchQuery("");
-    setSearchResult(null);
+    setSearchResults([]);
     setSearchError("");
+    setSearchHasSearched(false);
+    setActiveSearchIndex(-1);
     fetchQuotesForSymbols([symbol], true);
   }
 
@@ -195,30 +251,60 @@ export default function MarketPage() {
         <section className="card overflow-hidden">
           <div className="border-b border-bg-border p-4">
             <div className="relative">
-              <div className="flex items-center gap-3 rounded-lg border border-bg-border bg-bg-elevated px-4 py-3 focus-within:border-accent-green">
+              <div className="flex items-center gap-3 rounded-lg border border-bg-border bg-bg-elevated px-4 py-3 transition-colors focus-within:border-accent-green">
                 <Search className="h-4 w-4 shrink-0 text-gray-500" />
                 <input
-                  className="flex-1 bg-transparent font-mono text-sm uppercase outline-none placeholder:font-sans placeholder:normal-case placeholder:text-gray-500"
-                  placeholder="Search any symbol, like AAPL or BRK-B"
+                  className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-gray-500"
+                  placeholder="Search Apple, Bitcoin, DOGE, or a ticker"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={Boolean(searchQuery && (searchResults.length || searchLoading || searchError || searchHasSearched))}
+                  aria-controls="instrument-search-results"
+                  aria-activedescendant={activeSearchIndex >= 0 ? `instrument-search-option-${activeSearchIndex}` : undefined}
                 />
                 {searchLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-500" />}
                 {searchQuery && !searchLoading && (
-                  <button onClick={() => { setSearchQuery(""); setSearchResult(null); setSearchError(""); }} aria-label="Clear search">
+                  <button className="rounded p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green" onClick={() => { setSearchQuery(""); setSearchResults([]); setSearchError(""); }} aria-label="Clear search">
                     <X className="h-4 w-4 text-gray-500 hover:text-white" />
                   </button>
                 )}
               </div>
-              {searchQuery && (searchResult || searchError) && (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-lg border border-bg-border bg-bg-card shadow-2xl">
+              {searchQuery && (searchResults.length || searchLoading || searchError || searchHasSearched) && (
+                <div id="instrument-search-results" role="listbox" aria-label="Instrument search results" className="absolute left-0 right-0 top-full z-20 mt-2 max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto rounded-lg border border-bg-border bg-bg-card shadow-2xl">
                   {searchError ? (
                     <div className="p-5 text-center text-sm text-gray-500">{searchError}</div>
-                  ) : searchResult ? (
-                    <button className="w-full p-4 text-left hover:bg-bg-elevated" onClick={() => openSymbol(searchResult.symbol)}>
-                      <QuoteLine symbol={searchResult.symbol} quote={searchResult.quote} ownedQty={positionBySymbol.get(searchResult.symbol)?.qty} />
+                  ) : searchLoading ? (
+                    <div className="flex items-center gap-3 p-4 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Finding instruments…</div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="p-5 text-center text-sm text-gray-500">No tradable instruments match “{searchQuery}”. Try a company, coin, or ticker.</div>
+                  ) : searchResults.map((result, index) => (
+                    <button
+                      key={result.symbol}
+                      id={`instrument-search-option-${index}`}
+                      role="option"
+                      aria-selected={index === activeSearchIndex}
+                      disabled={!result.tradable}
+                      className={cn("flex w-full items-center gap-3 border-b border-bg-border px-4 py-3 text-left last:border-b-0 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-accent-green", index === activeSearchIndex ? "bg-bg-elevated" : "hover:bg-bg-elevated", !result.tradable && "cursor-not-allowed opacity-50")}
+                      onMouseEnter={() => setActiveSearchIndex(index)}
+                      onClick={() => openInstrument(result)}
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bg-elevated font-mono text-xs font-black text-accent-green">{result.displaySymbol.slice(0, 3)}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-bold">{result.displaySymbol}</span>
+                          <span className="badge bg-bg-soft text-[10px] uppercase text-gray-400">{result.assetClass}</span>
+                        </div>
+                        <div className="truncate text-sm text-gray-400">{result.name}</div>
+                      </div>
+                      <div className="shrink-0 text-right text-xs text-gray-500">
+                        <div>{result.displayMarket}</div>
+                        <div className={result.tradable ? "mt-1 font-semibold text-accent-green" : "mt-1 font-semibold text-accent-red"}>{result.tradable ? "Tradable" : "Unavailable"}</div>
+                      </div>
                     </button>
-                  ) : null}
+                  ))}
                 </div>
               )}
             </div>
