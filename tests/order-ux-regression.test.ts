@@ -57,6 +57,29 @@ test("order UI preserves the flat black-lime rail and neutral sell treatment", (
   assert.doesNotMatch(mobile, /side === "buy" \? colors\.bullishSoft : colors\.bearishSoft/);
 });
 
+test("dashboard exposes buy and sell entry points to the market order rail", () => {
+  const dashboard = read("src/app/(app)/dashboard/page.tsx");
+
+  assert.match(dashboard, /Buy stock<\/Link>/);
+  assert.match(dashboard, /Sell stock<\/Link>/);
+  assert.match(dashboard, /&side=buy/);
+  assert.match(dashboard, /&side=sell/);
+  assert.match(dashboard, /Paper funds only/);
+});
+
+test("order success and rail animations are defined and honor reduced motion", () => {
+  const css = read("src/app/globals.css");
+  const flow = read("src/components/order-flow.tsx");
+
+  assert.match(css, /@keyframes order-scrim/);
+  assert.match(css, /@keyframes order-ring-draw/);
+  assert.match(css, /@keyframes order-check-draw/);
+  assert.match(css, /@keyframes rail-highlight/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(flow, /prefers-reduced-motion: reduce/);
+  assert.match(flow, /setStage\("done"\)/);
+});
+
 test("new visitors default to the canonical midnight Vanta canvas", () => {
   const layout = read("src/app/layout.tsx");
   const provider = read("src/components/theme-provider.tsx");

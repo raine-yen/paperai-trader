@@ -190,6 +190,11 @@ export default function Dashboard() {
                 {isUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
                 {formatUSD(investedGrowth)} ({formatPct(investedGrowthPct)}) on invested capital
               </div>
+              <div className="mt-5 flex items-center gap-3">
+                <Link href="/market" className="inline-flex min-h-11 items-center gap-2 bg-accent-green px-5 text-sm font-extrabold text-black transition-transform hover:brightness-95 active:scale-[.98]">Buy stock</Link>
+                <Link href="/market" className="inline-flex min-h-11 items-center border border-bg-border px-5 text-sm font-bold text-gray-200 transition-colors hover:border-gray-400 hover:bg-bg-elevated">Sell stock</Link>
+                <span className="text-xs text-gray-500">Paper funds only — no real money.</span>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:min-w-[360px]">
               <Metric label="Cash" value={formatUSD(account.cash)} icon={Wallet} />
@@ -358,7 +363,10 @@ export default function Dashboard() {
                           <span className="ml-1 text-xs opacity-70">{formatPct(Number(p.unrealized_plpc))}</span>
                         </td>
                         <td className="px-4 py-4 text-right">
-                          <Link href={`/market?symbol=${encodeURIComponent(p.symbol)}&side=sell`} className="rounded-md border border-bg-border px-3 py-1.5 text-xs font-semibold text-gray-300 hover:border-accent-red hover:text-accent-red">Sell</Link>
+                          <div className="inline-flex items-center justify-end gap-2">
+                            <Link href={`/market?symbol=${encodeURIComponent(p.symbol)}&side=buy`} className="rounded-md border border-accent-green/40 bg-accent-green/10 px-3 py-1.5 text-xs font-semibold text-accent-green hover:bg-accent-green hover:text-black">Buy</Link>
+                            <Link href={`/market?symbol=${encodeURIComponent(p.symbol)}&side=sell`} className="rounded-md border border-bg-border px-3 py-1.5 text-xs font-semibold text-gray-300 hover:border-accent-red hover:text-accent-red">Sell</Link>
+                          </div>
                         </td>
                       </tr>
                     );
