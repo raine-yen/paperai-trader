@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, Loader2, Search, X, Zap, Clock3, ShieldCheck } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ChevronLeft, Loader2, Search, X } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { COMPANY_NAMES, getCompanyName, MARKET_GROUPS } from "@/lib/market-data";
 import { cn, formatPct, formatUSD } from "@/lib/utils";
@@ -69,7 +69,6 @@ export default function MarketPage() {
   const [cash, setCash] = useState(0);
   const [positions, setPositions] = useState<Position[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [isTradingExpanded, setIsTradingExpanded] = useState(false);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const positionBySymbol = useMemo(() => new Map(positions.map((p) => [p.symbol.toUpperCase(), p])), [positions]);
@@ -171,16 +170,9 @@ export default function MarketPage() {
     setSearchResult(null);
     setSearchError("");
     fetchQuotesForSymbols([symbol], true);
-    // Auto-expand on mobile for the new trade panel
-    setIsTradingExpanded(true);
   }
 
   const selectedPosition = selectedSymbol ? positionBySymbol.get(selectedSymbol) ?? null : null;
-
-  // Close trading panel on mobile
-  function closeTradingPanel() {
-    setIsTradingExpanded(false);
-  }
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -199,9 +191,7 @@ export default function MarketPage() {
         </div>
       </header>
 
-      {/* Main layout: market table + trading panel */}
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_500px]">
-        {/* Market scanner table */}
+      <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_580px]">
         <section className="card overflow-hidden">
           <div className="border-b border-bg-border p-4">
             <div className="relative">
@@ -289,21 +279,29 @@ export default function MarketPage() {
           )}
         </section>
 
-        {/* Trading panel — sticky on desktop, expandable on mobile */}
-        <TradingPanel
-          symbol={selectedSymbol}
-          initialSide={initialSide}
-          quotes={quotes}
-          positionBySymbol={positionBySymbol}
-          cash={cash}
-          onClose={() => setSelectedSymbol(null)}
-          onTraded={() => {
-            fetchAccount();
-            if (selectedSymbol) fetchQuotesForSymbols([selectedSymbol], true);
-          }}
-          isExpanded={isTradingExpanded}
-          onToggleExpand={setIsTradingExpanded}
-        />
+        {selectedSymbol ? (
+          <StockTicket
+            key={selectedSymbol}
+            symbol={selectedSymbol}
+            initialSide={initialSide}
+            quote={quotes.get(selectedSymbol) ?? null}
+            position={selectedPosition}
+            cash={cash}
+            onClose={() => setSelectedSymbol(null)}
+            onTraded={() => {
+              fetchAccount();
+              fetchQuotesForSymbols([selectedSymbol], true);
+            }}
+          />
+        ) : (
+          <aside className="card flex min-h-[520px] items-center justify-center p-8 text-center">
+            <div>
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-elevated font-mono text-2xl font-black text-accent-green">PT</div>
+              <h2 className="text-2xl font-semibold">Select a stock</h2>
+              <p className="mt-2 max-w-xs text-sm leading-6 text-gray-500">Open any row to see a chart, owned shares, order preview, and safe buy/sell controls.</p>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );
@@ -390,191 +388,13 @@ function QuoteLine({ symbol, quote, ownedQty }: { symbol: string; quote: Quote; 
   );
 }
 
-/* ============================================================
-   TRADING PANEL — new sticky, expanded, animated buy/sell section
-   ============================================================ */
-function TradingPanel({ symbol, initialSide, quotes, positionBySymbol, cash, onClose, onTraded, isExpanded, onToggleExpand }: {
-  symbol: string | null;
-  initialSide: Side;
-  quotes: Map<string, Quote>;
-  positionBySymbol: Map<string, Position>;
-  cash: number;
-  onClose: () => void;
-  onTraded: () => void;
-  isExpanded: boolean;
-  onToggleExpand: (v: boolean) => void;
-}) {
-  // Always show a "quick buy/sell" card when no symbol selected
-  if (!symbol) {
-    return (
-      <aside className={cn(
-        "sticky top-20 z-10 flex h-fit flex-col overflow-hidden rounded-2xl border border-bg-border bg-bg-card transition-all duration-500 ease-out",
-        isExpanded ? "max-h-[90vh] shadow-2xl shadow-black/40" : "max-h-[500px]"
-      )}>
-        {/* Header bar with close/expand */}
-        <button
-          onClick={() => onToggleExpand(!isExpanded)}
-          className="flex w-full items-center justify-between border-b border-bg-border bg-bg-soft px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-white"
-          aria-label={isExpanded ? "Collapse trading panel" : "Expand trading panel"}
-        >
-          <div className="flex items-center gap-2">
-            <Zap className="h-3.5 w-3.5 text-accent-yellow" />
-            Trading Panel
-          </div>
-          <ChevronRight className={cn("h-4 w-4 transition-transform duration-300", isExpanded && "rotate-90")} />
-        </button>
-
-        {/* Collapsed: quick action prompt */}
-        {!isExpanded && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-elevated">
-              <Zap className="h-8 w-8 text-accent-yellow" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-white">Select a stock to start trading</p>
-              <p className="mt-1 text-xs text-gray-500">Choose any ticker from the table to open the full trade ticket.</p>
-            </div>
-          </div>
-        )}
-
-        {/* Expanded: show a default ticket or placeholder */}
-        {isExpanded && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-elevated">
-              <Search className="h-8 w-8 text-gray-400" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-white">No ticker selected</p>
-              <p className="mt-1 text-xs text-gray-500">Click on any row in the market table above, or search for a symbol to open the full buy/sell ticket.</p>
-            </div>
-            <div className="w-full rounded-xl border border-dashed border-bg-border p-4">
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <ShieldCheck className="h-3.5 w-3.5 text-accent-green" />
-                All trades are simulated — paper money only.
-              </div>
-            </div>
-          </div>
-        )}
-      </aside>
-    );
-  }
-
-  const quote = quotes.get(symbol) ?? null;
-  const position = positionBySymbol.get(symbol) ?? null;
-
-  return (
-    <aside className="sticky top-20 z-10 flex h-fit flex-col overflow-hidden rounded-2xl border border-bg-border bg-bg-card shadow-xl shadow-black/20 transition-all duration-500 ease-out">
-      {/* Header — fixed sticky top */}
-      <TradingPanelHeader
-        symbol={symbol}
-        initialSide={initialSide}
-        quote={quote}
-        position={position}
-        onClose={onClose}
-      />
-
-      {/* Body — scrollable */}
-      <div className="max-h-[calc(100vh-14rem)] overflow-y-auto p-5">
-        <StockTicket
-          symbol={symbol}
-          initialSide={initialSide}
-          quote={quote}
-          position={position}
-          cash={cash}
-          onTraded={onTraded}
-        />
-      </div>
-    </aside>
-  );
-}
-
-function TradingPanelHeader({ symbol, initialSide, quote, position, onClose }: {
-  symbol: string;
-  initialSide: Side;
-  quote: Quote | null;
-  position: Position | null;
-  onClose: () => void;
-}) {
-  const [side, setSide] = useState<Side>(initialSide);
-  const price = quote?.price ?? 0;
-  const ownedQty = Number(position?.qty ?? 0);
-  const ownedValue = ownedQty * price;
-  const change = quote?.change ?? (quote?.prevClose ? price - quote.prevClose : null);
-  const changePct = quote?.changePercent ?? (quote?.prevClose ? (change! / quote.prevClose) * 100 : null);
-  const isUp = change == null || change >= 0;
-
-  return (
-    <div className="sticky top-0 z-10 border-b border-bg-border bg-bg-card pb-4 pt-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-bg-elevated hover:text-white"
-            onClick={onClose}
-            aria-label="Close ticket"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="font-mono text-lg font-black">{symbol}</h2>
-              {position && <span className="badge bg-accent-green/15 text-accent-green">{ownedQty.toFixed(4)} owned</span>}
-            </div>
-            <div className="truncate text-xs text-gray-500">{getCompanyName(symbol)}</div>
-          </div>
-        </div>
-
-        {/* Buy / Sell toggle — large, prominent, animated */}
-        <div className="flex overflow-hidden rounded-xl bg-bg-elevated p-1 shadow-inner">
-          <button
-            onClick={() => { setSide("buy"); }}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-black transition-all duration-300 ease-out",
-              side === "buy"
-                ? "bg-accent-green text-black shadow-lg shadow-green-500/30 scale-100"
-                : "text-gray-500 hover:text-white scale-[0.98]"
-            )}
-          >
-            <ArrowUpRight className="h-3.5 w-3.5" />
-            Buy
-          </button>
-          <button
-            onClick={() => { setSide("sell"); }}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-black transition-all duration-300 ease-out",
-              side === "sell"
-                ? "bg-accent-red text-white shadow-lg shadow-red-500/30 scale-100"
-                : "text-gray-500 hover:text-white scale-[0.98]"
-            )}
-          >
-            <ArrowDownRight className="h-3.5 w-3.5" />
-            Sell
-          </button>
-        </div>
-      </div>
-
-      {/* Price bar */}
-      <div className="mt-4">
-        <div className="text-3xl font-black tabular-nums">{quote ? formatUSD(price) : "--"}</div>
-        {changePct != null && (
-          <div className={cn("mt-1 flex items-center gap-1 text-sm font-semibold", isUp ? "text-accent-green" : "text-accent-red")}>
-            {isUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-            {formatUSD(Math.abs(change!))} ({formatPct(Math.abs(changePct))}) today
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ============================================================
-   STOCK TICKET — the full buy/sell order form
-   ============================================================ */
-function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash, onTraded }: {
+function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash, onClose, onTraded }: {
   symbol: string;
   initialSide: Side;
   quote: Quote | null;
   position: Position | null;
   cash: number;
+  onClose: () => void;
   onTraded: () => void;
 }) {
   const [quote, setQuote] = useState<Quote | null>(initialQuote);
@@ -588,7 +408,6 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
   const [limitPrice, setLimitPrice] = useState(initialQuote ? initialQuote.price.toFixed(2) : "");
   const [submitting, setSubmitting] = useState(false);
   const [tradeResult, setTradeResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const [inputFocused, setInputFocused] = useState(false);
 
   useEffect(() => {
     setSide(initialSide);
@@ -674,215 +493,180 @@ function StockTicket({ symbol, initialSide, quote: initialQuote, position, cash,
     setSubmitting(false);
   }
 
-  // Visual state for the order input
-  const isHoveredOrFocused = inputFocused || !!amount;
-
   return (
-    <div className="space-y-5 animate-fade-in">
-      {/* Chart */}
-      <div>
-        <div className="mb-3 flex gap-1">
-          {CHART_RANGES.map(({ label, range }) => (
-            <button
-              key={range}
-              onClick={() => setChartRange(range)}
-              className={cn("flex-1 rounded-md py-1.5 text-xs font-bold transition-all duration-200", chartRange === range ? "bg-white text-black shadow-sm" : "text-gray-500 hover:bg-bg-elevated hover:text-white")}
-            >
-              {label}
-            </button>
-          ))}
+    <aside className="card overflow-hidden xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
+      <div className="sticky top-0 z-10 border-b border-bg-border bg-bg-card p-5">
+        <div className="flex items-center gap-3">
+          <button className="rounded-md p-2 text-gray-400 hover:bg-bg-elevated hover:text-white" onClick={onClose} aria-label="Close ticket">
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="font-mono text-2xl font-black">{symbol}</h2>
+              {position && <span className="badge bg-accent-green/15 text-accent-green">{ownedQty.toFixed(4)} owned</span>}
+            </div>
+            <div className="truncate text-sm text-gray-500">{getCompanyName(symbol)}</div>
+          </div>
         </div>
-        <div className="h-36 rounded-xl bg-bg-soft p-2">
-          {chartLoading ? (
-            <div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-gray-500" /></div>
-          ) : bars.length < 2 ? (
-            <div className="flex h-full items-center justify-center text-xs text-gray-600">Chart data unavailable</div>
-          ) : (
-            <PriceChart bars={bars} isUp={isUp} range={chartRange} />
+        <div className="mt-5">
+          <div className="text-4xl font-black tabular-nums">{quote ? formatUSD(price) : "--"}</div>
+          {changePct != null && (
+            <div className={cn("mt-1 flex items-center gap-1 text-sm font-semibold", isUp ? "text-accent-green" : "text-accent-red")}>
+              {isUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              {formatUSD(Math.abs(change!))} ({formatPct(Math.abs(changePct))}) today
+            </div>
           )}
         </div>
       </div>
 
-      {/* Stats grid — compact */}
-      <div className="grid grid-cols-2 gap-2">
-        <MiniStat label="Buying power" value={formatUSD(cash)} tone="text-accent-green" />
-        <MiniStat label="Owned value" value={formatUSD(ownedValue)} />
-        <MiniStat label="Volume" value={compactNumber(quote?.volume)} />
-        <MiniStat label="P/E ratio" value={metric(quote?.trailingPE)} />
-      </div>
-
-      {/* Position info */}
-      {position && (
-        <div className="rounded-xl border border-bg-border bg-bg-elevated/50 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Your position</span>
-            <button
-              onClick={() => { setSide("sell"); setMode("shares"); setAmount(ownedQty.toFixed(4)); }}
-              className="rounded-md px-2 py-1 text-xs font-bold text-accent-red transition-colors hover:bg-accent-red/10 hover:text-white"
-            >
-              Sell all
-            </button>
+      <div className="space-y-5 p-5">
+        <div>
+          <div className="mb-3 flex gap-1">
+            {CHART_RANGES.map(({ label, range }) => (
+              <button
+                key={range}
+                onClick={() => setChartRange(range)}
+                className={cn("flex-1 rounded-md py-1.5 text-xs font-bold transition-colors", chartRange === range ? "bg-white text-black" : "text-gray-500 hover:bg-bg-elevated hover:text-white")}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <SummaryRow label="Shares" value={ownedQty.toFixed(4)} />
-            <SummaryRow label="Avg cost" value={formatUSD(Number(position.avg_entry_price))} />
-            <SummaryRow label="Market value" value={formatUSD(Number(position.market_value))} />
-            <SummaryRow label="P/L" value={`${formatUSD(Number(position.unrealized_pl))} (${formatPct(Number(position.unrealized_plpc))})`} tone={Number(position.unrealized_pl) >= 0 ? "text-accent-green" : "text-accent-red"} />
+          <div className="h-44 rounded-lg bg-bg-soft p-2">
+            {chartLoading ? (
+              <div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-gray-500" /></div>
+            ) : bars.length < 2 ? (
+              <div className="flex h-full items-center justify-center text-xs text-gray-600">Chart data unavailable</div>
+            ) : (
+              <PriceChart bars={bars} isUp={isUp} range={chartRange} />
+            )}
           </div>
         </div>
-      )}
 
-      {/* Order type selector */}
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Order type</span>
-        <div className="flex gap-2">
-          {(["market", "limit"] as const).map((t) => (
+        <div className="grid grid-cols-2 gap-3">
+          <MiniMetric label="Buying power" value={formatUSD(cash)} tone="text-accent-green" />
+          <MiniMetric label="Owned value" value={formatUSD(ownedValue)} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <MiniMetric label="Market cap" value={compactMoney(quote?.marketCap)} />
+          <MiniMetric label="P/E ratio" value={metric(quote?.trailingPE)} />
+          <MiniMetric label="Volume" value={compactNumber(quote?.volume)} />
+          <MiniMetric label="52W range" value={rangeLabel(quote?.yearLow, quote?.yearHigh)} />
+        </div>
+
+        {position && (
+          <div className="surface p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="stat-label">Your position</span>
+              <button onClick={() => { setSide("sell"); setMode("shares"); setAmount(ownedQty.toFixed(4)); }} className="text-xs font-bold text-accent-red hover:text-white">Sell all</button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <SummaryRow label="Shares" value={ownedQty.toFixed(4)} />
+              <SummaryRow label="Avg cost" value={formatUSD(Number(position.avg_entry_price))} />
+              <SummaryRow label="Market value" value={formatUSD(Number(position.market_value))} />
+              <SummaryRow label="P/L" value={`${formatUSD(Number(position.unrealized_pl))} (${formatPct(Number(position.unrealized_plpc))})`} tone={Number(position.unrealized_pl) >= 0 ? "text-accent-green" : "text-accent-red"} />
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-lg bg-bg-elevated p-1.5">
+          <div className="grid grid-cols-2 gap-1">
             <button
-              key={t}
-              onClick={() => setOrderType(t)}
+              onClick={() => { setSide("buy"); setTradeResult(null); }}
               className={cn(
-                "rounded-lg border px-4 py-1.5 text-xs font-bold capitalize transition-all duration-200",
-                orderType === t
-                  ? "border-white/30 bg-white text-black shadow-sm"
-                  : "border-bg-border bg-transparent text-gray-500 hover:border-gray-500 hover:text-white"
+                "flex items-center justify-center gap-1.5 rounded-md py-3 text-sm font-black transition-all duration-200",
+                side === "buy"
+                  ? "bg-accent-green text-black shadow-2xl shadow-green-500/30 scale-[1.02]"
+                  : "text-gray-400 hover:text-white hover:bg-bg-elevated"
               )}
             >
-              {t}
+              <ArrowUpRight className="h-4 w-4" /> Buy
             </button>
-          ))}
+            <button
+              onClick={() => { setSide("sell"); setTradeResult(null); }}
+              className={cn(
+                "flex items-center justify-center gap-1.5 rounded-md py-3 text-sm font-black transition-all duration-200",
+                side === "sell"
+                  ? "bg-accent-red text-white shadow-2xl shadow-red-500/30 scale-[1.02]"
+                  : "text-gray-400 hover:text-white hover:bg-bg-elevated"
+              )}
+            >
+              <ArrowDownRight className="h-4 w-4" /> Sell
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Amount input — large, animated, clear */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="stat-label">Amount</span>
-          <div className="flex gap-1 rounded-lg bg-bg-elevated p-0.5">
-            {(["shares", "dollars"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setAmount(""); }}
-                className={cn(
-                  "rounded-md px-3 py-1 text-xs font-semibold capitalize transition-all duration-200",
-                  mode === m ? "bg-white text-black shadow-sm" : "text-gray-500 hover:text-white"
-                )}
-              >
-                {m}
-              </button>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Order type</span>
+          <div className="flex gap-2">
+            {(["market", "limit"] as const).map((t) => (
+              <button key={t} onClick={() => setOrderType(t)} className={cn("rounded-md px-3 py-1 text-xs font-bold capitalize", orderType === t ? "bg-white text-black" : "bg-bg-elevated text-gray-400 hover:text-white")}>{t}</button>
             ))}
           </div>
         </div>
 
-        <div
-          className={cn(
-            "flex items-center rounded-xl border-2 bg-bg-elevated transition-all duration-300 ease-out",
-            inputFocused ? "border-accent-green bg-bg-elevated shadow-lg shadow-green-500/10" : "border-bg-border hover:border-gray-500"
-          )}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-        >
-          <span className="pl-5 text-xl font-bold text-gray-500">{mode === "dollars" ? "$" : "#"}</span>
-          <input
-            type="number"
-            min="0"
-            step={mode === "dollars" ? "0.01" : "0.0001"}
-            max={side === "sell" ? (mode === "shares" ? ownedQty : ownedValue) : undefined}
-            className="w-full bg-transparent px-3 py-5 text-3xl font-black tabular-nums outline-none placeholder:text-gray-700"
-            placeholder="0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <button
-            onClick={setMax}
-            className={cn(
-              "px-5 text-xs font-black uppercase transition-all duration-300",
-              side === "buy" ? "text-accent-green hover:text-white" : "text-accent-red hover:text-white"
-            )}
-          >
-            Max
-          </button>
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="stat-label">Amount</span>
+            <div className="flex gap-1">
+              {(["shares", "dollars"] as const).map((m) => (
+                <button key={m} onClick={() => { setMode(m); setAmount(""); }} className={cn("rounded px-2 py-0.5 text-xs font-semibold capitalize", mode === m ? "bg-bg-elevated text-white" : "text-gray-500 hover:text-white")}>{m}</button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center rounded-xl border-2 border-bg-border bg-bg-elevated focus-within:border-accent-green transition-colors">
+            <span className="pl-5 pr-2 text-2xl font-black text-gray-500">{mode === "dollars" ? "$" : "#"}</span>
+            <input
+              type="number"
+              min="0"
+              step={mode === "dollars" ? "0.01" : "0.0001"}
+              max={side === "sell" ? (mode === "shares" ? ownedQty : ownedValue) : undefined}
+              className="w-full bg-transparent px-2 py-5 text-4xl font-black tabular-nums outline-none"
+              placeholder="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <button onClick={setMax} className="pr-5 text-sm font-black text-accent-green hover:text-white whitespace-nowrap">Max</button>
+          </div>
+          {side === "sell" && <div className="mt-2 text-xs text-gray-500">Available to sell: {ownedQty.toFixed(4)} shares ({formatUSD(ownedValue)}).</div>}
         </div>
 
-        {side === "sell" && amount && (
-          <div className="mt-2 text-xs text-gray-500">Available to sell: {ownedQty.toFixed(4)} shares ({formatUSD(ownedValue)}).</div>
-        )}
-
         {orderType === "limit" && (
-          <div className="mt-3">
+          <div>
             <label className="label">Limit price</label>
             <input className="input font-mono" type="number" min="0" step="0.01" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} />
           </div>
         )}
-      </div>
 
-      {/* Order preview — slides in when amount > 0 */}
-      {numAmount > 0 && (
-        <div className="rounded-xl border border-bg-border bg-bg-elevated/60 p-4 animate-fade-in">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Order preview</div>
-          <div className="space-y-2 text-sm">
+        {numAmount > 0 && (
+          <div className="rounded-xl bg-bg-elevated/50 border border-bg-border space-y-3 p-5 text-sm">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Order preview</div>
             <SummaryRow label="Shares" value={desiredShares > 0 ? desiredShares.toFixed(4) : "-"} />
             <SummaryRow label="Market price" value={formatUSD(price)} />
             <SummaryRow label={side === "buy" ? "Estimated cost" : "Estimated proceeds"} value={formatUSD(notional)} bold />
             {side === "sell" && <SummaryRow label="Shares left" value={`${Math.max(0, ownedQty - desiredShares).toFixed(4)}`} />}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Errors */}
-      {(sellTooMuch || cannotSell || buyTooMuch) && (
-        <div className="rounded-xl border border-accent-red/30 bg-accent-red/10 p-4 text-sm font-semibold text-accent-red animate-shake">
-          {cannotSell ? `You do not own ${symbol}, so selling is disabled.` : sellTooMuch ? `You can sell up to ${ownedQty.toFixed(4)} shares.` : `Not enough buying power for this order.`}
-        </div>
-      )}
+        {(sellTooMuch || cannotSell || buyTooMuch) && (
+          <div className="rounded-lg bg-accent-red/10 p-3 text-sm font-semibold text-accent-red">
+            {cannotSell ? `You do not own ${symbol}, so selling is disabled.` : sellTooMuch ? `You can sell up to ${ownedQty.toFixed(4)} shares.` : `Not enough buying power for this order.`}
+          </div>
+        )}
 
-      {/* Success / error result */}
-      {tradeResult && (
-        <div className={cn("rounded-xl p-4 text-center text-sm font-semibold animate-fade-in", tradeResult.ok ? "border border-accent-green/30 bg-accent-green/10 text-accent-green" : "border border-accent-red/30 bg-accent-red/10 text-accent-red")}>
-          {tradeResult.msg}
-        </div>
-      )}
+        {tradeResult && <div className={cn("rounded-lg p-3 text-center text-sm font-semibold", tradeResult.ok ? "bg-accent-green/10 text-accent-green" : "bg-accent-red/10 text-accent-red")}>{tradeResult.msg}</div>}
 
-      {/* Submit button — large, full width, animated */}
-      <button
-        onClick={submit}
-        disabled={!canSubmit}
-        className={cn(
-          "w-full rounded-xl py-5 text-lg font-black transition-all duration-300 ease-out",
-          "hover:scale-[1.02] active:scale-[0.98]",
-          "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100",
+        <button onClick={submit} disabled={!canSubmit} className={cn(
+          "w-full rounded-xl py-5 text-lg font-black tracking-wide transition-all duration-200 disabled:opacity-40 active:scale-[0.98]",
           side === "buy"
-            ? "bg-gradient-to-r from-green-500 to-green-400 text-black shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/30"
-            : "bg-gradient-to-r from-red-500 to-red-400 text-white shadow-lg shadow-red-500/20 hover:shadow-xl hover:shadow-red-500/30"
-        )}
-      >
-        {submitting ? (
-          <span className="flex items-center justify-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Processing...
-          </span>
-        ) : (
-          <span className="flex items-center justify-center gap-2">
-            {side === "buy" ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
-            {side === "buy" ? "Buy" : "Sell"} {symbol}
-          </span>
-        )}
-      </button>
-
-      {/* Guardrail note */}
-      <div className="flex items-start gap-2 rounded-lg border border-dashed border-bg-border bg-bg-soft/50 p-3 text-xs text-gray-500">
-        <Clock3 className="mt-0.5 h-3 w-3 shrink-0 text-accent-blue" />
-        <p>Sells are capped to your owned quantity before submission. All trades use simulated paper money.</p>
+            ? "bg-gradient-to-r from-green-500 to-accent-green text-black hover:from-green-400 hover:to-green-400 shadow-xl shadow-green-500/20 hover:shadow-green-500/30"
+            : "bg-gradient-to-r from-red-500 to-accent-red text-white hover:from-red-400 hover:to-red-400 shadow-xl shadow-red-500/20 hover:shadow-red-500/30"
+        )}>
+          {submitting ? <Loader2 className="mx-auto h-6 w-6 animate-spin" /> : `${side === "buy" ? "Buy" : "Sell"} ${symbol}`}
+        </button>
       </div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  return (
-    <div className="rounded-lg border border-bg-border bg-bg-elevated/50 p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{label}</div>
-      <div className={cn("mt-1 text-sm font-bold tabular-nums", tone)}>{value}</div>
-    </div>
+    </aside>
   );
 }
 
@@ -958,7 +742,17 @@ function compactNumber(value: number | null | undefined) {
   return Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 2 }).format(value);
 }
 
+function compactMoney(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return `$${compactNumber(value)}`;
+}
+
 function metric(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "-";
   return value.toFixed(2);
+}
+
+function rangeLabel(low: number | null | undefined, high: number | null | undefined) {
+  if (low == null || high == null || !Number.isFinite(low) || !Number.isFinite(high)) return "-";
+  return `${formatUSD(low)} - ${formatUSD(high)}`;
 }
