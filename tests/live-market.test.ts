@@ -1,69 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
-import { getMarketFeed, type LiveQuote } from "../src/lib/live-market";
 
-type InternalFeed = {
-  anchors: Map<string, {
-    symbol: string;
-    anchorPrice: number;
-    price: number;
-    prevClose: number | null;
-    lastRealAt: number;
-    source: LiveQuote["source"];
-    vol: number;
-    velocity: number;
-  }>;
-  snapshotCache: Map<string, LiveQuote>;
-  timer: ReturnType<typeof setInterval> | null;
-  tick: () => void;
-};
+const feedFile = readFileSync(resolve(import.meta.dirname, "../src/lib/live-market.ts"), "utf8");
 
-test("coalesces all simulated quotes into one subscriber update per 100ms tick", () => {
-  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
-  const previousRandom = Math.random;
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: { visibilityState: "visible" },
-  });
+test("equity presentation feed never generates a random or simulated quote", () => {
+  assert.doesNotMatch(feedFile, /Math\.random|gaussian\(|micro-walk|source:\s*["']sim/);
+  assert.match(feedFile, /fetch\(`\/api\/live/);
+  assert.match(feedFile, /providerTimestamp/);
+});
 
-  const feed = getMarketFeed() as unknown as InternalFeed;
-  if (feed.timer) clearInterval(feed.timer);
-  feed.timer = null;
-  feed.anchors.clear();
-  feed.snapshotCache.clear();
-  feed.anchors.set("AAA", {
-    symbol: "AAA",
-    anchorPrice: 11,
-    price: 10,
-    prevClose: 9.5,
-    lastRealAt: Date.now(),
-    source: "anchor",
-    vol: 0,
-    velocity: 0,
-  });
-  feed.anchors.set("BBB", {
-    symbol: "BBB",
-    anchorPrice: 11,
-    price: 10,
-    prevClose: 9.5,
-    lastRealAt: Date.now(),
-    source: "anchor",
-    vol: 0,
-    velocity: 0,
-  });
-
-  const snapshots: number[] = [];
-  const unsubscribe = getMarketFeed().subscribe((quotes) => snapshots.push(quotes.size));
-  snapshots.length = 0;
-  Math.random = () => 0.5;
-
-  try {
-    feed.tick();
-    assert.deepEqual(snapshots, [2]);
-  } finally {
-    unsubscribe();
-    Math.random = previousRandom;
-    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
-    else Reflect.deleteProperty(globalThis, "document");
-  }
+test("closed-market polling is deliberately slow and authoritative polling remains available", () => {
+  assert.match(feedFile, /export const OPEN_POLL_MS = 15_000/);
+  assert.match(feedFile, /export const CLOSED_POLL_MS = 120_000/);
+  assert.match(feedFile, /marketState === "open"/);
 });
