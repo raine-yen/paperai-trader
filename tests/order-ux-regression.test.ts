@@ -83,6 +83,17 @@ test("order success and rail animations are defined and honor reduced motion", (
   assert.match(flow, /setStage\("done"\)/);
 });
 
+test("the Apple workspace keeps the full page usable until a Buy or Sell ticket is opened", () => {
+  const market = read("src/app/(app)/market/page.tsx");
+  const css = read("src/app/globals.css");
+
+  assert.match(market, /cn\("vanta-workspace", ticketSide && "has-open-ticket"\)/);
+  assert.match(css, /\.vanta-workspace \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+  assert.match(css, /\.vanta-workspace\.has-open-ticket \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 284px/s);
+  assert.match(css, /\.vanta-order-rail \{[^}]*display:\s*none/s);
+  assert.match(css, /\.vanta-order-rail\.is-open \{[^}]*display:\s*block/s);
+});
+
 test("new visitors default to the canonical midnight Vanta canvas", () => {
   const layout = read("src/app/layout.tsx");
   const provider = read("src/components/theme-provider.tsx");

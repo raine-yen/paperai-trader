@@ -241,7 +241,8 @@
 }
 
 /* Vanta market workspace: deliberately flat, divider-led surfaces instead of cards. */
-.vanta-workspace { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) 284px; grid-template-rows: 58px 1fr; background: var(--surface-background); }
+.vanta-workspace { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 58px 1fr; background: var(--surface-background); }
+.vanta-workspace.has-open-ticket { grid-template-columns: minmax(0, 1fr) 284px; }
 .vanta-workspace-top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 28px; border-bottom: 1px solid var(--border-subtle); }
 .vanta-back, .vanta-workspace-top button { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; color: var(--content-secondary); font-size: 13px; }
 .vanta-back:hover { color: white; }
@@ -288,7 +289,8 @@
 .vanta-education article { min-height: 150px; padding: 20px 0; border-top: 1px solid var(--border-subtle); }
 .vanta-education h3 { margin: 12px 0 8px; font-size: 18px; font-weight: 600; letter-spacing: -.025em; }
 .vanta-education span { color: var(--content-secondary); font-size: 13px; line-height: 1.55; }
-.vanta-order-rail { grid-column: 2; grid-row: 2; position: sticky; top: 0; height: calc(100dvh - 58px); overflow-y: auto; background: #050505; }
+.vanta-order-rail { grid-column: 2; grid-row: 2; display: none; position: sticky; top: 0; height: calc(100dvh - 58px); overflow-y: auto; background: #050505; }
+.vanta-order-rail.is-open { display: block; }
 .vanta-order-rail header { padding: 24px 22px 18px; border-bottom: 1px solid var(--border-subtle); }
 .vanta-order-rail header div { display: flex; justify-content: space-between; align-items: baseline; margin-top: 15px; }
 .vanta-order-rail header div span, .vanta-order-rail header small { color: var(--content-secondary); font-size: 12px; }

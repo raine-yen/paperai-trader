@@ -177,7 +177,7 @@ function MarketWorkspace({ symbol, initialSide, initialQuote, position, cash, fe
   function closeTicket() { setTicketSide(null); }
 
   return (
-    <section className="vanta-workspace">
+    <section className={cn("vanta-workspace", ticketSide && "has-open-ticket")}>
       <header className="vanta-workspace-top"><button onClick={onBack} className="vanta-back"><ArrowLeft className="h-4 w-4" /> Back</button><div className="vanta-workspace-search"><Search className="h-4 w-4" /><span>Search markets</span><kbd>⌘ K</kbd></div></header>
       <main className="vanta-detail">
         <div className="vanta-instrument"><span className="vanta-ticker-mark">{symbol.slice(0, 2)}</span><div><p>{symbol} · {quote?.exchange ?? "NASDAQ"}</p><h1>{quote?.name ?? getCompanyName(symbol)}</h1><span>Illustrative paper-market reference</span></div></div>
