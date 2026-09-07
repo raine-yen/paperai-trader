@@ -202,8 +202,8 @@ function OrderRail({ symbol, price, initialSide, open, nonce, position, cash, on
  useEffect(() => {
    if (!open) return;
    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-   railRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
-   amountRef.current?.focus({ preventScroll: true });
+   railRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+   window.requestAnimationFrame(() => amountRef.current?.focus());
  }, [open, nonce]);
   useEffect(() => {
     if (stage !== "review") return;

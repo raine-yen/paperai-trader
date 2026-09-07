@@ -94,6 +94,8 @@ test("the Apple workspace keeps the full page usable until a Buy or Sell ticket 
   assert.match(css, /\.vanta-order-rail\.is-open \{[^}]*display:\s*block/s);
   assert.match(css, /\.vanta-order-content \{[^}]*min-width:\s*0/s);
   assert.match(css, /\.vanta-amount \{[^}]*min-width:\s*0[^}]*width:\s*100%/s);
+  assert.match(market, /railRef\.current\?\.scrollIntoView\(\{ behavior: reduce \? "auto" : "smooth", block: "start" \}\)/);
+  assert.match(market, /requestAnimationFrame\(\(\) => amountRef\.current\?\.focus\(\)\)/);
 });
 
 test("new visitors default to the canonical midnight Vanta canvas", () => {
