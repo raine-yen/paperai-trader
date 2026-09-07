@@ -221,7 +221,7 @@ export default function Dashboard() {
               <h2 className="font-semibold">Account Mix</h2>
               <p className="text-xs text-gray-500">Cash and open market value</p>
             </div>
-            <Link href="/market" className="text-xs font-semibold text-accent-green hover:text-gray-50">Trade</Link>
+            <button type="button" onClick={() => openTradeLauncher("buy")} className="text-xs font-semibold text-accent-green hover:text-gray-50">Trade</button>
           </div>
           <div className="space-y-4">
             <Allocation label="Cash" value={account.cash} total={allocationBase} tone="bg-accent-blue" />
@@ -336,7 +336,7 @@ export default function Dashboard() {
           </div>
           {positions.length === 0 ? (
             <div className="p-10 text-center text-sm text-gray-500">
-              No open holdings. <Link href="/market" className="text-accent-green hover:underline">Find your first trade.</Link>
+              No open holdings. <button type="button" onClick={() => openTradeLauncher("buy")} className="text-accent-green hover:underline">Find your first trade.</button>
             </div>
           ) : (
             <div className="overflow-x-auto">
