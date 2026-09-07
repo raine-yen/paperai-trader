@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { supabaseForRequest } from "@/lib/supabase/request";
 import { getSessionUser } from "@/lib/session-user";
 
 const REWARD_POINTS = 200; // recognition points only — never account cash
@@ -8,7 +9,9 @@ export async function GET(req: NextRequest) {
   const user = await getSessionUser(req);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const db = supabaseAdmin();
+  // Dashboard reads should not require a service-role key: this authenticated
+  // request is constrained by the user's existing RLS policies.
+  const db = await supabaseForRequest(req);
   const { data: account } = await db
     .from("accounts")
     .select("id")
