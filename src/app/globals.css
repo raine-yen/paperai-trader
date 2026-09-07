@@ -296,12 +296,12 @@
 .vanta-order-rail header div span, .vanta-order-rail header small { color: var(--content-secondary); font-size: 12px; }
 .vanta-order-rail header strong { font-size: 17px; font-weight: 600; }
 .vanta-order-rail header small { display: block; margin-top: 7px; }
-.vanta-order-content { display: grid; gap: 14px; padding: 22px; }
+.vanta-order-content { display: grid; gap: 14px; min-width: 0; padding: 22px; }
 .vanta-order-content > h2 { margin: 0 0 3px; font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
 .vanta-segment { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border-subtle); }
 .vanta-segment button { min-height: 44px; background: #0b0b0b; color: var(--content-secondary); font-size: 12px; font-weight: 700; }
 .vanta-segment button.is-active { background: white; color: black; }
-.vanta-amount { display: flex; align-items: center; min-height: 74px; border-bottom: 1px solid var(--border-strong); }
+.vanta-amount { display: flex; align-items: center; min-width: 0; width: 100%; min-height: 74px; border-bottom: 1px solid var(--border-strong); }
 .vanta-amount span { color: var(--content-secondary); font-size: 24px; }
 .vanta-amount input { min-width: 0; flex: 1; padding: 0 8px; background: transparent; color: white; font-size: 30px; font-variant-numeric: tabular-nums; outline: none; }
 .vanta-amount button { min-height: 44px; color: var(--brand-lime); font-size: 12px; font-weight: 700; }
