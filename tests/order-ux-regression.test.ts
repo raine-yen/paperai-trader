@@ -57,13 +57,16 @@ test("order UI preserves the flat black-lime rail and neutral sell treatment", (
   assert.doesNotMatch(mobile, /side === "buy" \? colors\.bullishSoft : colors\.bearishSoft/);
 });
 
-test("dashboard exposes buy and sell entry points to the market order rail", () => {
+test("dashboard launches a selected paper buy or sell flow instead of a generic market page", () => {
   const dashboard = read("src/app/(app)/dashboard/page.tsx");
 
-  assert.match(dashboard, /Buy stock<\/Link>/);
-  assert.match(dashboard, /Sell stock<\/Link>/);
-  assert.match(dashboard, /&side=buy/);
-  assert.match(dashboard, /&side=sell/);
+  assert.match(dashboard, /openTradeLauncher\("buy"\)/);
+  assert.match(dashboard, /openTradeLauncher\("sell"\)/);
+  assert.match(dashboard, /role="dialog"/);
+  assert.match(dashboard, /aria-labelledby="paper-trade-launcher-title"/);
+  assert.match(dashboard, /id="dashboard-trade-symbol"/);
+  assert.match(dashboard, /Continue to \{tradeSide === "buy" \? "buy" : "sell"\}/);
+  assert.match(dashboard, /\/market\?symbol=\$\{encodeURIComponent\(symbol\)\}&side=\$\{tradeSide\}/);
   assert.match(dashboard, /Paper funds only/);
 });
 

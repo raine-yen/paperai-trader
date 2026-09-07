@@ -57,6 +57,8 @@ type Quest = {
 export default function Dashboard() {
   const [data, setData] = useState<MeData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [tradeSide, setTradeSide] = useState<"buy" | "sell" | null>(null);
+  const [tradeSymbol, setTradeSymbol] = useState("AAPL");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [claimedRewards, setClaimedRewards] = useState<string[]>([]);
   const [claimingReward, setClaimingReward] = useState<string | null>(null);
@@ -94,6 +96,11 @@ export default function Dashboard() {
     if (!data?.positions.length) return null;
     return [...data.positions].sort((a, b) => Math.abs(b.unrealized_pl) - Math.abs(a.unrealized_pl))[0];
   }, [data?.positions]);
+
+  function openTradeLauncher(side: "buy" | "sell") {
+    setTradeSide(side);
+    setTradeSymbol(topPosition?.symbol ?? "AAPL");
+  }
 
   useEffect(() => {
     if (!data?.account?.id) return;
@@ -190,9 +197,9 @@ export default function Dashboard() {
                 {isUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
                 {formatUSD(investedGrowth)} ({formatPct(investedGrowthPct)}) on invested capital
               </div>
-              <div className="mt-5 flex items-center gap-3">
-                <Link href="/market" className="inline-flex min-h-11 items-center gap-2 bg-accent-green px-5 text-sm font-extrabold text-black transition-transform hover:brightness-95 active:scale-[.98]">Buy stock</Link>
-                <Link href="/market" className="inline-flex min-h-11 items-center border border-bg-border px-5 text-sm font-bold text-gray-200 transition-colors hover:border-gray-400 hover:bg-bg-elevated">Sell stock</Link>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <button type="button" onClick={() => openTradeLauncher("buy")} className="inline-flex min-h-11 items-center gap-2 bg-accent-green px-5 text-sm font-extrabold text-black transition-transform hover:brightness-95 active:scale-[.98]">Buy stock</button>
+                <button type="button" onClick={() => openTradeLauncher("sell")} disabled={!positions.length} className="inline-flex min-h-11 items-center border border-bg-border px-5 text-sm font-bold text-gray-200 transition-colors hover:border-gray-400 hover:bg-bg-elevated disabled:cursor-not-allowed disabled:opacity-40" title={positions.length ? "Open a simulated sell order" : "You need a paper position before you can sell"}>Sell stock</button>
                 <span className="text-xs text-gray-500">Paper funds only — no real money.</span>
               </div>
             </div>
@@ -407,6 +414,36 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+      {tradeSide && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4 backdrop-blur-sm" role="presentation" onMouseDown={() => setTradeSide(null)}>
+          <form
+            className="w-full max-w-md border border-bg-border bg-black p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="paper-trade-launcher-title"
+            onMouseDown={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const symbol = tradeSymbol.trim().toUpperCase();
+              if (symbol) window.location.assign(`/market?symbol=${encodeURIComponent(symbol)}&side=${tradeSide}`);
+            }}
+          >
+            <p className="text-xs font-bold uppercase tracking-[.18em] text-accent-green">Paper trade</p>
+            <h2 id="paper-trade-launcher-title" className="mt-2 text-2xl font-black tracking-tight">{tradeSide === "buy" ? "Buy a stock" : "Sell a holding"}</h2>
+            <p className="mt-2 text-sm leading-6 text-gray-400">Choose a symbol, then review the simulated {tradeSide} order with live account and quote checks.</p>
+            <label className="mt-6 block text-xs font-bold uppercase tracking-[.16em] text-gray-500" htmlFor="dashboard-trade-symbol">Symbol</label>
+            <input id="dashboard-trade-symbol" autoFocus value={tradeSymbol} onChange={(event) => setTradeSymbol(event.target.value.toUpperCase().replace(/[^A-Z.]/g, "").slice(0, 10))} placeholder="AAPL" className="mt-2 h-14 w-full border border-bg-border bg-bg-soft px-4 font-mono text-xl font-bold uppercase text-white outline-none transition-colors focus:border-accent-green" />
+            <div className="mt-3 flex flex-wrap gap-2" aria-label="Popular symbols">
+              {["AAPL", "MSFT", "NVDA", "AMZN"].map((symbol) => <button key={symbol} type="button" onClick={() => setTradeSymbol(symbol)} className="min-h-10 border border-bg-border px-3 font-mono text-xs font-bold text-gray-300 hover:border-accent-green hover:text-accent-green">{symbol}</button>)}
+            </div>
+            <p className="mt-4 text-xs text-gray-500">Paper / simulated only — no real money. Nothing is sent until you confirm on the next screen.</p>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => setTradeSide(null)} className="min-h-12 border border-bg-border font-bold text-gray-300 hover:bg-bg-elevated">Cancel</button>
+              <button type="submit" disabled={!tradeSymbol.trim()} className="min-h-12 bg-accent-green px-4 font-extrabold text-black disabled:opacity-40">Continue to {tradeSide === "buy" ? "buy" : "sell"}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
