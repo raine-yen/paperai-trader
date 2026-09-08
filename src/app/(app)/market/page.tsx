@@ -151,6 +151,17 @@ function MarketWorkspace({ symbol, initialSide, initialQuote, position, cash, fe
   const [message, setMessage] = useState("");
   const [ticketSide, setTicketSide] = useState<Side | null>(null);
   const [ticketNonce, setTicketNonce] = useState(0);
+  const workspaceParams = useSearchParams();
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    // Arriving from the dashboard launcher (?side=buy|sell) means intent to trade — open the ticket straight away.
+    const side = workspaceParams.get("side");
+    if ((side === "buy" || side === "sell") && !autoOpenedRef.current) {
+      autoOpenedRef.current = true;
+      setTicketNonce((nonce) => nonce + 1);
+      setTicketSide(side);
+    }
+  }, [workspaceParams]);
   useEffect(() => { setQuote(initialQuote); }, [initialQuote]);
   useEffect(() => { setLoading(true); fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&range=${range}`, { cache: "no-store" }).then((response) => response.json()).then((data) => setBars(data.bars ?? [])).catch(() => setBars([])).finally(() => setLoading(false)); }, [range, symbol]);
   const price = quote?.price ?? 0;

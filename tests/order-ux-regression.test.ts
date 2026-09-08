@@ -106,3 +106,13 @@ test("new visitors default to the canonical midnight Vanta canvas", () => {
   assert.match(provider, /useState<ThemePreference>\("midnight"\)/);
   assert.match(provider, /\? stored : "midnight"/);
 });
+
+test("a side deep-link from the dashboard launcher opens the order ticket immediately", () => {
+  const market = read("src/app/(app)/market/page.tsx");
+
+  // MarketWorkspace must auto-open the ticket when arriving with ?side=buy|sell
+  assert.match(market, /workspaceParams\.get\("side"\)/);
+  assert.match(market, /setTicketSide\(side\)/);
+  // Guarded so it fires once per mount, not on every searchParam change
+  assert.match(market, /autoOpenedRef\.current/);
+});
