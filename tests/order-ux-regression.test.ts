@@ -6,15 +6,25 @@ import test from "node:test";
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
-test("market order ticket reuses the shared success overlay and keeps configure then review explicit", () => {
+test("market order ticket is one-tap: confirm button at the bottom of the bar, receipt animates inline on that bar", () => {
   const market = read("src/app/(app)/market/page.tsx");
+  const css = read("src/app/globals.css");
 
-  assert.match(market, /import\s+\{\s*OrderSuccessOverlay\s*,\s*type\s+OrderReceipt\s*\}\s+from\s+"@\/components\/order-flow"/);
-  assert.match(market, /const \[stage, setStage\] = useState<"configure" \| "review">\("configure"\)/);
-  assert.match(market, /aria-label="Sell NVDA paper order"|aria-label=\{`Sell \$\{symbol\} paper order`\}/);
-  assert.match(market, /Review paper order/);
-  assert.match(market, /Confirm paper trade/);
-  assert.match(market, /<OrderSuccessOverlay[\s\S]*receipt=\{receipt\}/);
+  // No separate full-screen success overlay anymore.
+  assert.doesNotMatch(market, /<OrderSuccessOverlay/);
+  // No two-stage review dialog.
+  assert.doesNotMatch(market, /Review paper order/);
+  assert.doesNotMatch(market, /vanta-review-scrim/);
+  // A single prominent confirm button carries the live side/symbol/notional and submits directly.
+  assert.match(market, /className=\{cn\("vanta-confirm-button", side === "sell" && "is-sell"\)\}\s*disabled=\{!valid \|\| submitting\}\s*onClick=\{submit\}/);
+  assert.match(market, /Enter" && valid && !submitting\) submit\(\)/);
+  // The receipt renders inside the same order bar (is-receipt), not a separate overlay.
+  assert.match(market, /vanta-order-rail is-open is-receipt/);
+  assert.match(market, /vanta-rail-receipt/);
+  assert.match(market, /role="status" aria-live="polite"/);
+  assert.match(css, /\.vanta-confirm-button \{[^}]*min-height:\s*54px/s);
+  assert.match(css, /\.vanta-order-rail\.is-receipt \{[^}]*animation:/s);
+  assert.match(css, /@keyframes rail-receipt-in/);
 });
 
 test("shared receipt is a keyboard-dismissible dialog and respects reduced motion", () => {

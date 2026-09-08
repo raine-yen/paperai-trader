@@ -6,16 +6,16 @@ import test from "node:test";
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
-test("web market tickets refresh authoritative account and quote state before review and submit", () => {
+test("web market tickets refresh authoritative account and quote state before submitting", () => {
   const market = read("src/app/(app)/market/page.tsx");
   assert.match(market, /async function refreshOrderState\(\)/);
   assert.match(market, /await Promise\.all\(\[fetchAccount\(\), fetchQuotes\(\[symbol\], true\)\]\)/);
   assert.match(market, /onReview=\{refreshOrderState\}/);
-  assert.equal(market.match(/const fresh = await onReview\(\);/g)?.length, 2);
-  assert.match(market, /async function review\(\).*setSubmitting\(true\)/s);
+  // One-tap flow: a single refresh-and-submit path (no separate review round).
+  assert.equal(market.match(/const fresh = await onReview\(\);/g)?.length, 1);
+  assert.doesNotMatch(market, /async function review\(\)/);
   assert.match(market, /async function submit\(\).*setSubmitting\(true\)/s);
-  assert.match(market, /Review paper order/);
-  assert.match(market, /Confirm paper trade/);
+  assert.match(market, /onClick=\{submit\}/);
   assert.match(market, /await onTraded\(\)/);
 });
 
