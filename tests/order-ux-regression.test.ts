@@ -117,12 +117,16 @@ test("new visitors default to the canonical midnight Vanta canvas", () => {
   assert.match(provider, /\? stored : "midnight"/);
 });
 
-test("a side deep-link from the dashboard launcher opens the order ticket immediately", () => {
+test("every selected stock opens a trade-ready order ticket without requiring the dashboard", () => {
   const market = read("src/app/(app)/market/page.tsx");
 
-  // MarketWorkspace must auto-open the ticket when arriving with ?side=buy|sell
-  assert.match(market, /workspaceParams\.get\("side"\)/);
-  assert.match(market, /setTicketSide\(side\)/);
-  // Guarded so it fires once per mount, not on every searchParam change
-  assert.match(market, /autoOpenedRef\.current/);
+  // Selecting any market-list or search result reaches MarketWorkspace via openSymbol.
+  assert.match(market, /function openSymbol\(symbol: string, side: Side = "buy"\)/);
+  assert.match(market, /onOpen=\{\(\) => openSymbol\(symbol\)\}/);
+  // The workspace opens its Buy/Sell ticket whenever its stock changes, whether
+  // the user came from the market list, search, or a dashboard deep link.
+  assert.match(market, /Every selected stock is immediately trade-ready/);
+  assert.match(market, /setTicketSide\(initialSide\)/);
+  assert.match(market, /\}, \[initialSide, symbol\]\);/);
+  assert.doesNotMatch(market, /autoOpenedRef/);
 });
