@@ -176,34 +176,19 @@ one app, not two:
   read-only against Polymarket's public data, write-only against our own
   Supabase tables.
 
-## 8. Open questions (need your call before I build)
-1. **Hosting for the websocket relay** — RESOLVED by inspection: `vercel.json`
-   defines cron-only serverless functions, no long-running Node process. A
-   persistent CLOB websocket relay is not viable on this hosting tier. **v1
-   ships with the polling fallback**: server-side polling of
-   `clob.polymarket.com/prices-history` + `gamma-api.polymarket.com/markets`
-   at ~1–2s cadence for the single market a user has open, cached and served
-   to the client via short-poll or SSE-over-serverless (each request re-invokes
-   the function, still sub-2s perceived latency). A websocket relay becomes a
-   fast-follow only if we provision a small always-on worker (Fly.io/Render/a
-   Vercel Edge Function with keep-alive isn't a fit either — would need a
-   real box). Flagging this so "every 1 sec" is understood as *near*-1s via
-   fast polling, not a true push socket, unless you want to provision that
-   worker.
-2. **Outcome scope**: ship Yes/No binary markets only for v1 (simplest, covers
-   the vast majority of Polymarket volume), or also support multi-outcome
-   markets (e.g. "who wins the election" with 5+ candidates)? Recommend
-   binary-only for v1.
-3. **Starting scope of markets**: all active Polymarket markets, or a curated
-   subset (politics/crypto/sports) to keep the surface manageable and avoid
-   NSFW/sensitive categories? Recommend filtering to Polymarket's own
-   `category` field, excluding anything flagged 18+/adult if such a flag
-   exists (need to verify Gamma API fields for this).
-4. Reuse existing `STARTING_CASH`/one shared cash balance across stocks +
-   crypto + predictions (single portfolio, my default assumption above), or a
-   separate prediction-only bankroll? Recommend single shared cash balance —
-   matches "your portfolio, one number" mental model and the portfolio-relative
-   % change work already shipped.
+## 8. Decisions (confirmed by user 2026-09-09)
+1. **Real-time strategy**: ship v1 now with fast polling (~1–2s), no new
+   infra. Note for later: user has a local box "GX10" that could become the
+   always-on worker for a true websocket relay if/when it's worth it — revisit
+   as a fast-follow, not blocking v1. Hosting is Vercel serverless
+   (`vercel.json` is cron-only, no long-running Node process), so a
+   persistent CLOB websocket relay isn't viable without that extra box.
+2. **Outcome scope**: binary (Yes/No) markets only for v1.
+3. **Market universe**: all active Polymarket markets (no category curation
+   for v1) — still exclude anything Gamma flags as closed/inactive.
+4. **Bankroll**: single shared portfolio cash balance across stocks, crypto,
+   and predictions — one equity number, matches the portfolio-relative %
+   change work already shipped.
 
 ## 9. Rollout order (once approved)
 1. Schema migration (new tables above) + typecheck.
