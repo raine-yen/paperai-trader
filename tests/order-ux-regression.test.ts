@@ -27,6 +27,18 @@ test("market order ticket is one-tap: confirm button at the bottom of the bar, r
   assert.match(css, /@keyframes rail-receipt-in/);
 });
 
+test("the permanent rail owns the only paper-order submission action for a selected stock", () => {
+  const market = read("src/app/(app)/market/page.tsx");
+
+  // The chart/detail region must not expose duplicate Buy/Sell action buttons.
+  assert.doesNotMatch(market, /vanta-trade-actions/);
+  assert.doesNotMatch(market, /vanta-sell-action/);
+  assert.doesNotMatch(market, /vanta-buy-action/);
+  // The rail's bottom confirmation is the sole functional /api/trade entry point.
+  assert.match(market, /fetch\("\/api\/trade", \{ method: "POST"/);
+  assert.match(market, /className=\{cn\("vanta-confirm-button", side === "sell" && "is-sell"\)\}[\s\S]*onClick=\{submit\}/);
+});
+
 test("shared receipt is a keyboard-dismissible dialog and respects reduced motion", () => {
   const flow = read("src/components/order-flow.tsx");
 
