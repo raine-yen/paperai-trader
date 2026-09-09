@@ -12,6 +12,49 @@ interface Entry {
   cost_basis: number;
   gain_amount: number;
   return_pct: number;
+  invested_growth_pct?: number;
+  tier?: number;
+  tier_name?: string;
+  division?: number;
+  rank_points?: number;
+  position?: number;
+  movement?: "up" | "down" | "new" | "same";
+  movement_amount?: number;
+}
+
+const TIER_STYLES: Record<string, string> = {
+  Iron: "text-gray-400 border-gray-500/40 bg-gray-500/10",
+  Bronze: "text-amber-600 border-amber-600/40 bg-amber-600/10",
+  Silver: "text-gray-200 border-gray-300/40 bg-gray-300/10",
+  Gold: "text-accent-yellow border-accent-yellow/40 bg-accent-yellow/10",
+  Diamond: "text-accent-blue border-accent-blue/50 bg-accent-blue/10",
+};
+
+function TierBadge({ tierName, division }: { tierName?: string; division?: number }) {
+  if (!tierName) return <span className="text-xs text-gray-500">Unranked</span>;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider",
+        TIER_STYLES[tierName] ?? "text-gray-400 border-bg-border",
+      )}
+      title={`${tierName} · Division ${division ?? 1}`}
+    >
+      {tierName === "Diamond" ? "◆" : tierName === "Gold" ? "●" : tierName === "Silver" ? "◐" : "▲"} {tierName}
+      {tierName === "Diamond" && division && division > 1 ? ` D${division}` : ""}
+    </span>
+  );
+}
+
+function MovementBadge({ movement, amount }: { movement?: string; amount?: number }) {
+  if (!movement || movement === "new") return <span className="text-[10px] font-bold uppercase tracking-wider text-accent-violet">New</span>;
+  if (movement === "same") return <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">—</span>;
+  const up = movement === "up";
+  return (
+    <span className={cn("text-xs font-black tabular-nums", up ? "text-accent-green" : "text-accent-red")}>
+      {up ? "▲" : "▼"} {amount ?? 1}
+    </span>
+  );
 }
 
 interface RevealedAsset {
@@ -110,9 +153,11 @@ export default function LeaderboardPage() {
               <thead className="bg-bg-soft text-xs uppercase tracking-wider text-gray-500">
                 <tr>
                   <th className="w-20 px-4 py-3 text-left font-semibold">Rank</th>
+                  <th className="px-4 py-3 text-left font-semibold">Tier</th>
                   <th className="px-4 py-3 text-left font-semibold">Trader</th>
                   <th className="px-4 py-3 text-right font-semibold">Portfolio</th>
                   <th className="px-4 py-3 text-right font-semibold">Return</th>
+                  <th className="px-4 py-3 text-right font-semibold">Move</th>
                   <th className="px-4 py-3 text-right font-semibold">P/L</th>
                   <th className="px-4 py-3 text-right font-semibold">Progress</th>
                   <th className="px-4 py-3 text-right font-semibold">Assets</th>
@@ -127,6 +172,7 @@ export default function LeaderboardPage() {
                     <Fragment key={entry.account_id}>
                       <tr className="ticker-row">
                         <td className="px-4 py-4"><RankBadge rank={index + 1} /></td>
+                        <td className="px-4 py-4"><TierBadge tierName={entry.tier_name} division={entry.division} /></td>
                         <td className="px-4 py-4">
                           <div className="font-semibold">{entry.display_name}</div>
                           <div className="text-xs text-gray-500">
@@ -135,6 +181,7 @@ export default function LeaderboardPage() {
                         </td>
                         <td className="px-4 py-4 text-right font-semibold tabular-nums">{formatUSD(Number(entry.equity))}</td>
                         <td className={cn("px-4 py-4 text-right font-black tabular-nums", up ? "text-accent-green" : "text-accent-red")}>{formatPct(Number(entry.return_pct))}</td>
+                        <td className="px-4 py-4 text-right"><MovementBadge movement={entry.movement} amount={entry.movement_amount} /></td>
                         <td className={cn("px-4 py-4 text-right font-semibold tabular-nums", up ? "text-accent-green" : "text-accent-red")}>{formatUSD(pl)}</td>
                         <td className="px-4 py-4 text-right">
                           <div className="ml-auto h-2 w-32 rounded-full bg-bg-elevated">
@@ -156,7 +203,7 @@ export default function LeaderboardPage() {
                       </tr>
                       {revealed[entry.account_id] && (
                         <tr className="border-b border-bg-border bg-bg-elevated/35">
-                          <td colSpan={7} className="px-4 py-4">
+                          <td colSpan={9} className="px-4 py-4">
                             {revealed[entry.account_id].length === 0 ? (
                               <div className="text-sm text-gray-500">{entry.display_name} has no open assets.</div>
                             ) : (
@@ -204,6 +251,7 @@ function PodiumCard({ entry, rank }: { entry: Entry; rank: number }) {
           <div>
             <div className="text-xs uppercase tracking-wider text-gray-500">Rank {rank}</div>
             <div className="font-semibold">{entry.display_name}</div>
+            <div className="mt-1"><TierBadge tierName={entry.tier_name} division={entry.division} /></div>
           </div>
         </div>
         <div className={cn("text-right font-black tabular-nums", up ? "text-accent-green" : "text-accent-red")}>{formatPct(Number(entry.return_pct))}</div>

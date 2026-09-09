@@ -6,6 +6,7 @@ import { isMissingTableError } from "@/lib/app-data";
 import { isAdminEmail } from "@/lib/admin";
 import { calculateInvestedPerformance } from "@/lib/performance";
 import { ensurePaperAccount } from "@/lib/ensure-paper-account";
+import { portfolioReturnPct } from "@/lib/ranks";
 
 // Authenticated dashboard endpoint — returns the current user's account, positions, recent orders.
 export async function GET(req: NextRequest) {
@@ -110,12 +111,11 @@ export async function GET(req: NextRequest) {
   }
   const ranked = ((leaderboard.data ?? []) as Array<{ id: string; cash: number; starting_cash: number }>).map((row) => {
     const liveEquity = Number(row.cash) + (positionValueByAccount.get(row.id) ?? 0);
-    const costBasis = positionCostByAccount.get(row.id) ?? 0;
-    const gainAmount = (positionValueByAccount.get(row.id) ?? 0) - costBasis;
     return {
       id: row.id,
       equity: liveEquity,
-      return_pct: costBasis > 0 ? (gainAmount / costBasis) * 100 : 0,
+      // Portfolio-relative: measured against the account's own starting capital.
+      return_pct: portfolioReturnPct({ equity: liveEquity, startingCash: Number(row.starting_cash) }),
     };
   }).sort((a, b) => b.return_pct - a.return_pct);
   const rankIndex = ranked.findIndex((row) => row.id === account.id);
