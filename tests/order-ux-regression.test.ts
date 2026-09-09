@@ -115,7 +115,9 @@ test("every selected stock has a permanent Buy/Sell rail with no hide or close a
   assert.doesNotMatch(market, /Close order ticket/);
   assert.match(market, /Place another order/);
   assert.match(css, /\.vanta-workspace\.has-open-ticket \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 284px/s);
-  assert.match(css, /\.vanta-order-rail\.is-open \{[^}]*display:\s*block/s);
+  assert.match(css, /\.vanta-order-rail\.is-open \{[^}]*display:\s*flex/s);
+  assert.match(market, /<footer className="vanta-order-footer">[\s\S]*Confirm \$\{side === "buy" \? "Buy" : "Sell"\}/);
+  assert.match(css, /\.vanta-order-footer \{[^}]*flex:\s*none/s);
   assert.match(css, /\.vanta-order-content \{[^}]*min-width:\s*0/s);
   assert.match(css, /\.vanta-amount \{[^}]*min-width:\s*0[^}]*width:\s*100%/s);
   assert.match(market, /railRef\.current\?\.scrollIntoView\(\{ behavior: reduce \? "auto" : "smooth", block: "start" \}\)/);

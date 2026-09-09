@@ -289,14 +289,15 @@
 .vanta-education article { min-height: 150px; padding: 20px 0; border-top: 1px solid var(--border-subtle); }
 .vanta-education h3 { margin: 12px 0 8px; font-size: 18px; font-weight: 600; letter-spacing: -.025em; }
 .vanta-education span { color: var(--content-secondary); font-size: 13px; line-height: 1.55; }
-.vanta-order-rail { grid-column: 2; grid-row: 2; display: none; position: sticky; top: 0; height: calc(100dvh - 58px); overflow-y: auto; background: #050505; }
-.vanta-order-rail.is-open { display: block; }
+.vanta-order-rail { grid-column: 2; grid-row: 2; display: none; position: sticky; top: 0; height: calc(100dvh - 58px); overflow: hidden; flex-direction: column; background: #050505; }
+.vanta-order-rail.is-open { display: flex; }
 .vanta-order-rail header { padding: 24px 22px 18px; border-bottom: 1px solid var(--border-subtle); }
 .vanta-order-rail header div { display: flex; justify-content: space-between; align-items: baseline; margin-top: 15px; }
 .vanta-order-rail header div span, .vanta-order-rail header small { color: var(--content-secondary); font-size: 12px; }
 .vanta-order-rail header strong { font-size: 17px; font-weight: 600; }
 .vanta-order-rail header small { display: block; margin-top: 7px; }
-.vanta-order-content { display: grid; gap: 14px; min-width: 0; padding: 22px; }
+.vanta-order-content { display: grid; gap: 14px; min-width: 0; min-height: 0; flex: 1; overflow-y: auto; padding: 22px; }
+.vanta-order-footer { flex: none; padding: 14px 22px max(18px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border-strong); background: #050505; box-shadow: 0 -10px 20px rgba(0, 0, 0, .22); }
 .vanta-order-content > h2 { margin: 0 0 3px; font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
 .vanta-segment { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border-subtle); }
 .vanta-segment button { min-height: 44px; background: #0b0b0b; color: var(--content-secondary); font-size: 12px; font-weight: 700; }
@@ -364,5 +365,5 @@
 .vanta-market-row:hover { background: #0b0b0b; }
 .vanta-market-row strong { display: block; font-size: 14px; }
 .vanta-market-row small { display: block; margin-top: 3px; color: var(--content-secondary); font-size: 12px; }
-@media (max-width: 900px) { .vanta-workspace { display: block; } .vanta-workspace-top { padding: 0 20px; } .vanta-workspace-search { width: auto; flex: 1; max-width: 360px; } .vanta-detail { width: 100%; padding: 28px 20px 32px; border: 0; } .vanta-chart { height: 260px; } .vanta-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vanta-order-rail { position: relative; top: auto; height: auto; border-top: 1px solid var(--border-strong); } .vanta-order-rail header { padding: 20px; } .vanta-order-content { padding: 20px; } .vanta-order-content::before { content: ""; width: 36px; height: 4px; justify-self: center; margin: -12px 0 4px; background: var(--border-strong); border-radius: 99px; } }
+@media (max-width: 900px) { .vanta-workspace { display: block; } .vanta-workspace-top { padding: 0 20px; } .vanta-workspace-search { width: auto; flex: 1; max-width: 360px; } .vanta-detail { width: 100%; padding: 28px 20px 32px; border: 0; } .vanta-chart { height: 260px; } .vanta-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vanta-order-rail { position: relative; top: auto; height: auto; overflow: visible; } .vanta-order-rail header { padding: 20px; } .vanta-order-content { overflow: visible; padding: 20px; } .vanta-order-footer { padding: 14px 20px max(20px, env(safe-area-inset-bottom)); } .vanta-order-content::before { content: ""; width: 36px; height: 4px; justify-self: center; margin: -12px 0 4px; background: var(--border-strong); border-radius: 99px; } }
 @media (max-width: 560px) { .vanta-workspace-top { padding: 0 14px; } .vanta-workspace-search { display: none; } .vanta-price-block { margin-top: 30px; } .vanta-facts, .vanta-position-grid, .vanta-education { grid-template-columns: 1fr 1fr; gap: 16px; } .vanta-education { display: grid; } .vanta-market-row { grid-template-columns: 42px minmax(120px, 1fr) minmax(80px, .55fr) minmax(68px, .4fr); gap: 10px; } .vanta-market-row > :last-child { display: none; } .vanta-paper-label { display: none; } .vanta-discover { padding: 0 20px 40px; } }
