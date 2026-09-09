@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownRight, ArrowLeft, ArrowUpRight, Loader2, Search, X } from "lucide-react";
+import { ArrowDownRight, ArrowLeft, ArrowUpRight, Bookmark, Loader2, Search, X } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getMarketFeed } from "@/lib/live-market";
 import { COMPANY_NAMES, getCompanyName, MARKET_GROUPS } from "@/lib/market-data";
+import { type InstrumentSearchResult } from "@/lib/instrument-catalog";
 import { cn, formatPct, formatUSD } from "@/lib/utils";
 import { type OrderReceipt } from "@/components/order-flow";
 
@@ -13,6 +14,7 @@ interface Quote { symbol?: string; price: number; prevClose: number | null; name
 interface Position { symbol: string; qty: number; avg_entry_price: number; current_price: number; market_value: number; unrealized_pl: number; unrealized_plpc: number; }
 interface Bar { t: string; c: number; }
 interface AccountSnapshot { cash: number; positions: Position[]; }
+interface PredictionMarket { id: string; question: string; yesPrice: number | null; noPrice: number | null; volume24hr: number | null; endDate: string | null; image: string | null; url: string; }
 type Side = "buy" | "sell";
 type Mode = "dollars" | "shares";
 type OrderType = "market" | "limit";
@@ -25,9 +27,15 @@ export default function MarketPage() {
   const [quotes, setQuotes] = useState<Map<string, Quote>>(new Map());
   const [loadingSymbols, setLoadingSymbols] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResult, setSearchResult] = useState<{ symbol: string; quote: Quote } | null>(null);
+  const [searchResults, setSearchResults] = useState<InstrumentSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [searchHasSearched, setSearchHasSearched] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+  const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [watchlistError, setWatchlistError] = useState("");
+  const [predictionMarkets, setPredictionMarkets] = useState<PredictionMarket[]>([]);
+  const [predictionError, setPredictionError] = useState("");
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [initialSide, setInitialSide] = useState<Side>("buy");
   const [cash, setCash] = useState(0);
@@ -36,8 +44,8 @@ export default function MarketPage() {
   const quotesRef = useRef(quotes);
 
   const positionBySymbol = useMemo(() => new Map(positions.map((position) => [position.symbol.toUpperCase(), position])), [positions]);
-  const categories = useMemo(() => ["Owned", ...Object.keys(MARKET_GROUPS)], []);
-  const symbols = useMemo(() => activeCategory === "Owned" ? positions.map((position) => position.symbol).sort() : MARKET_GROUPS[activeCategory] ?? [], [activeCategory, positions]);
+  const categories = useMemo(() => ["Owned", "Watchlist", ...Object.keys(MARKET_GROUPS)], []);
+  const symbols = useMemo(() => activeCategory === "Owned" ? positions.map((position) => position.symbol).sort() : activeCategory === "Watchlist" ? watchlist : MARKET_GROUPS[activeCategory] ?? [], [activeCategory, positions, watchlist]);
   const visibleSymbols = useMemo(() => selectedSymbol ? [selectedSymbol] : symbols, [selectedSymbol, symbols]);
 
   const fetchAccount = useCallback(async () => {
@@ -76,7 +84,24 @@ export default function MarketPage() {
     }
   }, []);
 
-  useEffect(() => { fetchAccount(); const id = window.setInterval(fetchAccount, 15_000); return () => window.clearInterval(id); }, [fetchAccount]);
+  const loadWatchlist = useCallback(async () => {
+    const response = await fetch("/api/watchlists", { cache: "no-store" });
+    if (!response.ok) { setWatchlistError("Your watchlist is temporarily unavailable."); return; }
+    const data = await response.json();
+    setWatchlist((data.items ?? []).map((item: { symbol: string }) => item.symbol.toUpperCase()));
+    setWatchlistError("");
+  }, []);
+
+  const loadPredictionMarkets = useCallback(async () => {
+    const response = await fetch("/api/prediction-markets", { cache: "no-store" });
+    if (!response.ok) { setPredictionError("Prediction markets are temporarily unavailable."); return; }
+    const data = await response.json();
+    setPredictionMarkets(data.items ?? []);
+    setPredictionError("");
+  }, []);
+
+  useEffect(() => { void fetchAccount(); const id = window.setInterval(() => void fetchAccount(), 15_000); return () => window.clearInterval(id); }, [fetchAccount]);
+  useEffect(() => { void loadWatchlist(); void loadPredictionMarkets(); }, [loadPredictionMarkets, loadWatchlist]);
   useEffect(() => { void fetchQuotes(visibleSymbols); }, [fetchQuotes, visibleSymbols]);
   useEffect(() => {
     const feed = getMarketFeed();
@@ -101,46 +126,76 @@ export default function MarketPage() {
   }, [fetchQuotes, searchParams]);
   useEffect(() => {
     window.clearTimeout(searchDebounce.current ?? undefined);
-    const symbol = searchQuery.trim().toUpperCase();
-    if (!symbol) { setSearchResult(null); setSearchError(""); return; }
+    const query = searchQuery.trim();
+    if (!query) { setSearchResults([]); setSearchError(""); setSearchHasSearched(false); setActiveSearchIndex(-1); return; }
     searchDebounce.current = window.setTimeout(async () => {
-      setSearchLoading(true); setSearchError(""); setSearchResult(null);
-      const response = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" });
+      setSearchLoading(true); setSearchError(""); setSearchHasSearched(false);
+      const response = await fetch(`/api/instruments/search?q=${encodeURIComponent(query)}&limit=8`, { cache: "no-store" });
       setSearchLoading(false);
-      if (!response.ok) { setSearchError(`No quote found for ${symbol}`); return; }
-      const quote = parseQuote(await response.json(), symbol);
-      setQuotes((previous) => new Map(previous).set(symbol, quote));
-      setSearchResult({ symbol, quote });
-    }, 300);
+      if (!response.ok) { setSearchResults([]); setSearchHasSearched(true); setActiveSearchIndex(-1); setSearchError("Search is temporarily unavailable. Try again."); return; }
+      const data = await response.json();
+      const results = (data.results ?? []) as InstrumentSearchResult[];
+      setSearchResults(results);
+      setSearchHasSearched(true);
+      setActiveSearchIndex(results.length ? 0 : -1);
+    }, 350);
     return () => window.clearTimeout(searchDebounce.current ?? undefined);
   }, [searchQuery]);
 
-  function openSymbol(symbol: string, side: Side = "buy") { setInitialSide(side); setSelectedSymbol(symbol); setSearchQuery(""); setSearchResult(null); setSearchError(""); fetchQuotes([symbol], true); }
+  function openInstrument(result: InstrumentSearchResult) { if (!result.tradable) return; openSymbol(result.symbol); }
 
-  if (selectedSymbol) return <MarketWorkspace symbol={selectedSymbol} initialSide={initialSide} initialQuote={quotes.get(selectedSymbol) ?? null} position={positionBySymbol.get(selectedSymbol) ?? null} cash={cash} fetchAccount={fetchAccount} fetchQuotes={fetchQuotes} onBack={() => setSelectedSymbol(null)} onTraded={async () => { await Promise.all([fetchAccount(), fetchQuotes([selectedSymbol], true)]); }} />;
+  async function toggleWatch(symbol: string) {
+    const normalized = symbol.toUpperCase();
+    const watched = watchlist.includes(normalized);
+    const response = await fetch(watched ? `/api/watchlists?symbol=${encodeURIComponent(normalized)}` : "/api/watchlists", {
+      method: watched ? "DELETE" : "POST",
+      headers: watched ? undefined : { "Content-Type": "application/json" },
+      body: watched ? undefined : JSON.stringify({ symbol: normalized }),
+    });
+    if (!response.ok) { setWatchlistError("Your watchlist could not be updated. Please try again."); return; }
+    setWatchlist((current) => watched ? current.filter((item) => item !== normalized) : [...current, normalized]);
+    setWatchlistError("");
+  }
+
+  function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!searchResults.length) return;
+    if (event.key === "ArrowDown") { event.preventDefault(); setActiveSearchIndex((index) => (index + 1) % searchResults.length); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setActiveSearchIndex((index) => (index <= 0 ? searchResults.length - 1 : index - 1)); }
+    else if (event.key === "Enter" && activeSearchIndex >= 0) { event.preventDefault(); openInstrument(searchResults[activeSearchIndex]); }
+    else if (event.key === "Escape") { event.preventDefault(); setSearchQuery(""); }
+  }
+
+  function openSymbol(symbol: string, side: Side = "buy") { setInitialSide(side); setSelectedSymbol(symbol); setSearchQuery(""); setSearchResults([]); setSearchError(""); setSearchHasSearched(false); setActiveSearchIndex(-1); fetchQuotes([symbol], true); }
+
+  if (selectedSymbol) return <MarketWorkspace symbol={selectedSymbol} initialSide={initialSide} initialQuote={quotes.get(selectedSymbol) ?? null} position={positionBySymbol.get(selectedSymbol) ?? null} cash={cash} fetchAccount={fetchAccount} fetchQuotes={fetchQuotes} onBack={() => { setSelectedSymbol(null); void loadWatchlist(); }} onTraded={async () => { await Promise.all([fetchAccount(), fetchQuotes([selectedSymbol], true)]); }} />;
 
   return (
     <section className="vanta-discover">
       <header className="vanta-search-header">
         <div className="relative w-full max-w-2xl">
-          <div className="vanta-search"><Search className="h-4 w-4" aria-hidden /><input autoFocus aria-label="Search a stock symbol" placeholder="Search markets" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value.toUpperCase())} />{searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{searchQuery ? <button onClick={() => setSearchQuery("")} aria-label="Clear search"><X className="h-4 w-4" /></button> : null}</div>
-          {searchQuery && (searchResult || searchError) ? <div className="vanta-search-result">{searchError ? <p>{searchError}</p> : searchResult ? <button onClick={() => openSymbol(searchResult.symbol)}><QuoteLine symbol={searchResult.symbol} quote={searchResult.quote} ownedQty={positionBySymbol.get(searchResult.symbol)?.qty} /></button> : null}</div> : null}
+          <div className="vanta-search"><Search className="h-4 w-4" aria-hidden /><input autoFocus aria-label="Search instruments by name or ticker" placeholder="Search Apple, Bitcoin, DOGE, or a ticker" role="combobox" aria-autocomplete="list" aria-expanded={Boolean(searchQuery && (searchResults.length || searchLoading || searchError || searchHasSearched))} aria-controls="instrument-search-results" aria-activedescendant={activeSearchIndex >= 0 ? `instrument-search-option-${activeSearchIndex}` : undefined} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={handleSearchKeyDown} />{searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{searchQuery ? <button onClick={() => { setSearchQuery(""); setSearchResults([]); setSearchError(""); }} aria-label="Clear search"><X className="h-4 w-4" /></button> : null}</div>
+          {searchQuery && (searchResults.length || searchLoading || searchError || searchHasSearched) ? <div id="instrument-search-results" role="listbox" aria-label="Instrument search results" className="vanta-search-result max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto">{searchError ? <p className="p-4 text-center">{searchError}</p> : searchLoading && !searchResults.length ? <p className="flex items-center justify-center gap-2 p-4"><Loader2 className="h-4 w-4 animate-spin" /> Finding instruments…</p> : searchResults.length === 0 ? <p className="p-4 text-center">No instruments match “{searchQuery}”. Try a company, coin, or ticker.</p> : searchResults.map((result, index) => <button key={result.symbol} id={`instrument-search-option-${index}`} role="option" aria-selected={index === activeSearchIndex} disabled={!result.tradable} onMouseEnter={() => setActiveSearchIndex(index)} onClick={() => openInstrument(result)} className={cn("flex w-full items-center gap-3 px-4 py-3 text-left", index === activeSearchIndex && "bg-bg-elevated", !result.tradable && "cursor-not-allowed opacity-50")}><span className="flex h-9 w-9 shrink-0 items-center justify-center bg-bg-elevated font-mono text-[10px] font-black text-accent-green">{result.displaySymbol.slice(0, 3)}</span><span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="font-mono text-sm font-bold">{result.displaySymbol}</span><span className="text-[10px] uppercase text-gray-500">{result.assetClass}</span></span><span className="block truncate text-xs text-gray-500">{result.name}</span></span><span className="shrink-0 text-right text-[11px] text-gray-500">{result.displayMarket}<span className={cn("mt-0.5 block font-semibold", result.tradable ? "text-accent-green" : "text-accent-red")}>{result.tradable ? "Tradable" : "Unavailable"}</span></span></button>)}</div> : null}
         </div>
         <span className="vanta-paper-label">Paper market data</span>
       </header>
       <div className="vanta-discover-intro"><p>DISCOVER</p><h1>Find a market to study.</h1><span>Prices are illustrative market references. Trades use simulated funds only.</span></div>
-      <div className="vanta-category-tabs" role="tablist" aria-label="Market categories">{categories.map((category) => <button key={category} role="tab" aria-selected={activeCategory === category} className={cn(activeCategory === category && "is-active")} onClick={() => setActiveCategory(category)}>{category}{category === "Owned" && positions.length ? ` · ${positions.length}` : ""}</button>)}</div>
+      <div className="vanta-category-tabs" role="tablist" aria-label="Market categories">{categories.map((category) => <button key={category} role="tab" aria-selected={activeCategory === category} className={cn(activeCategory === category && "is-active")} onClick={() => setActiveCategory(category)}>{category}{category === "Owned" && positions.length ? ` · ${positions.length}` : category === "Watchlist" && watchlist.length ? ` · ${watchlist.length}` : ""}</button>)}</div>
       <div className="vanta-market-list">
-        {symbols.length ? symbols.map((symbol) => <DiscoveryRow key={symbol} symbol={symbol} quote={quotes.get(symbol) ?? null} position={positionBySymbol.get(symbol) ?? null} loading={loadingSymbols.has(symbol)} onOpen={() => openSymbol(symbol)} />) : <p className="py-12 text-center text-sm text-gray-500">No simulated positions yet. Explore Popular to start researching.</p>}
+        {symbols.length ? symbols.map((symbol) => <DiscoveryRow key={symbol} symbol={symbol} quote={quotes.get(symbol) ?? null} position={positionBySymbol.get(symbol) ?? null} loading={loadingSymbols.has(symbol)} onOpen={() => openSymbol(symbol)} watched={watchlist.includes(symbol)} onToggleWatch={() => void toggleWatch(symbol)} />) : activeCategory === "Watchlist" ? <p className="py-12 text-center text-sm text-gray-500">Nothing pinned yet. Tap the bookmark on any market to pin it here.</p> : <p className="py-12 text-center text-sm text-gray-500">No simulated positions yet. Explore Popular to start researching.</p>}
       </div>
+      {watchlistError ? <p role="status" className="mt-3 text-sm text-accent-red">{watchlistError}</p> : null}
+      <section className="mt-10 border-t border-border pt-6" aria-labelledby="alternative-markets-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold tracking-[0.16em] text-accent-green">ALTERNATIVE MARKETS</p><h2 id="alternative-markets-heading" className="mt-1 text-2xl font-black">Crypto & Prediction Markets</h2></div><p className="max-w-md text-sm text-gray-500">Crypto is available for paper trading. Polymarket is read-only research—no prediction-market orders are placed in Vanta.</p></div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2"><article className="card p-4"><div className="flex items-center justify-between gap-2"><div><p className="text-xs font-bold tracking-[0.14em] text-accent-green">COINS & MEMECOINS</p><h3 className="mt-1 font-bold">Paper-tradable crypto</h3></div><button type="button" className="vanta-text-action" onClick={() => setActiveCategory("Crypto")}>View coins</button></div><p className="mt-2 text-sm text-gray-500">Bitcoin, Ethereum, Solana, DOGE, SHIB, PEPE, BONK, and more use live quote references with simulated funds.</p></article><article className="card p-4"><p className="text-xs font-bold tracking-[0.14em] text-accent-green">POLYMARKET · RESEARCH ONLY</p>{predictionError ? <p className="mt-2 text-sm text-gray-500">{predictionError}</p> : predictionMarkets.length ? <div className="mt-3 space-y-2">{predictionMarkets.slice(0, 3).map((market) => <a key={market.id} href={market.url} target="_blank" rel="noreferrer" className="block rounded border border-border p-3 transition hover:border-accent-green"><strong className="line-clamp-2 text-sm">{market.question}</strong><span className="mt-1 block text-xs text-gray-500">Yes {formatProbability(market.yesPrice)} · 24h volume {compactMoney(market.volume24hr)} · View on Polymarket ↗</span></a>)}</div> : <p className="mt-2 text-sm text-gray-500">Loading public prediction-market research…</p>}<p className="mt-3 text-xs text-gray-500">Paper research only. Vanta does not execute or simulate Polymarket trades.</p></article></div>
+      </section>
     </section>
   );
 }
 
-function DiscoveryRow({ symbol, quote, position, loading, onOpen }: { symbol: string; quote: Quote | null; position: Position | null; loading: boolean; onOpen: () => void }) {
+function DiscoveryRow({ symbol, quote, position, loading, onOpen, watched, onToggleWatch }: { symbol: string; quote: Quote | null; position: Position | null; loading: boolean; onOpen: () => void; watched: boolean; onToggleWatch: () => void }) {
   const change = quote?.change ?? (quote?.prevClose ? quote.price - quote.prevClose : null);
   const pct = quote?.changePercent ?? (quote?.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null);
-  return <article className="vanta-market-row"><button className="vanta-market-summary" onClick={onOpen} aria-label={`Open ${symbol} workspace`}><span className="vanta-ticker-mark">{symbol.slice(0, 2)}</span><span><strong>{symbol}</strong><small>{getCompanyName(symbol)}</small></span><span className="tabular-nums text-right">{loading ? "—" : quote ? formatUSD(quote.price) : "—"}</span><span className={cn("tabular-nums text-right", change != null && change < 0 ? "text-accent-red" : "text-accent-green")}>{pct == null ? "—" : formatPct(pct)}</span><span className="hidden text-right text-xs text-gray-500 md:block">{position ? `${Number(position.qty).toFixed(4)} owned` : "Research"}</span></button><button type="button" className="vanta-market-trade" aria-label={`Trade ${symbol}`} onClick={onOpen}>Trade</button></article>;
+  return <article className="vanta-market-row"><button className="vanta-market-summary" onClick={onOpen} aria-label={`Open ${symbol} workspace`}><span className="vanta-ticker-mark">{symbol.slice(0, 2)}</span><span><strong>{symbol}</strong><small>{getCompanyName(symbol)}</small></span><span className="tabular-nums text-right">{loading ? "—" : quote ? formatUSD(quote.price) : "—"}</span><span className={cn("tabular-nums text-right", change != null && change < 0 ? "text-accent-red" : "text-accent-green")}>{pct == null ? "—" : formatPct(pct)}</span><span className="hidden text-right text-xs text-gray-500 md:block">{position ? `${Number(position.qty).toFixed(4)} owned` : "Research"}</span></button><button type="button" className={cn("vanta-market-trade mr-1", watched && "text-accent-green")} aria-label={`${watched ? "Unpin" : "Pin"} ${symbol} ${watched ? "from" : "to"} watchlist`} aria-pressed={watched} onClick={(event) => { event.stopPropagation(); onToggleWatch(); }} title={watched ? "Unpin from watchlist" : "Pin to watchlist"}><Bookmark className={cn("h-4 w-4", watched && "fill-current")} /></button><button type="button" className="vanta-market-trade" aria-label={`Trade ${symbol}`} onClick={onOpen}>Trade</button></article>;
 }
 
 function MarketWorkspace({ symbol, initialSide, initialQuote, position, cash, fetchAccount, fetchQuotes, onBack, onTraded }: { symbol: string; initialSide: Side; initialQuote: Quote | null; position: Position | null; cash: number; fetchAccount: () => Promise<AccountSnapshot | null>; fetchQuotes: (symbols: string[], force?: boolean) => Promise<Map<string, Quote>>; onBack: () => void; onTraded: () => Promise<void> }) {
@@ -246,4 +301,5 @@ function quoteFreshnessLabel(quote: Quote) {
 function compactNumber(value: number | null | undefined) { return value == null || !Number.isFinite(value) ? "—" : Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 2 }).format(value); }
 function compactMoney(value: number | null | undefined) { return value == null || !Number.isFinite(value) ? "—" : `$${compactNumber(value)}`; }
 function metric(value: number | null | undefined) { return value == null || !Number.isFinite(value) ? "—" : value.toFixed(2); }
+function formatProbability(value: number | null) { return value == null || !Number.isFinite(value) ? "—" : `${(value * 100).toFixed(0)}%`; }
 function rangeLabel(low: number | null | undefined, high: number | null | undefined) { return low == null || high == null || !Number.isFinite(low) || !Number.isFinite(high) ? "—" : `${formatUSD(low)} – ${formatUSD(high)}`; }

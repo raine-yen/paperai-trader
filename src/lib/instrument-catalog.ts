@@ -243,13 +243,15 @@ export interface SearchOptions {
   offset?: number;
 }
 
-export interface InstrumentSearchResult {
-  instrument: Instrument;
+export type InstrumentMatchTier = "exact" | "alias" | "prefix" | "name" | "fuzzy" | "provider";
+
+/** Flattened result: instrument fields + match metadata (what the API route returns). */
+export interface InstrumentSearchResult extends Instrument {
   score: number;
-  tier: "exact" | "alias" | "prefix" | "name" | "fuzzy" | "provider";
+  matchTier: InstrumentMatchTier;
 }
 
-function tierFor(score: number): InstrumentSearchResult["tier"] {
+function tierFor(score: number): InstrumentMatchTier {
   if (score >= 1000) return "exact";
   if (score >= 900) return "alias";
   if (score >= 700) return "prefix";
@@ -283,9 +285,9 @@ export async function searchInstruments(rawQuery: string, options: SearchOptions
       score: 399.9 - idx * 0.1,
     }));
 
-  const merged = [
-    ...local.map(({ instrument, score }) => ({ instrument, score, tier: tierFor(score) })),
-    ...providerScored.map(({ instrument, score }) => ({ instrument, score, tier: "provider" as const })),
+  const merged: InstrumentSearchResult[] = [
+    ...local.map(({ instrument, score }) => ({ ...instrument, score, matchTier: tierFor(score) })),
+    ...providerScored.map(({ instrument, score }) => ({ ...instrument, score, matchTier: "provider" as const })),
   ];
 
   const limit = Math.min(Math.max(options.limit ?? 10, 1), 50);

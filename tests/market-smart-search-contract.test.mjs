@@ -11,7 +11,7 @@ async function source() {
 test("market search uses the instrument search endpoint without uppercasing names", async () => {
   const page = await source();
   assert.match(page, /\/api\/instruments\/search\?q=\$\{encodeURIComponent\(query\)\}&limit=8/);
-  assert.ok(page.includes("onChange={(e) => setSearchQuery(e.target.value)}"));
+  assert.ok(page.includes("onChange={(event) => setSearchQuery(event.target.value)}"));
   assert.match(page, /const query = searchQuery\.trim\(\);/);
 });
 
@@ -30,5 +30,5 @@ test("market search exposes accessible result metadata and keyboard navigation",
 test("choosing a result opens its canonical tradable symbol", async () => {
   const page = await source();
   assert.match(page, /onClick=\{\(\) => openInstrument\(result\)\}/);
-  assert.match(page, /openSymbol\(instrument\.symbol\)/);
+  assert.match(page, /openSymbol\(result\.symbol\)/);
 });

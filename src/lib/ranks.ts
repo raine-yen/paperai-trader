@@ -24,8 +24,10 @@ export interface Rank {
   rankPoints: number;
 }
 
-export function tierForReturnPct(returnPct: number): (typeof RANK_TIERS)[number] {
-  let selected = RANK_TIERS[0];
+export type RankTier = (typeof RANK_TIERS)[number];
+
+export function tierForReturnPct(returnPct: number): RankTier {
+  let selected: RankTier = RANK_TIERS[0];
   for (const candidate of RANK_TIERS) if (returnPct >= candidate.minPct) selected = candidate;
   return selected;
 }

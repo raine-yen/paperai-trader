@@ -61,17 +61,7 @@ export async function GET(req: NextRequest) {
       query,
       offset,
       limit,
-      results: results.map((r) => ({
-        symbol: r.instrument.symbol,
-        displaySymbol: r.instrument.displaySymbol,
-        name: r.instrument.displayName,
-        assetClass: r.instrument.assetClass,
-        exchange: r.instrument.exchange,
-        market: r.instrument.market,
-        tradable: r.instrument.tradable,
-        displayMarket: r.instrument.displayMarket,
-        matchTier: r.tier,
-      })),
+      results,
     },
     { headers: { "X-RateLimit-Limit": String(MAX_REQUESTS_PER_WINDOW), "X-RateLimit-Remaining": String(rl.remaining) } },
   );
