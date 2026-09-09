@@ -146,3 +146,12 @@ test("every selected stock opens a trade-ready order ticket without requiring th
   assert.match(market, /\}, \[initialSide, symbol\]\);/);
   assert.doesNotMatch(market, /autoOpenedRef/);
 });
+
+test("every discovery row exposes a named trade entry point instead of requiring an undisclosed row tap", () => {
+  const market = read("src/app/(app)/market/page.tsx");
+  const css = read("src/app/globals.css");
+
+  assert.match(market, /aria-label=\{`Trade \$\{symbol\}`\}/);
+  assert.match(market, /className="vanta-market-trade"/);
+  assert.match(css, /\.vanta-market-trade \{[^}]*min-height:\s*44px/s);
+});
