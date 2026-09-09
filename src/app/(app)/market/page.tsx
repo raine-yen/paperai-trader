@@ -149,7 +149,7 @@ function MarketWorkspace({ symbol, initialSide, initialQuote, position, cash, fe
   const [range, setRange] = useState("1d");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [ticketSide, setTicketSide] = useState<Side | null>(null);
+  const [ticketSide, setTicketSide] = useState<Side>(initialSide);
   const [ticketNonce, setTicketNonce] = useState(0);
   useEffect(() => {
     // Every selected stock is immediately trade-ready. The dashboard may set the
@@ -180,10 +180,9 @@ function MarketWorkspace({ symbol, initialSide, initialQuote, position, cash, fe
   async function addWatchlist() { const response = await fetch("/api/watchlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol }) }); setMessage(response.ok ? `${symbol} added to your paper watchlist.` : "Watchlist is unavailable right now."); }
   async function createAlert(direction: "above" | "below") { const target = price * (direction === "above" ? 1.03 : 0.97); const response = await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol, direction, target_price: target.toFixed(2) }) }); setMessage(response.ok ? `Paper alert set ${direction} ${formatUSD(target)}.` : "Alerts are unavailable right now."); }
   function openTicket(side: Side) { setTicketSide(side); setTicketNonce((nonce) => nonce + 1); }
-  function closeTicket() { setTicketSide(null); }
 
   return (
-    <section className={cn("vanta-workspace", ticketSide && "has-open-ticket")}>
+    <section className="vanta-workspace has-open-ticket">
       <header className="vanta-workspace-top"><button onClick={onBack} className="vanta-back"><ArrowLeft className="h-4 w-4" /> Back</button><div className="vanta-workspace-search"><Search className="h-4 w-4" /><span>Search markets</span><kbd>⌘ K</kbd></div></header>
       <main className="vanta-detail">
         <div className="vanta-instrument"><span className="vanta-ticker-mark">{symbol.slice(0, 2)}</span><div><p>{symbol} · {quote?.exchange ?? "NASDAQ"}</p><h1>{quote?.name ?? getCompanyName(symbol)}</h1><span>Illustrative paper-market reference</span></div></div>
@@ -197,12 +196,12 @@ function MarketWorkspace({ symbol, initialSide, initialQuote, position, cash, fe
         <section className="vanta-section"><div className="vanta-section-heading"><div><p>ABOUT {symbol}</p><h2>{quote?.name ?? getCompanyName(symbol)}</h2></div><button onClick={addWatchlist}>Add to watchlist</button></div><p className="vanta-section-copy">Review company metrics, then test an idea with simulated money. Market values are illustrative and can move before a paper order fills.</p><div className="mt-4 flex gap-3"><button className="vanta-text-action" onClick={() => createAlert("above")} disabled={!price}>Alert +3%</button><button className="vanta-text-action" onClick={() => createAlert("below")} disabled={!price}>Alert −3%</button></div>{message ? <p role="status" className="mt-3 text-sm text-gray-400">{message}</p> : null}</section>
         <div className="vanta-education"><article><p>LEARN</p><h3>What moves a price?</h3><span>Study earnings, volume, and broader market conditions before testing an idea.</span></article><article><p>PAPER PRACTICE</p><h3>Build a trade thesis</h3><span>Write down what would prove your simulated decision right or wrong.</span></article></div>
       </main>
-      <OrderRail symbol={symbol} price={price} initialSide={ticketSide ?? initialSide} open={ticketSide !== null} nonce={ticketNonce} position={position} cash={cash} onOpen={openTicket} onClose={closeTicket} onReview={refreshOrderState} onTraded={onTraded} />
+      <OrderRail symbol={symbol} price={price} initialSide={ticketSide} open={true} nonce={ticketNonce} position={position} cash={cash} onReview={refreshOrderState} onTraded={onTraded} />
     </section>
   );
 }
 
-function OrderRail({ symbol, price, initialSide, open, nonce, position, cash, onClose, onReview, onTraded }: { symbol: string; price: number; initialSide: Side; open: boolean; nonce: number; position: Position | null; cash: number; onOpen: (side: Side) => void; onClose: () => void; onReview: () => Promise<{ cash: number; position: Position | null; quote: Quote | null }>; onTraded: () => Promise<void> }) {
+function OrderRail({ symbol, price, initialSide, open, nonce, position, cash, onReview, onTraded }: { symbol: string; price: number; initialSide: Side; open: boolean; nonce: number; position: Position | null; cash: number; onReview: () => Promise<{ cash: number; position: Position | null; quote: Quote | null }>; onTraded: () => Promise<void> }) {
   const [side, setSide] = useState<Side>(initialSide); const [type, setType] = useState<OrderType>("market"); const [mode, setMode] = useState<Mode>("dollars"); const [amount, setAmount] = useState(""); const [limitPrice, setLimitPrice] = useState(price ? price.toFixed(2) : ""); const [submitting, setSubmitting] = useState(false); const [result, setResult] = useState(""); const [receipt, setReceipt] = useState<OrderReceipt | null>(null); const confirmRef = useRef<HTMLButtonElement | null>(null); const receiptRef = useRef<HTMLButtonElement | null>(null); const railRef = useRef<HTMLElement | null>(null); const amountRef = useRef<HTMLInputElement | null>(null);
  useEffect(() => { setSide(initialSide); setAmount(""); setResult(""); setReceipt(null); }, [initialSide, symbol, nonce]);
  useEffect(() => {
@@ -226,9 +225,9 @@ function OrderRail({ symbol, price, initialSide, open, nonce, position, cash, on
   <h2 className="vanta-rail-receipt-title">{receipt.title}</h2>
   <p className="vanta-rail-receipt-detail">{receipt.detail}</p>
   <dl className="vanta-estimates"><Estimate label="Status" value={receipt.status} /><Estimate label="Shares" value={receipt.amount} /></dl>
-  <button ref={receiptRef} type="button" className="vanta-confirm-button" onClick={() => { setReceipt(null); onClose(); }}>Done</button></div></aside>
+  <button ref={receiptRef} type="button" className="vanta-confirm-button" onClick={() => { setReceipt(null); setAmount(""); }}>Place another order</button></div></aside>
 ) : (
-  <aside ref={railRef} className={cn("vanta-order-rail", open && "is-open")} aria-label="Paper order ticket"><header><p>ACCOUNT</p><div><span>Buying power</span><strong className="tabular-nums">{formatUSD(cash)}</strong></div><small>Simulated funds only · no real money</small><button type="button" className="vanta-rail-close" aria-label="Close order ticket" onClick={onClose}><X className="h-4 w-4" /></button></header>
+  <aside ref={railRef} className={cn("vanta-order-rail", open && "is-open")} aria-label="Paper order ticket"><header><p>ACCOUNT</p><div><span>Buying power</span><strong className="tabular-nums">{formatUSD(cash)}</strong></div><small>Simulated funds only · no real money</small></header>
   <div className="vanta-order-content"><h2>{side === "buy" ? "Buy" : "Sell"} {symbol}</h2><Segment value={side} onChange={setSide} options={[["buy", "Buy"], ["sell", "Sell"]]} label="Order side" /><Segment value={type} onChange={setType} options={[["market", "Market"], ["limit", "Limit"]]} label="Order type" /><Segment value={mode} onChange={setMode} options={[["dollars", "Dollars"], ["shares", "Shares"]]} label="Amount mode" /><label className="vanta-amount"><span>{mode === "dollars" ? "$" : "#"}</span><input ref={amountRef} aria-label={`Order amount in ${mode}`} type="number" min="0" step={mode === "dollars" ? "0.01" : "0.0001"} value={amount} onChange={(event) => setAmount(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && valid && !submitting) submit(); }} /><button onClick={setMax}>Max</button></label>{type === "limit" ? <label className="vanta-limit">Limit price<input aria-label="Limit price" type="number" min="0" step="0.01" value={limitPrice} onChange={(event) => setLimitPrice(event.target.value)} /></label> : null}<dl className="vanta-estimates"><Estimate label="Estimated price" value={estimatedPrice ? formatUSD(estimatedPrice) : "—"} /><Estimate label="Estimated shares" value={shares ? shares.toFixed(4) : "—"} /><Estimate label={side === "buy" ? "Estimated cost" : "Estimated proceeds"} value={notional ? formatUSD(notional) : "—"} /><Estimate label={side === "buy" ? "Buying power after" : "Shares after sale"} value={side === "buy" ? formatUSD(Math.max(0, cash - notional)) : Math.max(0, owned - shares).toFixed(4)} /></dl>{error ? <p role="alert" className="vanta-order-error">{error}</p> : null}{result ? <p role="status" className="vanta-order-result">{result}</p> : null}<button ref={confirmRef} type="button" className={cn("vanta-confirm-button", side === "sell" && "is-sell")} disabled={!valid || submitting} onClick={submit}>{submitting ? "Sending…" : `${side === "buy" ? "Buy" : "Sell"} ${symbol}${notional ? ` · ${formatUSD(notional)}` : ""}`}</button><p className="vanta-order-note">Simulated trade — updates your paper account only.</p></div></aside>
   );
 }

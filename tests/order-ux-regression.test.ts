@@ -93,14 +93,16 @@ test("order success and rail animations are defined and honor reduced motion", (
   assert.match(flow, /setStage\("done"\)/);
 });
 
-test("the Apple workspace keeps the full page usable until a Buy or Sell ticket is opened", () => {
+test("every selected stock has a permanent Buy/Sell rail with no hide or close action", () => {
   const market = read("src/app/(app)/market/page.tsx");
   const css = read("src/app/globals.css");
 
-  assert.match(market, /cn\("vanta-workspace", ticketSide && "has-open-ticket"\)/);
-  assert.match(css, /\.vanta-workspace \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+  assert.match(market, /className="vanta-workspace has-open-ticket"/);
+  assert.match(market, /<OrderRail[^>]*open=\{true\}/);
+  assert.doesNotMatch(market, /vanta-rail-close/);
+  assert.doesNotMatch(market, /Close order ticket/);
+  assert.match(market, /Place another order/);
   assert.match(css, /\.vanta-workspace\.has-open-ticket \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 284px/s);
-  assert.match(css, /\.vanta-order-rail \{[^}]*display:\s*none/s);
   assert.match(css, /\.vanta-order-rail\.is-open \{[^}]*display:\s*block/s);
   assert.match(css, /\.vanta-order-content \{[^}]*min-width:\s*0/s);
   assert.match(css, /\.vanta-amount \{[^}]*min-width:\s*0[^}]*width:\s*100%/s);
