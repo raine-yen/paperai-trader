@@ -30,12 +30,13 @@ export async function getCurrentAccount(req: NextRequest) {
     .from("accounts")
     .select("*")
     .eq("user_id", user.id)
+    .eq("status", "active")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 
   if (error) return { response: NextResponse.json({ error: error.message }, { status: 500 }) };
-  if (!account) return { response: NextResponse.json({ error: "no account" }, { status: 400 }) };
+  if (!account) return { response: NextResponse.json({ error: "no active account" }, { status: 403 }) };
   return { user, account: account as SessionAccount, db };
 }
 

@@ -36,16 +36,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (data?.length) {
-    const unreadIds = data
-      .filter((m) => m.recipient_account_id === ctx.account.id && !m.read_at)
-      .map((m) => m.id);
-    if (unreadIds.length) {
-      await ctx.db.from("direct_messages").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
-    }
-  }
-
+  // GET is read-only / side-effect free. Marking messages read is an explicit
+  // PATCH the client calls once it has actually rendered the conversation.
   return NextResponse.json({ messages: (data ?? []).reverse() });
+}
+
+export async function PATCH(req: NextRequest) {
+  const ctx = await getCurrentAccount(req);
+  if ("response" in ctx) return ctx.response;
+
+  const body = await req.json().catch(() => ({}));
+  const other = typeof body.account_id === "string" ? body.account_id : null;
+
+  let query = ctx.db
+    .from("direct_messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("recipient_account_id", ctx.account.id)
+    .is("read_at", null);
+  if (other) query = query.eq("sender_account_id", other);
+
+  const { error } = await query;
+  if (error) {
+    if (isMissingTableError(error)) return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true });
 }
 
 export async function POST(req: NextRequest) {

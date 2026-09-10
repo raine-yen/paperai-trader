@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
     .upsert({
       account_id: ctx.account.id,
       avatar_url,
-      is_public: true,
       updated_at: new Date().toISOString(),
     }, { onConflict: "account_id" })
     .select("*")
