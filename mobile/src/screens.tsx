@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { InteractiveLineChart } from "./charts";
-import { compactMoney, compactNumber, firstName, maybeUsd, metric, rangeLabel, signedPct, signedUsd, timeAgo, usd } from "./format";
+import { compactMoney, compactNumber, cents, firstName, maybeUsd, metric, predictionCategory, predictionEndLabel, probability, rangeLabel, signedPct, signedUsd, timeAgo, usd } from "./format";
 import { getCompanyName, MARKET_GROUPS } from "./market-data";
 import { colors, font, layoutBreakpoints, navHeight, radius, space, themeOptions, type ThemePreference } from "./theme";
 import {
@@ -36,6 +36,11 @@ import type {
   OrderStage,
   OrderType,
   Position,
+  PredictionHistoryPoint,
+  PredictionMarket,
+  PredictionOutcome,
+  PredictionTradeResult,
+  PredictionView,
   Quote,
   Side,
 } from "./types";
@@ -1002,6 +1007,620 @@ export function CompeteScreen({
       </View>
       {!isTablet ? <WeeklyReviewCard /> : null}
     </View>
+  );
+}
+
+const PREDICTION_RANGES = [
+  ["1", "1D"],
+  ["7", "1W"],
+  ["30", "1M"],
+] as const;
+
+type PredictionsScreenProps = {
+  view: PredictionView;
+  setView: (view: PredictionView) => void;
+  markets: PredictionMarket[];
+  me: Me | null;
+  loading: boolean;
+  selectedMarketId: string | null;
+  openMarket: (id: string) => void;
+  closeMarket: () => void;
+  history: PredictionHistoryPoint[];
+  historyLoading: boolean;
+  loadHistory: (marketId: string, outcome: PredictionOutcome, days: number) => void;
+  outcome: PredictionOutcome;
+  setOutcome: (outcome: PredictionOutcome) => void;
+  mode: Side;
+  setMode: (mode: Side) => void;
+  amount: string;
+  setAmount: (value: string) => void;
+  stage: OrderStage;
+  setStage: (stage: OrderStage) => void;
+  submit: () => void;
+  busy: boolean;
+  message: string;
+  lastResult: PredictionTradeResult | null;
+  goPortfolio: () => void;
+};
+
+export function PredictionsScreen(props: PredictionsScreenProps) {
+  const selected = props.markets.find((market) => market.id === props.selectedMarketId) ?? null;
+  if (props.view === "detail" && selected) return <PredictionDetailScreen {...props} market={selected} />;
+  return <PredictionListScreen {...props} />;
+}
+
+function PredictionListScreen({ markets, me, loading, openMarket }: PredictionsScreenProps) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
+  const [category, setCategory] = useState("All");
+  const cash = Number(me?.account?.cash ?? 0);
+  const positions = me?.prediction_positions ?? [];
+  const categories = ["All", ...Array.from(new Set(markets.map((market) => predictionCategory(market.question, market.category))))];
+  const visible = category === "All" ? markets : markets.filter((market) => predictionCategory(market.question, market.category) === category);
+
+  return (
+    <View testID="screen-predictions-ready" style={{ gap: space.x6 }}>
+      <View style={{ flexDirection: isTablet ? "row" : "column", justifyContent: "space-between", alignItems: isTablet ? "flex-end" : "flex-start", gap: space.x4 }}>
+        <View style={{ maxWidth: 620, gap: space.x2 }}>
+          <PaperBadge compact />
+          <Eyebrow>Paper predictions</Eyebrow>
+          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 38 : 30, lineHeight: isTablet ? 42 : 34, fontWeight: font.bold }}>Predictions</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}>Trade Yes/No outcome shares on real-world questions with paper cash. A correct share settles at $1.00; an incorrect share settles at $0.00.</Text>
+        </View>
+        <Surface style={{ minWidth: isTablet ? 220 : "100%" }}>
+          <Eyebrow>Paper buying power</Eyebrow>
+          <Text style={{ marginTop: space.x2, color: colors.textPrimary, fontSize: 24, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{usd(cash, 0)}</Text>
+        </Surface>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.x2 }}>
+        {categories.map((item) => <FilterChip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}
+      </ScrollView>
+
+      {positions.length ? (
+        <Section title="Your prediction positions" eyebrow="Open outcome shares">
+          <Surface>
+            {positions.map((position, index) => {
+              const market = markets.find((item) => item.id === position.market_id);
+              const pl = Number(position.unrealized_pl ?? 0);
+              return (
+                <View key={`${position.market_id}-${position.outcome}`}>
+                  <Row
+                    title={position.question ?? market?.question ?? "Prediction market"}
+                    sub={`${Number(position.shares).toFixed(2)} ${position.outcome.toUpperCase()} shares · Avg ${cents(position.avg_cost)}`}
+                    right={position.market_value != null ? usd(position.market_value) : "—"}
+                    tone={pl >= 0 ? colors.bullish : colors.bearish}
+                    icon={position.outcome === "yes" ? "trending-up" : "trending-down"}
+                    onPress={market ? () => openMarket(market.id) : undefined}
+                  />
+                  {index < positions.length - 1 ? <Divider /> : null}
+                </View>
+              );
+            })}
+          </Surface>
+        </Section>
+      ) : null}
+
+      <Section title="Active markets" eyebrow="Live paper prices">
+        {loading && !markets.length ? (
+          <View accessibilityLabel="Loading prediction markets" style={{ gap: space.x3 }}>
+            <SkeletonBlock height={96} radiusValue={radius.sm} />
+            <SkeletonBlock height={96} radiusValue={radius.sm} />
+            <SkeletonBlock height={96} radiusValue={radius.sm} />
+          </View>
+        ) : visible.length ? (
+          <Surface>
+            {visible.map((market, index) => (
+              <View key={market.id}>
+                <PredictionMarketRow market={market} onPress={() => openMarket(market.id)} />
+                {index < visible.length - 1 ? <Divider /> : null}
+              </View>
+            ))}
+          </Surface>
+        ) : (
+          <StatePanel compact icon="target" title="No prediction markets yet" body="Active outcome markets will appear here once live paper prices load." />
+        )}
+      </Section>
+    </View>
+  );
+}
+
+function PredictionMarketRow({ market, onPress }: { market: PredictionMarket; onPress: () => void }) {
+  const category = predictionCategory(market.question, market.category);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${market.question}, Yes ${cents(market.yesPrice)}, ${probability(market.yesPrice)} implied, volume ${compactMoney(market.volume24hr)}`}
+      accessibilityHint="Open this prediction market to review odds and trade"
+      testID={`prediction-${market.id}`}
+      onPress={onPress}
+      style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}
+    >
+      <View style={{ minHeight: 76, flexDirection: "row", alignItems: "center", gap: space.x3 }}>
+        <View style={{ width: 44, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.brandSoft }}>
+          <Feather name="target" size={18} color={colors.brand} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: font.bold }} numberOfLines={2}>{market.question}</Text>
+          <Text style={{ marginTop: space.x1, color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{category} · Vol {compactMoney(market.volume24hr)} · Ends {predictionEndLabel(market.endDate)}</Text>
+        </View>
+        <View style={{ alignItems: "flex-end", minWidth: 88 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{cents(market.yesPrice)} Yes</Text>
+          <Text style={{ marginTop: space.x1, color: colors.brand, fontSize: 12, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{probability(market.yesPrice)} implied</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function PredictionDetailScreen(props: PredictionsScreenProps & { market: PredictionMarket }) {
+  const {
+    market,
+    me,
+    closeMarket,
+    history,
+    historyLoading,
+    loadHistory,
+    outcome,
+    setOutcome,
+    mode,
+    setMode,
+    amount,
+    setAmount,
+    stage,
+    setStage,
+    submit,
+    busy,
+    message,
+    lastResult,
+    goPortfolio,
+  } = props;
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
+  const [range, setRange] = useState(7);
+  const [compare, setCompare] = useState(false);
+
+  const currentPrice = outcome === "yes" ? market.yesPrice : market.noPrice;
+  const price = Number(currentPrice ?? 0);
+  const cash = Number(me?.account?.cash ?? 0);
+  const position = me?.prediction_positions?.find((item) => item.market_id === market.id && item.outcome === outcome) ?? null;
+  const ownedShares = Number(position?.shares ?? 0);
+  const isBuy = mode === "buy";
+  const parsedAmount = Number(amount) || 0;
+  const estimatedShares = isBuy ? (price > 0 && parsedAmount > 0 ? parsedAmount / price : 0) : Math.min(parsedAmount, ownedShares);
+  const payoutIfCorrect = isBuy ? estimatedShares : 0;
+  const potentialProfit = isBuy ? Math.max(0, estimatedShares - parsedAmount) : 0;
+  const proceeds = estimatedShares * price;
+
+  useEffect(() => {
+    loadHistory(market.id, outcome, range);
+    // loadHistory is recreated each render by the parent; depending on market/outcome/range only avoids a refetch loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market.id, outcome, range]);
+
+  useEffect(() => {
+    if (mode === "sell" && ownedShares <= 0) setMode("buy");
+  }, [mode, ownedShares, setMode]);
+
+  const chartPoints = history
+    .filter((point) => Number.isFinite(Number(point.p)))
+    .map((point) => {
+      const numeric = Number(point.t);
+      const epochMs = Number.isFinite(numeric) ? (numeric < 10_000_000_000 ? numeric * 1000 : numeric) : Date.parse(String(point.t));
+      const date = new Date(epochMs);
+      const label = Number.isNaN(date.getTime())
+        ? String(point.t)
+        : range === 1
+          ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+          : date.toLocaleDateString([], { month: "short", day: "numeric" });
+      return { value: Number(point.p), label };
+    });
+
+  if (stage === "processing") {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: space.x4, padding: space.x6, backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.brand} accessibilityLabel="Submitting paper prediction order" />
+        <Text accessibilityLiveRegion="polite" style={{ color: colors.textPrimary, fontSize: 17, fontWeight: font.semibold }}>Submitting paper order…</Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: "center" }}>{isBuy ? "Buying" : "Selling"} {outcome.toUpperCase()} shares with simulated funds</Text>
+      </View>
+    );
+  }
+
+  if (stage === "receipt") {
+    return (
+      <PredictionReceiptScreen
+        result={lastResult}
+        market={market}
+        outcome={outcome}
+        message={message}
+        goPortfolio={goPortfolio}
+        backToMarket={() => setStage("configure")}
+      />
+    );
+  }
+
+  if (stage === "review") {
+    return (
+      <PredictionReviewScreen
+        market={market}
+        outcome={outcome}
+        mode={mode}
+        price={price}
+        amount={parsedAmount}
+        shares={estimatedShares}
+        proceeds={proceeds}
+        payoutIfCorrect={payoutIfCorrect}
+        potentialProfit={potentialProfit}
+        busy={busy}
+        message={message}
+        edit={() => setStage("configure")}
+        confirm={submit}
+      />
+    );
+  }
+
+  const canReview = isBuy
+    ? Boolean(price > 0 && parsedAmount > 0 && parsedAmount <= cash + 0.005)
+    : Boolean(price > 0 && estimatedShares > 0 && estimatedShares <= ownedShares + 0.00001);
+  const validationMessage = !isBuy && ownedShares <= 0
+    ? "You have no shares of this outcome to sell."
+    : parsedAmount <= 0
+      ? isBuy ? "Enter a paper dollar amount to continue." : "Enter the number of shares to sell."
+      : isBuy && parsedAmount > cash + 0.005
+        ? "This stake is above your paper buying power. Lower the amount and review again."
+        : !isBuy && estimatedShares > ownedShares + 0.00001
+          ? `You can sell up to ${ownedShares.toFixed(2)} shares.`
+          : price <= 0
+            ? "A live outcome price is required before reviewing this paper order."
+            : "Ready for a final simulated-order review.";
+
+  const chartWorkspace = (
+    <Surface elevated style={{ flex: isTablet ? 1.45 : undefined, padding: isTablet ? space.x6 : space.x4 }}>
+      <View style={{ gap: space.x4 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.x4 }}>
+          <View style={{ flex: 1, gap: space.x2 }}>
+            <Eyebrow>{outcome.toUpperCase()} odds history</Eyebrow>
+            <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 40 : 32, fontWeight: font.semibold, fontVariant: ["tabular-nums"] }}>{cents(currentPrice)}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 14 }}>{probability(currentPrice)} implied probability</Text>
+          </View>
+          <PaperBadge compact />
+        </View>
+
+        {historyLoading && !chartPoints.length ? (
+          <SkeletonBlock height={isTablet ? 300 : 230} radiusValue={radius.md} />
+        ) : (
+          <InteractiveLineChart
+            testID={`prediction-chart-${market.id}`}
+            chartLabel={`${outcome.toUpperCase()} probability`}
+            height={isTablet ? 300 : 230}
+            points={chartPoints}
+            baseline={chartPoints[0]?.value}
+            formatValue={(value) => cents(value)}
+            compareEnabled={compare}
+            onCompareChange={setCompare}
+            emptyTitle="Probability history unavailable"
+            emptyBody="There is not enough verified odds history to draw this range yet."
+          />
+        )}
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.x2 }}>
+          {PREDICTION_RANGES.map(([value, label]) => <FilterChip key={value} label={label} active={range === Number(value)} onPress={() => setRange(Number(value))} />)}
+        </ScrollView>
+      </View>
+    </Surface>
+  );
+
+  const ticket = (
+    <View style={{ flex: isTablet ? 0.85 : undefined, gap: space.x4 }}>
+      <Surface>
+        <Eyebrow>Odds</Eyebrow>
+        <View style={{ marginTop: space.x3, flexDirection: "row", gap: space.x4 }}>
+          <Metric label="Yes" value={`${cents(market.yesPrice)} · ${probability(market.yesPrice)}`} />
+          <Metric label="No" value={`${cents(market.noPrice)} · ${probability(market.noPrice)}`} />
+        </View>
+        <View style={{ marginTop: space.x4, flexDirection: "row", gap: space.x4 }}>
+          <Metric label="24h volume" value={compactMoney(market.volume24hr)} />
+          <Metric label="Resolves" value={predictionEndLabel(market.endDate)} />
+        </View>
+      </Surface>
+
+      {position ? (
+        <Surface tone={colors.brandSoft}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.x3 }}>
+            <Eyebrow>Your position</Eyebrow>
+            <Button label="Sell" variant="secondary" icon="minus-circle" onPress={() => setMode("sell")} style={{ minHeight: 36, paddingHorizontal: space.x3 }} />
+          </View>
+          <View style={{ marginTop: space.x3, flexDirection: "row", gap: space.x4 }}>
+            <Metric label={`${outcome.toUpperCase()} shares`} value={ownedShares.toFixed(2)} />
+            <Metric label="Avg cost" value={cents(position.avg_cost)} />
+          </View>
+          <View style={{ marginTop: space.x4, flexDirection: "row", gap: space.x4 }}>
+            <Metric label="Market value" value={usd(position.market_value ?? 0)} />
+            <Metric label="Return" value={signedUsd(position.unrealized_pl ?? 0)} tone={(position.unrealized_pl ?? 0) >= 0 ? colors.bullish : colors.bearish} />
+          </View>
+        </Surface>
+      ) : null}
+
+      <Surface>
+        <Eyebrow>Trade this prediction</Eyebrow>
+        <View style={{ marginTop: space.x3, flexDirection: "row", gap: space.x2 }}>
+          <PredictionOutcomeCard label="Buy Yes" price={market.yesPrice} tone={colors.brand} active={mode === "buy" && outcome === "yes"} onPress={() => { setOutcome("yes"); setMode("buy"); }} />
+          <PredictionOutcomeCard label="Buy No" price={market.noPrice} tone={colors.bearish} active={mode === "buy" && outcome === "no"} onPress={() => { setOutcome("no"); setMode("buy"); }} />
+        </View>
+        <View style={{ marginTop: space.x3 }}>
+          <Segment
+            testID="prediction-mode"
+            value={mode}
+            options={[["buy", "Buy"], ["sell", ownedShares > 0 ? "Sell" : "Sell (none)"]]}
+            onChange={(next) => {
+              if (next === "sell" && ownedShares <= 0) return;
+              setMode(next);
+            }}
+          />
+        </View>
+        <View style={{ marginTop: space.x3 }}>
+          <Input
+            testID="prediction-amount"
+            label={isBuy ? "Paper stake (dollars)" : "Shares to sell"}
+            helper={isBuy ? "We convert your stake to outcome shares using the live price." : "Sell part or all of your owned outcome shares."}
+            keyboardType="decimal-pad"
+            value={amount}
+            onChangeText={setAmount}
+            placeholder={isBuy ? "0.00" : "0.00"}
+          />
+        </View>
+        <View style={{ marginTop: space.x2, flexDirection: "row", flexWrap: "wrap", gap: space.x2 }}>
+          {isBuy
+            ? ["25", "50", "100"].map((preset) => <PresetChip key={preset} label={`$${preset}`} onPress={() => setAmount(preset)} />)
+            : null}
+          {!isBuy ? <PresetChip label="Max" onPress={() => setAmount(ownedShares > 0 ? ownedShares.toFixed(4) : "")} /> : null}
+        </View>
+
+        <View style={{ marginTop: space.x4 }}>
+          <Row compact title="Outcome shares you receive" sub={isBuy ? "Stake ÷ live price" : "Shares closed"} right={estimatedShares.toFixed(2)} />
+          <Divider />
+          {isBuy ? (
+            <>
+              <Row compact title="Payout if correct" sub="$1.00 per correct share" right={usd(payoutIfCorrect)} />
+              <Divider />
+              <Row compact title="Potential profit" sub="Payout minus stake" right={signedUsd(potentialProfit)} tone={colors.bullish} />
+            </>
+          ) : (
+            <Row compact title="Estimated proceeds" sub="Shares × live price" right={usd(proceeds)} />
+          )}
+        </View>
+
+        <View style={{ marginTop: space.x4, gap: space.x3 }}>
+          <InlineNotice tone={canReview ? "success" : "warning"} title={canReview ? "Ready to review" : "Review is locked"} body={validationMessage} />
+          <Button
+            testID="prediction-review"
+            label={busy ? "Checking latest details…" : "Review paper order"}
+            icon="arrow-right"
+            onPress={() => setStage("review")}
+            disabled={!canReview || busy}
+            disabledReason={validationMessage}
+          />
+        </View>
+      </Surface>
+
+      <Surface>
+        <Eyebrow>About this market</Eyebrow>
+        <Text style={{ marginTop: space.x2, color: colors.textSecondary, fontSize: 13, lineHeight: 20 }}>
+          This paper market uses live public outcome prices as a reference. A correct {outcome.toUpperCase()} share settles at $1.00; an incorrect share settles at $0.00. Vanta never sends real-money orders to a prediction exchange.
+        </Text>
+      </Surface>
+    </View>
+  );
+
+  return (
+    <View testID={`prediction-${market.id}-ready`} style={{ gap: space.x6 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.x3 }}>
+        <IconButton icon="chevron-left" label="Back to predictions" onPress={closeMarket} />
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{predictionCategory(market.question, market.category)} · Resolves {predictionEndLabel(market.endDate)}</Text>
+        </View>
+        <PaperBadge compact />
+      </View>
+
+      <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 30 : 24, lineHeight: isTablet ? 36 : 30, fontWeight: font.bold }}>{market.question}</Text>
+
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "stretch", gap: space.x4 }}>
+        {chartWorkspace}
+        {ticket}
+      </View>
+    </View>
+  );
+}
+
+function PredictionOutcomeCard({ label, price, tone, active, onPress }: { label: string; price: number | null; tone: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, ${cents(price)}, ${probability(price)} implied`}
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        minHeight: 78,
+        padding: space.x3,
+        borderRadius: radius.md,
+        borderWidth: active ? 2 : 1,
+        borderColor: active ? tone : colors.border,
+        backgroundColor: active ? colors.brandSoft : colors.surface,
+        opacity: pressed ? 0.8 : 1,
+        gap: space.x1,
+      })}
+    >
+      <Text style={{ color: tone, fontSize: 12, fontWeight: font.bold }}>{label}</Text>
+      <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: font.bold, fontVariant: ["tabular-nums"] }}>{cents(price)} · {probability(price)}</Text>
+      <Text style={{ color: colors.textSecondary, fontSize: 11 }}>Pays $1.00 if correct</Text>
+    </Pressable>
+  );
+}
+
+function PredictionReviewScreen({
+  market,
+  outcome,
+  mode,
+  price,
+  amount,
+  shares,
+  proceeds,
+  payoutIfCorrect,
+  potentialProfit,
+  busy,
+  message,
+  edit,
+  confirm,
+}: {
+  market: PredictionMarket;
+  outcome: PredictionOutcome;
+  mode: Side;
+  price: number;
+  amount: number;
+  shares: number;
+  proceeds: number;
+  payoutIfCorrect: number;
+  potentialProfit: number;
+  busy: boolean;
+  message: string;
+  edit: () => void;
+  confirm: () => void;
+}) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
+  const isBuy = mode === "buy";
+  return (
+    <View testID="screen-prediction-review-ready" style={{ gap: isTablet ? space.x6 : space.x4 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.x4 }}>
+        <View style={{ flex: 1, gap: isTablet ? space.x2 : space.x1 }}>
+          <PaperBadge />
+          <Eyebrow>Final check · no real money</Eyebrow>
+          <Text style={{ color: colors.textPrimary, fontSize: isTablet ? 40 : 30, lineHeight: isTablet ? 44 : 34, fontWeight: font.bold }}>{isBuy ? `Buy ${outcome.toUpperCase()}` : `Sell ${outcome.toUpperCase()}`}</Text>
+        </View>
+        <IconButton icon="edit-2" label="Edit order" onPress={edit} />
+      </View>
+
+      <View style={{ flexDirection: isTablet ? "row" : "column", alignItems: "stretch", gap: isTablet ? space.x6 : space.x4 }}>
+        <Surface elevated style={{ flex: 1.2, padding: isTablet ? space.x8 : space.x4 }}>
+          <View style={{ gap: space.x4 }}>
+            <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: font.bold }}>{market.question}</Text>
+            <View>
+              <Row compact title="Outcome" sub={`${cents(price)} each`} right={outcome.toUpperCase()} />
+              <Divider />
+              <Row compact title={isBuy ? "Paper stake" : "Shares"} sub="Simulated funds only" right={isBuy ? usd(amount) : shares.toFixed(2)} />
+              <Divider />
+              <Row compact title="Outcome shares" sub="Rounded to two decimals" right={shares.toFixed(2)} />
+              <Divider />
+              {isBuy ? (
+                <>
+                  <Row compact title="Payout if correct" sub="$1.00 per correct share" right={usd(payoutIfCorrect)} />
+                  <Divider />
+                  <Row compact title="Potential profit" sub="Payout minus stake" right={signedUsd(potentialProfit)} tone={colors.bullish} />
+                </>
+              ) : (
+                <Row compact title="Estimated proceeds" sub="Shares × live price" right={usd(proceeds)} />
+              )}
+            </View>
+          </View>
+        </Surface>
+
+        <View style={{ flex: 0.8, gap: isTablet ? space.x4 : space.x3 }}>
+          <InlineNotice tone="info" title="This is a paper trade" body="Only your simulated portfolio changes—no deposits, withdrawals, payouts, or cash-out." />
+          {message ? <InlineNotice tone="error" title="The order was not submitted" body={message} /> : null}
+          <Button testID="prediction-confirm" label={busy ? "Submitting paper order…" : isBuy ? `Confirm buy ${outcome.toUpperCase()}` : `Confirm sell ${outcome.toUpperCase()}`} icon="check" onPress={confirm} loading={busy} />
+          {isTablet ? <Button label="Edit details" variant="secondary" onPress={edit} disabled={busy} /> : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PredictionReceiptScreen({
+  result,
+  market,
+  outcome,
+  message,
+  goPortfolio,
+  backToMarket,
+}: {
+  result: PredictionTradeResult | null;
+  market: PredictionMarket;
+  outcome: PredictionOutcome;
+  message: string;
+  goPortfolio: () => void;
+  backToMarket: () => void;
+}) {
+  const successful = Boolean(result);
+  const isBuy = result?.side !== "sell";
+  const entrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.sequence([
+      Animated.delay(120),
+      Animated.spring(entrance, { toValue: 1, useNativeDriver: true, friction: 6, tension: 60 }),
+    ]).start();
+  }, [entrance]);
+  return (
+    <Animated.View
+      testID="screen-prediction-receipt-ready"
+      style={{
+        alignSelf: "center",
+        width: "100%",
+        maxWidth: 720,
+        gap: space.x6,
+        opacity: entrance,
+        transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }],
+      }}
+    >
+      <Surface elevated style={{ padding: space.x8 }}>
+        <View style={{ alignItems: "center", gap: space.x4 }}>
+          <View
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: radius.xl,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: successful ? colors.bullishSoft : colors.bearishSoft,
+              transform: [{ scale: entrance.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.4, 1.12, 1] }) }],
+            }}
+          >
+            <Feather name={successful ? "check" : "alert-circle"} size={32} color={successful ? colors.bullish : colors.bearish} />
+          </View>
+          <PaperBadge />
+          <View style={{ alignItems: "center", gap: space.x2 }}>
+            <Text style={{ color: colors.textPrimary, fontSize: 30, fontWeight: font.bold, textAlign: "center" }}>{successful ? "Paper order filled" : "Order needs attention"}</Text>
+            <Text style={{ maxWidth: 520, color: colors.textSecondary, fontSize: 15, lineHeight: 22, textAlign: "center" }}>{message || "Review the details and try again when a live outcome price is available."}</Text>
+          </View>
+          {result ? (
+            <View style={{ alignSelf: "stretch", marginTop: space.x2 }}>
+              <Row title={market.question} sub={`${isBuy ? "Bought" : "Sold"} ${outcome.toUpperCase()} shares`} right="Filled" tone={colors.bullish} />
+              <Divider />
+              <Row title="Quantity" sub={`${outcome.toUpperCase()} outcome shares`} right={Number(result.shares).toFixed(2)} />
+              <Divider />
+              <Row title="Fill price" sub="Live paper price" right={cents(result.price)} />
+              {isBuy && result.cost != null ? (
+                <>
+                  <Divider />
+                  <Row title="Paper cost" sub="Simulated funds only" right={usd(result.cost)} />
+                </>
+              ) : null}
+              {!isBuy && result.proceeds != null ? (
+                <>
+                  <Divider />
+                  <Row title="Proceeds" sub="Returned to paper cash" right={usd(result.proceeds)} />
+                </>
+              ) : null}
+            </View>
+          ) : null}
+          <InlineNotice tone="success" title="Learning prompt" body="Note what real-world signal would confirm or invalidate this prediction before it resolves." />
+          <View style={{ alignSelf: "stretch", flexDirection: "row", gap: space.x3 }}>
+            <Button label="Back to market" variant="secondary" onPress={backToMarket} style={{ flex: 1 }} />
+            <Button label="View portfolio" onPress={goPortfolio} style={{ flex: 1 }} />
+          </View>
+        </View>
+      </Surface>
+    </Animated.View>
   );
 }
 

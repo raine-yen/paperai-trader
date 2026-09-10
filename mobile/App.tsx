@@ -6,18 +6,19 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, RefreshControl, ScrollView, Text, useColorScheme, useWindowDimensions, View } from "react-native";
 import { BottomNav } from "./src/bottom-nav";
-import { PREVIEW_BARS, PREVIEW_LEADERBOARD, PREVIEW_ME, PREVIEW_QUOTES, PREVIEW_SESSION } from "./src/preview-data";
+import { PREVIEW_BARS, PREVIEW_LEADERBOARD, PREVIEW_ME, PREVIEW_PREDICTION_HISTORY, PREVIEW_PREDICTION_MARKETS, PREVIEW_QUOTES, PREVIEW_SESSION } from "./src/preview-data";
 import {
   AdminScreen,
   AuthScreen,
   CompeteScreen,
   DiscoverScreen,
   PortfolioScreen,
+  PredictionsScreen,
   ProfileScreen,
   screenBottomPadding,
 } from "./src/screens";
 import { applyTheme, colors, contentMaxWidth, layoutBreakpoints, resolveTheme, space, tabletNavWidth, type ThemePreference } from "./src/theme";
-import type { AdminData, AmountMode, ApiKey, Bar, DiscoverView, LeaderboardEntry, Me, Order, OrderStage, OrderType, Quote, Session, Side, Tab } from "./src/types";
+import type { AdminData, AmountMode, ApiKey, Bar, DiscoverView, LeaderboardEntry, Me, Order, OrderStage, OrderType, PredictionHistoryPoint, PredictionMarket, PredictionOutcome, PredictionTradeResult, PredictionView, Quote, Session, Side, Tab } from "./src/types";
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -72,6 +73,21 @@ export default function App() {
   const [orderMessage, setOrderMessage] = useState("");
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(APP_STORE_PREVIEW ? PREVIEW_LEADERBOARD : []);
+  const [predictionMarkets, setPredictionMarkets] = useState<PredictionMarket[]>(APP_STORE_PREVIEW ? PREVIEW_PREDICTION_MARKETS : []);
+  const [predictionsLoading, setPredictionsLoading] = useState(false);
+  const [predictionView, setPredictionView] = useState<PredictionView>("list");
+  const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
+  const [predictionHistory, setPredictionHistory] = useState<PredictionHistoryPoint[]>([]);
+  const [predictionHistoryLoading, setPredictionHistoryLoading] = useState(false);
+  const [predictionOutcome, setPredictionOutcome] = useState<PredictionOutcome>("yes");
+  const [predictionMode, setPredictionMode] = useState<Side>("buy");
+  const [predictionAmount, setPredictionAmount] = useState(APP_STORE_PREVIEW ? "25" : "25");
+  const [predictionStage, setPredictionStage] = useState<OrderStage>("configure");
+  const [predictionBusy, setPredictionBusy] = useState(false);
+  const [predictionMessage, setPredictionMessage] = useState("");
+  const [predictionResult, setPredictionResult] = useState<PredictionTradeResult | null>(null);
+  const predictionSubmitInFlight = useRef(false);
+  const predictionHistoryGeneration = useRef(0);
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>(APP_STORE_PREVIEW ? "light" : "system");
   const [newSecret, setNewSecret] = useState("");
   const [adminData, setAdminData] = useState<AdminData | null>(null);
@@ -165,7 +181,7 @@ export default function App() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
-  }, [tab, discoverView, orderStage]);
+  }, [tab, discoverView, orderStage, predictionView, predictionStage]);
 
   async function restoreSession() {
     try {
@@ -314,6 +330,7 @@ export default function App() {
         ...Object.fromEntries((nextQuotes.quotes ?? []).map((q) => [String(q.symbol).toUpperCase(), normalizeQuote(q, String(q.symbol))])),
       }));
       setError("");
+      loadPredictionMarkets();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not refresh");
     } finally {
@@ -482,6 +499,154 @@ export default function App() {
     }
   }
 
+  async function loadPredictionMarkets() {
+    if (APP_STORE_PREVIEW) {
+      setPredictionMarkets(PREVIEW_PREDICTION_MARKETS);
+      return;
+    }
+    setPredictionsLoading(true);
+    try {
+      const res = await api<{ items: PredictionMarket[] }>("/api/prediction-markets");
+      setPredictionMarkets(res.items ?? []);
+    } catch {
+      // Keep any previously loaded markets; the list surface shows a state panel when empty.
+    } finally {
+      setPredictionsLoading(false);
+    }
+  }
+
+  async function loadPredictionHistory(marketId: string, outcome: PredictionOutcome, days: number) {
+    if (APP_STORE_PREVIEW) {
+      setPredictionHistory(PREVIEW_PREDICTION_HISTORY[marketId] ?? []);
+      setPredictionHistoryLoading(false);
+      return;
+    }
+    const generation = ++predictionHistoryGeneration.current;
+    setPredictionHistoryLoading(true);
+    setPredictionHistory([]);
+    try {
+      const res = await api<{ items: PredictionHistoryPoint[] }>(
+        `/api/prediction-markets/${encodeURIComponent(marketId)}/history?outcome=${outcome}&days=${days}`,
+      );
+      if (generation !== predictionHistoryGeneration.current) return;
+      setPredictionHistory(res.items ?? []);
+    } catch {
+      if (generation !== predictionHistoryGeneration.current) return;
+      setPredictionHistory([]);
+    } finally {
+      if (generation === predictionHistoryGeneration.current) setPredictionHistoryLoading(false);
+    }
+  }
+
+  function openMarket(id: string) {
+    setSelectedMarketId(id);
+    setPredictionView("detail");
+    setPredictionOutcome("yes");
+    setPredictionMode("buy");
+    setPredictionAmount(APP_STORE_PREVIEW ? "25" : "25");
+    setPredictionStage("configure");
+    setPredictionMessage("");
+    setPredictionResult(null);
+    setPredictionHistory([]);
+  }
+
+  function closeMarket() {
+    setPredictionView("list");
+    setSelectedMarketId(null);
+    setPredictionStage("configure");
+    setPredictionMessage("");
+    setPredictionResult(null);
+  }
+
+  async function submitPrediction() {
+    if (predictionSubmitInFlight.current) return;
+    const market = predictionMarkets.find((item) => item.id === selectedMarketId);
+    if (!market) {
+      setPredictionMessage("This prediction market is no longer available.");
+      return;
+    }
+    const isBuy = predictionMode === "buy";
+    const price = Number(predictionOutcome === "yes" ? market.yesPrice : market.noPrice) || 0;
+    const parsedAmount = Number(predictionAmount) || 0;
+    const ownedShares = Number(
+      me?.prediction_positions?.find((item) => item.market_id === market.id && item.outcome === predictionOutcome)?.shares ?? 0,
+    );
+    const sellShares = Math.min(parsedAmount, ownedShares);
+
+    if (isBuy && (price <= 0 || parsedAmount <= 0)) {
+      setPredictionMessage("Enter a paper stake above zero to continue.");
+      setPredictionStage("configure");
+      return;
+    }
+    if (!isBuy && (sellShares <= 0 || ownedShares <= 0)) {
+      setPredictionMessage("You have no shares of this outcome to sell.");
+      setPredictionStage("configure");
+      return;
+    }
+
+    predictionSubmitInFlight.current = true;
+    setPredictionBusy(true);
+    setPredictionMessage("");
+    const clientOrderId = `mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    try {
+      let result: PredictionTradeResult;
+      if (APP_STORE_PREVIEW) {
+        const shares = isBuy ? (price > 0 ? parsedAmount / price : 0) : sellShares;
+        result = {
+          ok: true,
+          shares,
+          price,
+          cost: isBuy ? parsedAmount : undefined,
+          proceeds: isBuy ? undefined : sellShares * price,
+          outcome: predictionOutcome,
+          side: predictionMode,
+          question: market.question,
+        };
+      } else {
+        setPredictionStage("processing");
+        const closeAll = !isBuy && Math.abs(sellShares - ownedShares) < 0.00001;
+        const raw = isBuy
+          ? await api<PredictionTradeResult>("/api/predictions/trade", {
+              method: "POST",
+              body: JSON.stringify({
+                market_id: market.id,
+                outcome: predictionOutcome,
+                stake_usd: parsedAmount,
+                client_order_id: clientOrderId,
+              }),
+            })
+          : await api<PredictionTradeResult>("/api/predictions/close", {
+              method: "POST",
+              body: JSON.stringify({
+                market_id: market.id,
+                outcome: predictionOutcome,
+                shares: closeAll ? undefined : sellShares,
+                close_all: closeAll || undefined,
+                client_order_id: clientOrderId,
+              }),
+            });
+        result = { ...raw, outcome: predictionOutcome, side: predictionMode, question: market.question };
+      }
+      if (!APP_STORE_PREVIEW) await refreshAll(false);
+      setPredictionResult(result);
+      const outcomeLabel = predictionOutcome.toUpperCase();
+      setPredictionMessage(
+        result.duplicate
+          ? `This paper ${isBuy ? "buy" : "sell"} was already recorded. Your simulated position is up to date.`
+          : isBuy
+            ? `Paper buy ${outcomeLabel} filled. ${Number(result.shares).toFixed(2)} outcome shares added to your simulated portfolio.`
+            : `Paper sell ${outcomeLabel} filled. ${Number(result.shares).toFixed(2)} outcome shares closed.`,
+      );
+      setPredictionStage("receipt");
+    } catch (e) {
+      setPredictionMessage(e instanceof Error ? e.message : "Your paper order could not be placed.");
+      setPredictionStage("review");
+    } finally {
+      predictionSubmitInFlight.current = false;
+      setPredictionBusy(false);
+    }
+  }
+
   async function addWatch() {
     if (APP_STORE_PREVIEW) {
       Alert.alert("Watchlist updated", `${selectedSymbol} is already represented in this simulated preview.`);
@@ -629,6 +794,11 @@ export default function App() {
       setDiscoverView("list");
       resetOrderDraft();
     }
+    if (next !== "predictions") {
+      setPredictionView("list");
+      setSelectedMarketId(null);
+      setPredictionStage("configure");
+    }
     if (next !== "profile") setProfileView("settings");
   }
 
@@ -744,6 +914,33 @@ export default function App() {
             />
           ) : tab === "compete" ? (
             <CompeteScreen entries={leaderboard} currentAccountId={me?.account?.id} />
+          ) : tab === "predictions" ? (
+            <PredictionsScreen
+              view={predictionView}
+              setView={setPredictionView}
+              markets={predictionMarkets}
+              me={me}
+              loading={predictionsLoading}
+              selectedMarketId={selectedMarketId}
+              openMarket={openMarket}
+              closeMarket={closeMarket}
+              history={predictionHistory}
+              historyLoading={predictionHistoryLoading}
+              loadHistory={loadPredictionHistory}
+              outcome={predictionOutcome}
+              setOutcome={setPredictionOutcome}
+              mode={predictionMode}
+              setMode={setPredictionMode}
+              amount={predictionAmount}
+              setAmount={setPredictionAmount}
+              stage={predictionStage}
+              setStage={setPredictionStage}
+              submit={submitPrediction}
+              busy={predictionBusy}
+              message={predictionMessage}
+              lastResult={predictionResult}
+              goPortfolio={() => setTab("portfolio")}
+            />
           ) : profileView === "admin" ? (
             <AdminScreen data={adminData} loading={adminLoading} error={adminError} back={() => setProfileView("settings")} runAction={runAdminAction} />
           ) : (
