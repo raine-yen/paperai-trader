@@ -142,7 +142,19 @@ export default function MarketPage() {
     return () => window.clearTimeout(searchDebounce.current ?? undefined);
   }, [searchQuery]);
 
-  function openInstrument(result: InstrumentSearchResult) { if (!result.tradable) return; openSymbol(result.symbol); }
+  function openInstrument(result: InstrumentSearchResult) {
+    if (!result.tradable) return;
+    if (result.assetClass === "prediction") {
+      // The market page's chart/trade workspace is stock+crypto only; predictions
+      // trade through the dedicated prediction ticket, not this ticker-based flow.
+      // Until that screen lands here, route to Polymarket's own page (matches the
+      // "Polymarket · research only" card elsewhere on this page).
+      const url = predictionMarkets.find((m) => m.id === result.marketId)?.url;
+      if (url) window.open(url, "_blank", "noreferrer");
+      return;
+    }
+    openSymbol(result.symbol);
+  }
 
   async function toggleWatch(symbol: string) {
     const normalized = symbol.toUpperCase();

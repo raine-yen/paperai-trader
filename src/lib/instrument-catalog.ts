@@ -16,7 +16,7 @@
 //    <400 live-provider hits, ranked by provider score (never above local hits)
 // Within a tier, popularity weight is the tiebreaker.
 
-export type AssetClass = "stock" | "etf" | "crypto";
+export type AssetClass = "stock" | "etf" | "crypto" | "prediction";
 
 export interface Instrument {
   symbol: string;        // canonical trade symbol (crypto uses Yahoo-style BASE-USD)
@@ -241,6 +241,8 @@ async function yahooSearch(query: string): Promise<Instrument[]> {
 export interface SearchOptions {
   limit?: number;
   offset?: number;
+  /** Injectable for tests; defaults to the real Supabase admin client. */
+  predictionDb?: PredictionCatalogDb;
 }
 
 export type InstrumentMatchTier = "exact" | "alias" | "prefix" | "name" | "fuzzy" | "provider";
@@ -249,6 +251,8 @@ export type InstrumentMatchTier = "exact" | "alias" | "prefix" | "name" | "fuzzy
 export interface InstrumentSearchResult extends Instrument {
   score: number;
   matchTier: InstrumentMatchTier;
+  /** Present only for assetClass:'prediction' results — the Polymarket conditionId to trade against. */
+  marketId?: string;
 }
 
 function tierFor(score: number): InstrumentMatchTier {
@@ -260,9 +264,75 @@ function tierFor(score: number): InstrumentMatchTier {
   return "provider";
 }
 
+// ---- Prediction markets as a searchable source --------------------------
+// Reuses the same tiered scorer against question/category text so "fed"
+// surfaces a Fed-rate-cut market the same way "apple" surfaces AAPL.
+
+export interface PredictionSearchRow {
+  id: string; // conditionId
+  question: string;
+  category: string | null;
+  yes_price: number | null;
+  no_price: number | null;
+  image: string | null;
+  url: string | null;
+  status: string;
+}
+
+export interface PredictionCatalogDb {
+  from(table: string): {
+    select(cols: string): {
+      eq(col: string, val: string): PromiseLike<{ data: PredictionSearchRow[] | null; error: { message?: string } | null }>;
+    };
+  };
+}
+
+/** Score a prediction market's question/category against a normalized query, same tiers as scoreCatalog. */
+export function scorePredictionMarket(row: PredictionSearchRow, query: string): number {
+  const q = query.replace(/\s/g, "");
+  if (!q) return 0;
+  const question = norm(row.question);
+  const category = row.category ? norm(row.category) : "";
+
+  let score = 0;
+  if (question.startsWith(query)) score = 650;
+  else if (question.split(" ").some((w) => w.startsWith(query)) || (category && category.startsWith(query))) score = 600;
+  else if (question.includes(query) || (category && category.includes(query))) score = 500;
+  else if (subsequence(query, question.replace(/\s/g, ""))) score = 400;
+
+  return score;
+}
+
+function predictionToInstrument(row: PredictionSearchRow): Instrument {
+  return {
+    symbol: row.id,
+    displayName: row.question,
+    name: norm(row.question),
+    aliases: row.category ? [norm(row.category)] : [],
+    assetClass: "prediction",
+    exchange: null,
+    market: "predictions",
+    tradable: row.status === "active",
+    displaySymbol: row.id,
+    displayMarket: row.category ?? "Prediction market",
+  };
+}
+
+async function searchPredictionMarkets(db: PredictionCatalogDb, query: string): Promise<ScoredInstrument[]> {
+  const { data, error } = await db.from("prediction_markets").select("*").eq("status", "active");
+  if (error || !data) return [];
+  const scored: ScoredInstrument[] = [];
+  for (const row of data) {
+    const score = scorePredictionMarket(row, query);
+    if (score > 0) scored.push({ instrument: predictionToInstrument(row), score });
+  }
+  return scored;
+}
+
 /**
  * Unified smart search: local catalog first (deterministic ranking),
- * augmented by live Yahoo search results that the catalog doesn't cover.
+ * augmented by live Yahoo search results and persisted prediction markets
+ * that the catalog doesn't cover.
  */
 export async function searchInstruments(rawQuery: string, options: SearchOptions = {}): Promise<InstrumentSearchResult[]> {
   const query = norm(rawQuery);
@@ -273,10 +343,26 @@ export async function searchInstruments(rawQuery: string, options: SearchOptions
     const score = scoreCatalog(instrument, query);
     if (score > 0) local.push({ instrument, score });
   }
-  local.sort((a, b) => b.score - a.score);
+
+  // Prediction markets score in the SAME tier space as the local catalog
+  // (600/500/400 etc.) so "fed" and "apple" compete fairly by relevance,
+  // not by asset class.
+  let predictionDb = options.predictionDb;
+  if (!predictionDb) {
+    try {
+      const { supabaseAdmin } = await import("@/lib/supabase/admin");
+      predictionDb = supabaseAdmin() as unknown as PredictionCatalogDb;
+    } catch {
+      predictionDb = undefined; // no DB available (e.g. pure unit test) — skip predictions
+    }
+  }
+  const predictionMatches = predictionDb ? await searchPredictionMarkets(predictionDb, query) : [];
+
+  const merged0 = [...local, ...predictionMatches];
+  merged0.sort((a, b) => b.score - a.score);
 
   const provider = await yahooSearch(query);
-  const seen = new Set(local.map((l) => l.instrument.symbol));
+  const seen = new Set(merged0.map((l) => l.instrument.symbol));
   const providerScored: ScoredInstrument[] = provider
     .filter((p) => !seen.has(p.symbol))
     .map((instrument, idx) => ({
@@ -286,7 +372,12 @@ export async function searchInstruments(rawQuery: string, options: SearchOptions
     }));
 
   const merged: InstrumentSearchResult[] = [
-    ...local.map(({ instrument, score }) => ({ ...instrument, score, matchTier: tierFor(score) })),
+    ...merged0.map(({ instrument, score }) => ({
+      ...instrument,
+      score,
+      matchTier: tierFor(score),
+      ...(instrument.assetClass === "prediction" ? { marketId: instrument.symbol } : {}),
+    })),
     ...providerScored.map(({ instrument, score }) => ({ ...instrument, score, matchTier: "provider" as const })),
   ];
 

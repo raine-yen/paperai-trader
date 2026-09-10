@@ -39,6 +39,25 @@ try {
   check("alias: 'microstrategy' finds MSTR", r7.some((x) => x.symbol === "MSTR"), JSON.stringify(r7.slice(0, 5).map((x) => x.symbol)));
   const r8 = await top("fuzzyzz");
   check("nonsense query returns no fuzzy false positives above 400", !r8.some((x) => x.score >= 400), JSON.stringify(r8.slice(0, 5).map((x) => [x.symbol, x.score])));
+
+  // Prediction markets in the unified search, with an injected fake DB (no network/Supabase needed):
+  const fakePredictionDb = {
+    from: () => ({
+      select: () => ({
+        eq: async () => ({
+          data: [
+            { id: "0xfed123", question: "Will the Fed cut rates in March?", category: "Economics", yes_price: 0.62, no_price: 0.38, image: null, url: null, status: "active" },
+            { id: "0xelxn456", question: "Will the incumbent win the election?", category: "Politics", yes_price: 0.5, no_price: 0.5, image: null, url: null, status: "active" },
+          ],
+          error: null,
+        }),
+      }),
+    }),
+  };
+  const r9 = await top("fed", { limit: 5, predictionDb: fakePredictionDb });
+  check("'fed' surfaces the Fed-cut prediction market", r9.some((x) => x.assetClass === "prediction" && x.marketId === "0xfed123"), JSON.stringify(r9.map((x) => [x.symbol, x.assetClass, x.score])));
+  const r10 = await top("aapl", { limit: 5, predictionDb: fakePredictionDb });
+  check("'aapl' still returns AAPL first even with predictions in the pool", r10[0]?.symbol === "AAPL", JSON.stringify(r10.slice(0, 3).map((x) => [x.symbol, x.assetClass])));
 } catch (e) {
   failures++;
   console.log("FAIL live tests threw ::", e && e.message);
