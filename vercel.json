@@ -10,7 +10,11 @@
     },
     {
       "path": "/api/cron/predictions",
-      "schedule": "*/10 * * * *"
+      "schedule": "10 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions-settle",
+      "schedule": "15 13 * * *"
     }
   ]
 }

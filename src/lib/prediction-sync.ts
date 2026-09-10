@@ -144,8 +144,8 @@ export async function liveMidpoint(
       headers: { Accept: "application/json" },
     });
     if (res.ok) {
-      const body = (await res.json()) as { mid?: string | number };
-      const mid = price01(body.mid);
+      const body = (await res.json()) as { mid?: string | number; midpoint?: string | number };
+      const mid = price01(body.mid ?? body.midpoint);
       if (mid != null) return mid;
     }
   } catch {

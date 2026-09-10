@@ -3,7 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { syncPredictionCatalog } from "@/lib/prediction-sync";
 
 // Refreshes the persisted prediction-markets catalog from Polymarket Gamma.
-// Vercel Cron hits this every 10 minutes (Hobby minimum); manual GET works too.
+// Vercel Cron hits this once/day (Hobby ceiling); /api/predictions/refresh
+// gives users an on-demand path so the catalog doesn't go stale for 24h.
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
