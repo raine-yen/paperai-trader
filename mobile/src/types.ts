@@ -83,6 +83,31 @@ export type TraderProfile = {
   risk_style?: string | null;
 };
 
+export type PredictionPosition = {
+  id: string;
+  market_id: string;
+  outcome: "yes" | "no";
+  shares: number;
+  avg_cost: number;
+  question?: string | null;
+  current_price?: number;
+  market_value?: number;
+  cost_basis?: number;
+  unrealized_pl?: number;
+};
+
+export type PredictionFill = {
+  id: string;
+  market_id: string;
+  outcome: "yes" | "no";
+  side: "buy" | "sell" | "settle";
+  shares: number;
+  price: number;
+  total: number;
+  cash_after: number;
+  created_at: string;
+};
+
 export type Me = {
   user?: { id?: string; email?: string };
   account: Account | null;
@@ -98,6 +123,9 @@ export type Me = {
   profile?: TraderProfile | null;
   transfers?: Array<Record<string, unknown>>;
   is_admin?: boolean;
+  prediction_positions?: PredictionPosition[];
+  prediction_positions_value?: number;
+  prediction_fills?: PredictionFill[];
 };
 
 export type Quote = {

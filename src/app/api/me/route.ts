@@ -7,6 +7,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { calculateInvestedPerformance } from "@/lib/performance";
 import { ensurePaperAccount } from "@/lib/ensure-paper-account";
 import { portfolioReturnPct } from "@/lib/ranks";
+import { liveMidpoint, type PredictionMarketRow } from "@/lib/prediction-sync";
 
 // Authenticated dashboard endpoint — returns the current user's account, positions, recent orders.
 export async function GET(req: NextRequest) {
@@ -43,6 +44,8 @@ export async function GET(req: NextRequest) {
     alertsResult,
     profileResult,
     messagesResult,
+    { data: predictionPositions },
+    { data: predictionFills },
   ] = await Promise.all([
     db.from("positions").select("*").eq("account_id", account.id),
     db
@@ -68,6 +71,13 @@ export async function GET(req: NextRequest) {
     db.from("trader_profiles").select("*").eq("account_id", account.id).maybeSingle(),
 
     db.from("direct_messages").select("id").eq("recipient_account_id", account.id).is("read_at", null).eq("hidden_by_admin", false),
+    db.from("prediction_positions").select("*").eq("account_id", account.id).gt("shares", 0),
+    db
+      .from("prediction_fills")
+      .select("*")
+      .eq("account_id", account.id)
+      .order("created_at", { ascending: false })
+      .limit(25),
   ]);
 
   const symbols = (positions ?? []).map((p: { symbol: string }) => p.symbol);
@@ -89,7 +99,36 @@ export async function GET(req: NextRequest) {
   });
 
   const positionsValue = positionsWithMarket.reduce((s, p) => s + p.market_value, 0);
-  const equity = Number(account.cash) + positionsValue;
+
+  // Enrich prediction positions with a live CLOB midpoint (fallback to the
+  // persisted catalog price), matching how /api/prediction-markets prices them.
+  const predMarketIds = Array.from(new Set((predictionPositions ?? []).map((p: { market_id: string }) => p.market_id)));
+  const predMarketRows = predMarketIds.length
+    ? (await db.from("prediction_markets").select("*").in("id", predMarketIds)).data ?? []
+    : [];
+  const predMarketById = new Map((predMarketRows as PredictionMarketRow[]).map((m) => [m.id, m]));
+  const predictionPositionsWithMarket = await Promise.all(
+    (predictionPositions ?? []).map(async (p: { id: string; market_id: string; outcome: string; shares: number; avg_cost: number }) => {
+      const market = predMarketById.get(p.market_id);
+      const tokenId = (p.outcome === "yes" ? market?.yes_token_id : market?.no_token_id) ?? null;
+      const fallback = (p.outcome === "yes" ? market?.yes_price : market?.no_price) ?? null;
+      const price = (await liveMidpoint(tokenId, fetch, fallback)) ?? Number(p.avg_cost);
+      const shares = Number(p.shares);
+      const marketValue = shares * price;
+      const costBasis = shares * Number(p.avg_cost);
+      return {
+        ...p,
+        question: market?.question ?? null,
+        current_price: price,
+        market_value: marketValue,
+        cost_basis: costBasis,
+        unrealized_pl: marketValue - costBasis,
+      };
+    }),
+  );
+  const predictionPositionsValue = predictionPositionsWithMarket.reduce((s, p) => s + p.market_value, 0);
+
+  const equity = Number(account.cash) + positionsValue + predictionPositionsValue;
   const performance = calculateInvestedPerformance(positionsWithMarket);
   const leaderboard = await db
     .from("accounts")
@@ -123,7 +162,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     user: { id: user.id, email: user.email },
     is_admin: isAdminEmail(user.email),
-    account: { ...account, equity, positions_value: positionsValue },
+    account: { ...account, equity, positions_value: positionsValue, prediction_positions_value: predictionPositionsValue },
     performance,
     positions: positionsWithMarket,
     orders: orders ?? [],
@@ -133,6 +172,9 @@ export async function GET(req: NextRequest) {
     alerts: alertsResult.error && isMissingTableError(alertsResult.error) ? [] : alertsResult.data ?? [],
     profile: profileResult.error && isMissingTableError(profileResult.error) ? null : profileResult.data ?? null,
     unread_messages: messagesResult.error && isMissingTableError(messagesResult.error) ? 0 : messagesResult.data?.length ?? 0,
+    prediction_positions: predictionPositionsWithMarket,
+    prediction_positions_value: predictionPositionsValue,
+    prediction_fills: predictionFills ?? [],
     competition: {
       rank: rankIndex >= 0 ? rankIndex + 1 : null,
       participants: ranked.length,
