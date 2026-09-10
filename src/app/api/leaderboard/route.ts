@@ -19,13 +19,14 @@ interface StandingRow {
   gain_amount: number;
   return_pct: number;
   invested_growth_pct: number;
-  tier: number;
-  tier_name: string;
-  division: number;
-  rank_points: number;
   position: number;
-  movement: RankMovement;
-  movement_amount: number;
+  /** Internal-only: used to persist ranks/rank_history, stripped before the response goes out. */
+  _tier: number;
+  _tier_name: string;
+  _division: number;
+  _rank_points: number;
+  _movement: RankMovement;
+  _movement_amount: number;
 }
 
 async function recomputeRanks(competitionId: string, standings: StandingRow[]): Promise<void> {
@@ -61,16 +62,16 @@ async function recomputeRanks(competitionId: string, standings: StandingRow[]): 
 
   for (const entry of standings) {
     const mv = rankMovement({ current: entry.position, previous: previousPositions.get(entry.account_id) ?? null });
-    entry.movement = mv.movement;
-    entry.movement_amount = mv.movementAmount;
+    entry._movement = mv.movement;
+    entry._movement_amount = mv.movementAmount;
 
     await db.from("ranks").upsert(
       {
         account_id: entry.account_id,
         season_id: seasonId,
-        tier: entry.tier,
-        division: entry.division,
-        rank_points: entry.rank_points,
+        tier: entry._tier,
+        division: entry._division,
+        rank_points: entry._rank_points,
         position_in_tier: entry.position,
         updated_at: new Date().toISOString(),
       },
@@ -82,9 +83,9 @@ async function recomputeRanks(competitionId: string, standings: StandingRow[]): 
         account_id: entry.account_id,
         season_id: seasonId,
         position: entry.position,
-        tier: entry.tier,
-        division: entry.division,
-        rank_points: entry.rank_points,
+        tier: entry._tier,
+        division: entry._division,
+        rank_points: entry._rank_points,
       });
     }
   }
@@ -200,13 +201,13 @@ export async function GET(req: NextRequest) {
         gain_amount: performance.gain_amount,
         return_pct: rank.returnPct,
         invested_growth_pct: performance.growth_pct,
-        tier: rank.tier,
-        tier_name: rank.tierName,
-        division: rank.division,
-        rank_points: rank.rankPoints,
         position: 0,
-        movement: "new" as RankMovement,
-        movement_amount: 0,
+        _tier: rank.tier,
+        _tier_name: rank.tierName,
+        _division: rank.division,
+        _rank_points: rank.rankPoints,
+        _movement: "new" as RankMovement,
+        _movement_amount: 0,
       };
     })
     .sort((a, b) => b.return_pct - a.return_pct);
@@ -221,7 +222,12 @@ export async function GET(req: NextRequest) {
     // Rank persistence is best-effort: the board must still render if writes fail.
   }
 
-  return NextResponse.json({ entries: standings });
+  // Public leaderboard is intentionally lean: no tier/division/movement here.
+  // Those live behind the dedicated GET /api/rank drill-in (tap-to-open icon),
+  // per product decision — the list itself must not show rank badges.
+  const entries = standings.map(({ _tier, _tier_name, _division, _rank_points, _movement, _movement_amount, ...rest }) => rest);
+
+  return NextResponse.json({ entries });
 }
 
 export const dynamic = "force-dynamic";

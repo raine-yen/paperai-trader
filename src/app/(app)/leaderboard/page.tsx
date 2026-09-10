@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Award, Eye, Loader2, Medal, Trophy } from "lucide-react";
+import { Award, Eye, Loader2, Medal, Shield, Trophy } from "lucide-react";
 import { cn, formatPct, formatUSD } from "@/lib/utils";
 
 interface Entry {
@@ -13,13 +13,19 @@ interface Entry {
   gain_amount: number;
   return_pct: number;
   invested_growth_pct?: number;
-  tier?: number;
-  tier_name?: string;
-  division?: number;
-  rank_points?: number;
   position?: number;
-  movement?: "up" | "down" | "new" | "same";
-  movement_amount?: number;
+}
+
+interface RankDetail {
+  account_id: string;
+  display_name: string;
+  tier: number;
+  tier_name: string;
+  division: number;
+  rank_points: number;
+  return_pct: number;
+  movement: "up" | "down" | "new" | "same";
+  movement_amount: number;
 }
 
 const TIER_STYLES: Record<string, string> = {
@@ -30,30 +36,68 @@ const TIER_STYLES: Record<string, string> = {
   Diamond: "text-accent-blue border-accent-blue/50 bg-accent-blue/10",
 };
 
-function TierBadge({ tierName, division }: { tierName?: string; division?: number }) {
-  if (!tierName) return <span className="text-xs text-gray-500">Unranked</span>;
+function tierGlyph(tierName?: string) {
+  return tierName === "Diamond" ? "◆" : tierName === "Gold" ? "●" : tierName === "Silver" ? "◐" : "▲";
+}
+
+/** Small tap-to-open rank icon. Leaderboard rows never show tier/division
+ * inline — tapping this fetches and reveals the detail in a popover so the
+ * board itself stays uncluttered. */
+function RankIcon({ accountId, onOpen }: { accountId: string; onOpen: (id: string) => void }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider",
-        TIER_STYLES[tierName] ?? "text-gray-400 border-bg-border",
-      )}
-      title={`${tierName} · Division ${division ?? 1}`}
+    <button
+      type="button"
+      onClick={() => onOpen(accountId)}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-bg-border text-gray-400 transition hover:border-accent-blue/50 hover:text-accent-blue"
+      title="View rank"
+      aria-label="View rank"
     >
-      {tierName === "Diamond" ? "◆" : tierName === "Gold" ? "●" : tierName === "Silver" ? "◐" : "▲"} {tierName}
-      {tierName === "Diamond" && division && division > 1 ? ` D${division}` : ""}
-    </span>
+      <Shield className="h-3.5 w-3.5" />
+    </button>
   );
 }
 
-function MovementBadge({ movement, amount }: { movement?: string; amount?: number }) {
-  if (!movement || movement === "new") return <span className="text-[10px] font-bold uppercase tracking-wider text-accent-violet">New</span>;
-  if (movement === "same") return <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">—</span>;
-  const up = movement === "up";
+function RankPopover({ detail, loading, error, onClose }: { detail: RankDetail | null; loading: boolean; error: string; onClose: () => void }) {
   return (
-    <span className={cn("text-xs font-black tabular-nums", up ? "text-accent-green" : "text-accent-red")}>
-      {up ? "▲" : "▼"} {amount ?? 1}
-    </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="card w-full max-w-xs p-5" onClick={(e) => e.stopPropagation()}>
+        {loading ? (
+          <div className="py-6 text-center text-sm text-gray-500">Loading rank...</div>
+        ) : error ? (
+          <div className="py-6 text-center text-sm text-accent-red">{error}</div>
+        ) : detail ? (
+          <>
+            <div className="text-xs uppercase tracking-wider text-gray-500">{detail.display_name}</div>
+            <div className="mt-2 flex items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-black uppercase tracking-wider",
+                  TIER_STYLES[detail.tier_name] ?? "text-gray-400 border-bg-border",
+                )}
+              >
+                {tierGlyph(detail.tier_name)} {detail.tier_name}
+                {detail.tier_name === "Diamond" && detail.division > 1 ? ` D${detail.division}` : ""}
+              </span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Metric label="Return" value={formatPct(detail.return_pct)} tone={detail.return_pct >= 0 ? "text-accent-green" : "text-accent-red"} />
+              <Metric
+                label="Movement"
+                value={
+                  detail.movement === "new" || detail.movement === "same"
+                    ? detail.movement === "new" ? "New" : "—"
+                    : `${detail.movement === "up" ? "▲" : "▼"} ${detail.movement_amount}`
+                }
+                tone={detail.movement === "up" ? "text-accent-green" : detail.movement === "down" ? "text-accent-red" : undefined}
+              />
+            </div>
+          </>
+        ) : null}
+        <button type="button" onClick={onClose} className="btn-ghost mt-4 w-full border border-bg-border py-2 text-xs">
+          Close
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -72,6 +116,10 @@ export default function LeaderboardPage() {
   const [revealed, setRevealed] = useState<Record<string, RevealedAsset[]>>({});
   const [peekLoading, setPeekLoading] = useState<string | null>(null);
   const [peekError, setPeekError] = useState("");
+  const [rankOpenFor, setRankOpenFor] = useState<string | null>(null);
+  const [rankDetail, setRankDetail] = useState<RankDetail | null>(null);
+  const [rankLoading, setRankLoading] = useState(false);
+  const [rankError, setRankError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -114,6 +162,22 @@ export default function LeaderboardPage() {
     setPeekLoading(null);
   }
 
+  async function openRank(accountId: string) {
+    setRankOpenFor(accountId);
+    setRankDetail(null);
+    setRankError("");
+    setRankLoading(true);
+    try {
+      const r = await fetch(`/api/rank?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (r.ok) setRankDetail(j);
+      else setRankError(j.error ?? "Could not load rank");
+    } catch {
+      setRankError("Could not load rank");
+    }
+    setRankLoading(false);
+  }
+
   return (
     <div className="animate-fade-in space-y-5">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -134,7 +198,7 @@ export default function LeaderboardPage() {
       {podium.length > 0 && (
         <section className="grid gap-4 md:grid-cols-3">
           {podium.map((entry, index) => (
-            <PodiumCard key={entry.account_id} entry={entry} rank={index + 1} />
+            <PodiumCard key={entry.account_id} entry={entry} rank={index + 1} onOpenRank={openRank} />
           ))}
         </section>
       )}
@@ -153,14 +217,13 @@ export default function LeaderboardPage() {
               <thead className="bg-bg-soft text-xs uppercase tracking-wider text-gray-500">
                 <tr>
                   <th className="w-20 px-4 py-3 text-left font-semibold">Rank</th>
-                  <th className="px-4 py-3 text-left font-semibold">Tier</th>
                   <th className="px-4 py-3 text-left font-semibold">Trader</th>
                   <th className="px-4 py-3 text-right font-semibold">Portfolio</th>
                   <th className="px-4 py-3 text-right font-semibold">Return</th>
-                  <th className="px-4 py-3 text-right font-semibold">Move</th>
                   <th className="px-4 py-3 text-right font-semibold">P/L</th>
                   <th className="px-4 py-3 text-right font-semibold">Progress</th>
                   <th className="px-4 py-3 text-right font-semibold">Assets</th>
+                  <th className="w-12 px-4 py-3 text-right font-semibold"></th>
                 </tr>
               </thead>
               <tbody>
@@ -172,7 +235,6 @@ export default function LeaderboardPage() {
                     <Fragment key={entry.account_id}>
                       <tr className="ticker-row">
                         <td className="px-4 py-4"><RankBadge rank={index + 1} /></td>
-                        <td className="px-4 py-4"><TierBadge tierName={entry.tier_name} division={entry.division} /></td>
                         <td className="px-4 py-4">
                           <div className="font-semibold">{entry.display_name}</div>
                           <div className="text-xs text-gray-500">
@@ -181,7 +243,6 @@ export default function LeaderboardPage() {
                         </td>
                         <td className="px-4 py-4 text-right font-semibold tabular-nums">{formatUSD(Number(entry.equity))}</td>
                         <td className={cn("px-4 py-4 text-right font-black tabular-nums", up ? "text-accent-green" : "text-accent-red")}>{formatPct(Number(entry.return_pct))}</td>
-                        <td className="px-4 py-4 text-right"><MovementBadge movement={entry.movement} amount={entry.movement_amount} /></td>
                         <td className={cn("px-4 py-4 text-right font-semibold tabular-nums", up ? "text-accent-green" : "text-accent-red")}>{formatUSD(pl)}</td>
                         <td className="px-4 py-4 text-right">
                           <div className="ml-auto h-2 w-32 rounded-full bg-bg-elevated">
@@ -200,10 +261,13 @@ export default function LeaderboardPage() {
                             {revealed[entry.account_id] ? "Viewed" : "$10,000"}
                           </button>
                         </td>
+                        <td className="px-4 py-4 text-right">
+                          <RankIcon accountId={entry.account_id} onOpen={openRank} />
+                        </td>
                       </tr>
                       {revealed[entry.account_id] && (
                         <tr className="border-b border-bg-border bg-bg-elevated/35">
-                          <td colSpan={9} className="px-4 py-4">
+                          <td colSpan={8} className="px-4 py-4">
                             {revealed[entry.account_id].length === 0 ? (
                               <div className="text-sm text-gray-500">{entry.display_name} has no open assets.</div>
                             ) : (
@@ -233,11 +297,20 @@ export default function LeaderboardPage() {
           </div>
         )}
       </section>
+
+      {rankOpenFor && (
+        <RankPopover
+          detail={rankDetail}
+          loading={rankLoading}
+          error={rankError}
+          onClose={() => setRankOpenFor(null)}
+        />
+      )}
     </div>
   );
 }
 
-function PodiumCard({ entry, rank }: { entry: Entry; rank: number }) {
+function PodiumCard({ entry, rank, onOpenRank }: { entry: Entry; rank: number; onOpenRank: (id: string) => void }) {
   const pl = Number(entry.gain_amount);
   const up = Number(entry.return_pct) >= 0;
   const Icon = rank === 1 ? Trophy : rank === 2 ? Medal : Award;
@@ -251,10 +324,12 @@ function PodiumCard({ entry, rank }: { entry: Entry; rank: number }) {
           <div>
             <div className="text-xs uppercase tracking-wider text-gray-500">Rank {rank}</div>
             <div className="font-semibold">{entry.display_name}</div>
-            <div className="mt-1"><TierBadge tierName={entry.tier_name} division={entry.division} /></div>
           </div>
         </div>
-        <div className={cn("text-right font-black tabular-nums", up ? "text-accent-green" : "text-accent-red")}>{formatPct(Number(entry.return_pct))}</div>
+        <div className="flex items-center gap-2">
+          <div className={cn("text-right font-black tabular-nums", up ? "text-accent-green" : "text-accent-red")}>{formatPct(Number(entry.return_pct))}</div>
+          <RankIcon accountId={entry.account_id} onOpen={onOpenRank} />
+        </div>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3">
         <Metric label="Equity" value={formatUSD(Number(entry.equity))} />
