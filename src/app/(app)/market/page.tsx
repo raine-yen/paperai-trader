@@ -145,12 +145,7 @@ export default function MarketPage() {
   function openInstrument(result: InstrumentSearchResult) {
     if (!result.tradable) return;
     if (result.assetClass === "prediction") {
-      // The market page's chart/trade workspace is stock+crypto only; predictions
-      // trade through the dedicated prediction ticket, not this ticker-based flow.
-      // Until that screen lands here, route to Polymarket's own page (matches the
-      // "Polymarket · research only" card elsewhere on this page).
-      const url = result.url ?? predictionMarkets.find((m) => m.id === result.marketId)?.url;
-      if (url) window.open(url, "_blank", "noreferrer");
+      if (result.marketId) window.location.assign(`/predictions?marketId=${encodeURIComponent(result.marketId)}`);
       return;
     }
     openSymbol(result.symbol);
@@ -197,8 +192,24 @@ export default function MarketPage() {
       </div>
       {watchlistError ? <p role="status" className="mt-3 text-sm text-accent-red">{watchlistError}</p> : null}
       <section className="mt-10 border-t border-border pt-6" aria-labelledby="alternative-markets-heading">
-        <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold tracking-[0.16em] text-accent-green">ALTERNATIVE MARKETS</p><h2 id="alternative-markets-heading" className="mt-1 text-2xl font-black">Crypto & Prediction Markets</h2></div><p className="max-w-md text-sm text-gray-500">Crypto is available for paper trading. Polymarket is read-only research—no prediction-market orders are placed in Vanta.</p></div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2"><article className="card p-4"><div className="flex items-center justify-between gap-2"><div><p className="text-xs font-bold tracking-[0.14em] text-accent-green">COINS & MEMECOINS</p><h3 className="mt-1 font-bold">Paper-tradable crypto</h3></div><button type="button" className="vanta-text-action" onClick={() => setActiveCategory("Crypto")}>View coins</button></div><p className="mt-2 text-sm text-gray-500">Bitcoin, Ethereum, Solana, DOGE, SHIB, PEPE, BONK, and more use live quote references with simulated funds.</p></article><article className="card p-4"><p className="text-xs font-bold tracking-[0.14em] text-accent-green">POLYMARKET · RESEARCH ONLY</p>{predictionError ? <p className="mt-2 text-sm text-gray-500">{predictionError}</p> : predictionMarkets.length ? <div className="mt-3 space-y-2">{predictionMarkets.slice(0, 3).map((market) => <a key={market.id} href={market.url} target="_blank" rel="noreferrer" className="block rounded border border-border p-3 transition hover:border-accent-green"><strong className="line-clamp-2 text-sm">{market.question}</strong><span className="mt-1 block text-xs text-gray-500">{market.outcomes?.length && market.outcomes[0]?.toLowerCase() !== "yes" ? `${market.outcomes[0]} ${formatProbability(market.outcomePrices?.[0] ?? null)} · ${market.outcomes[1] ?? "Other"} ${formatProbability(market.outcomePrices?.[1] ?? null)}` : `Yes ${formatProbability(market.yesPrice)} · No ${formatProbability(market.noPrice)}`} · 24h volume {compactMoney(market.volume24hr)} · View on Polymarket ↗</span></a>)}</div> : <p className="mt-2 text-sm text-gray-500">Loading public prediction-market research…</p>}<p className="mt-3 text-xs text-gray-500">Paper research only. Vanta does not execute or simulate Polymarket trades.</p></article></div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold tracking-[0.16em] text-accent-green">ALTERNATIVE MARKETS</p>
+            <h2 id="alternative-markets-heading" className="mt-1 text-2xl font-black">Crypto & paper predictions</h2>
+          </div>
+          <p className="max-w-md text-sm text-gray-500">Crypto and outcome contracts are paper-tradable with the same simulated cash balance. Prediction trades settle at $1 per correct share.</p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <article className="card p-4">
+            <div className="flex items-center justify-between gap-2"><div><p className="text-xs font-bold tracking-[0.14em] text-accent-green">COINS & MEMECOINS</p><h3 className="mt-1 font-bold">Paper-tradable crypto</h3></div><button type="button" className="vanta-text-action" onClick={() => setActiveCategory("Crypto")}>View coins</button></div>
+            <p className="mt-2 text-sm text-gray-500">Bitcoin, Ethereum, Solana, DOGE, SHIB, PEPE, BONK, and more use live quote references with simulated funds.</p>
+          </article>
+          <article className="card p-4">
+            <div className="flex items-center justify-between gap-2"><div><p className="text-xs font-bold tracking-[0.14em] text-accent-green">PAPER PREDICTIONS</p><h3 className="mt-1 font-bold">Trade an outcome</h3></div><button type="button" className="vanta-text-action" onClick={() => window.location.assign("/predictions")}>Browse all</button></div>
+            {predictionError ? <p className="mt-2 text-sm text-gray-500">{predictionError}</p> : predictionMarkets.length ? <div className="mt-3 space-y-2">{predictionMarkets.slice(0, 3).map((market) => <button key={market.id} type="button" onClick={() => window.location.assign(`/predictions?marketId=${encodeURIComponent(market.id)}`)} className="block w-full rounded border border-border p-3 text-left transition hover:border-accent-green" aria-label={`Trade ${market.question} in Vanta`}><strong className="line-clamp-2 text-sm">{market.question}</strong><span className="mt-1 block text-xs text-gray-500">{market.outcomes?.length && market.outcomes[0]?.toLowerCase() !== "yes" ? `${market.outcomes[0]} ${formatProbability(market.outcomePrices?.[0] ?? null)} · ${market.outcomes[1] ?? "Other"} ${formatProbability(market.outcomePrices?.[1] ?? null)}` : `Yes ${formatProbability(market.yesPrice)} · No ${formatProbability(market.noPrice)}`} · 24h volume {compactMoney(market.volume24hr)} · Trade in Vanta</span></button>)}</div> : <p className="mt-2 text-sm text-gray-500">Loading paper prediction markets…</p>}
+            <p className="mt-3 text-xs text-gray-500">Outcome shares pay $1 when correct at resolution. You can also close all or part of an open position early.</p>
+          </article>
+        </div>
       </section>
     </section>
   );

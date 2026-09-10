@@ -61,9 +61,10 @@
       --color-border: 34 34 34;
       --color-soft: 12 12 12;
       --color-text: 245 245 245;
-    --color-green: 45 230 157;
+    --color-accent: 200 255 0;
+    --color-green: 200 255 0;
     --color-blue: 91 192 250;
-    --page-glow: rgba(45, 230, 157, 0.12);
+    --page-glow: rgba(200, 255, 0, 0.12);
         --page-gradient-end: 0 0 0;
   }
 
@@ -84,13 +85,47 @@
   * {
     border-color: rgb(var(--color-border));
   }
+
+  :root {
+    --brand-lime: #c8ff00;
+    --brand-lime-pressed: #b3e600;
+    --content-primary: #ffffff;
+    --content-secondary: #a7a7a7;
+    --content-tertiary: #707070;
+    --surface-background: #000000;
+    --surface-raised: #0a0a0a;
+    --border-subtle: #1c1c1c;
+    --border-strong: #2a2a2a;
+    --bearish: #ff5a36;
+    --bullish: #c8ff00;
+    --scrim: rgba(0, 0, 0, 0.72);
+    --focus-ring: #c8ff00;
+    --elevation-shadow: 0 22px 70px rgba(0, 0, 0, 0.48);
+  }
+
+  [data-theme="light"] {
+    --content-primary: #000000;
+    --content-secondary: #4b4b4b;
+    --content-tertiary: #7a7a7a;
+    --surface-background: #ffffff;
+    --surface-raised: #f7f7f7;
+    --border-subtle: #e6e6e6;
+    --border-strong: #d4d4d4;
+    --bearish: #d93b1f;
+    --scrim: rgba(0, 0, 0, 0.4);
+    --elevation-shadow: 0 22px 70px rgba(0, 0, 0, 0.14);
+  }
 }
 
 @layer components {
-  .vanta-app-main { @apply w-full px-4 py-4 lg:ml-[216px] lg:px-0 lg:py-0; }
-  .vanta-rail { @apply sticky top-0 z-30 flex min-h-16 items-center border-b border-bg-border bg-black px-4 lg:fixed lg:inset-y-0 lg:left-0 lg:w-[216px] lg:flex-col lg:items-stretch lg:border-b-0 lg:border-r lg:px-3 lg:py-4; }
+  .vanta-app-main { @apply w-full px-4 py-4 lg:ml-[216px] lg:px-0 lg:py-0 xl:mr-[280px]; }
+  .vanta-rail { @apply sticky top-0 z-30 min-h-16 items-center border-b border-bg-border bg-black px-4 lg:fixed lg:inset-y-0 lg:left-0 lg:w-[216px] lg:flex-col lg:items-stretch lg:border-b-0 lg:border-r lg:px-3 lg:py-4; }
+  .vanta-mobile-topbar { @apply sticky top-0 z-30 flex min-h-16 items-center justify-between border-b border-bg-border bg-black/95 px-4 backdrop-blur; }
+  .vanta-mobile-bottom { @apply fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-bg-border bg-black/95 px-1 pt-1 backdrop-blur; padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+  .vanta-mobile-nav-link { @apply flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-1 text-[9px] font-semibold text-gray-500 transition-colors; }
+  .vanta-mobile-nav-link.is-active { @apply text-accent-green; }
+  .vanta-watchlist-rail { @apply fixed inset-y-0 right-0 z-20 hidden w-[280px] overflow-y-auto border-l border-bg-border bg-black xl:block; }
   .vanta-rail-head { @apply flex items-center; }
-  .vanta-mobile-menu { @apply mr-3 inline-flex h-11 w-11 items-center justify-center text-gray-300 lg:hidden; }
   .vanta-lockup { @apply flex items-center gap-3 text-white; }
   .vanta-mark { @apply flex h-10 w-10 items-center justify-center rounded-full bg-white text-sm font-black text-black; }
   .vanta-lockup-copy { @apply flex items-center gap-2 text-base tracking-tight; }
@@ -104,6 +139,10 @@
   .vanta-safety-card small { @apply mt-1 text-[9px] tracking-[.08em] text-accent-green; }
   .vanta-icon-button { @apply inline-flex min-h-11 min-w-11 items-center justify-center text-gray-400 hover:bg-bg-elevated hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-green; }
   .vanta-mobile-drawer { @apply relative h-full w-[min(280px,82vw)] bg-black p-5 shadow-2xl; }
+}
+
+@media (max-width: 1023px) {
+  .vanta-app-main { padding-bottom: 5.5rem; }
 }
 
 @layer components {
@@ -260,7 +299,7 @@
 .vanta-chart { height: 330px; margin-top: 28px; border-bottom: 1px solid var(--border-subtle); }
 .vanta-ranges { display: flex; gap: 4px; margin-top: 14px; overflow-x: auto; }
 .vanta-ranges button { min-width: 44px; min-height: 34px; padding: 0 10px; color: var(--content-secondary); font-size: 12px; font-weight: 700; }
-.vanta-ranges button.is-active { background: white; color: black; }
+.vanta-ranges button.is-active { background: var(--brand-lime); color: #0a0a0a; }
 .vanta-ranges button:focus-visible, .vanta-segment button:focus-visible, .vanta-review-button:focus-visible, .vanta-buy-action:focus-visible, .vanta-sell-action:focus-visible, .vanta-rail-close:focus-visible, .vanta-search:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .vanta-trade-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; margin-top: 26px; }
 .vanta-buy-action, .vanta-sell-action { min-height: 52px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; letter-spacing: -.01em; transition: transform 120ms ease, background-color 140ms ease, border-color 140ms ease; }
@@ -300,8 +339,8 @@
 .vanta-order-footer { flex: none; padding: 14px 22px max(18px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border-strong); background: #050505; box-shadow: 0 -10px 20px rgba(0, 0, 0, .22); }
 .vanta-order-content > h2 { margin: 0 0 3px; font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
 .vanta-segment { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border-subtle); }
-.vanta-segment button { min-height: 44px; background: #0b0b0b; color: var(--content-secondary); font-size: 12px; font-weight: 700; }
-.vanta-segment button.is-active { background: white; color: black; }
+.vanta-segment button { min-height: 44px; background: #0b0b0b; color: var(--content-secondary); font-size: 12px; font-weight: 700; transition: background-color 140ms ease, color 140ms ease; }
+.vanta-segment button.is-active { background: var(--brand-lime); color: #0a0a0a; }
 .vanta-amount { display: flex; align-items: center; min-width: 0; width: 100%; min-height: 74px; border-bottom: 1px solid var(--border-strong); }
 .vanta-amount span { color: var(--content-secondary); font-size: 24px; }
 .vanta-amount input { min-width: 0; flex: 1; padding: 0 8px; background: transparent; color: white; font-size: 30px; font-variant-numeric: tabular-nums; outline: none; }

@@ -34,6 +34,18 @@ test("leaderboard page never renders tier/division/movement inline in the table"
   // Rank detail is opt-in via a tap-to-open icon backed by /api/rank.
   assert.match(page, /RankIcon/);
   assert.match(page, /\/api\/rank\?account_id=/);
+  assert.match(page, /Rank points/);
+  assert.match(page, /Division ladder/);
+  assert.match(page, /Diamond begins at 40% return/);
+});
+
+test("Compete surfaces the signed-in trader's own rank standing inline", async () => {
+  const page = await source("src/app/(app)/leaderboard/page.tsx");
+  // A "Your standing" hero shows the viewer's own tier/division without needing
+  // to tap another trader's icon: it bootstraps from /api/me then /api/rank.
+  assert.match(page, /Your standing/);
+  assert.match(page, /YourRankHero/);
+  assert.match(page, /\/api\/me/);
 });
 
 test("GET /api/rank exposes tier/division/movement for the drill-in view", async () => {

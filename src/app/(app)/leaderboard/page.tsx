@@ -90,7 +90,14 @@ function RankPopover({ detail, loading, error, onClose }: { detail: RankDetail |
                 }
                 tone={detail.movement === "up" ? "text-accent-green" : detail.movement === "down" ? "text-accent-red" : undefined}
               />
+              <Metric label="Rank points" value={String(detail.rank_points)} />
+              <Metric label="Division" value={`${detail.tier_name} ${detail.division}`} />
             </div>
+            <section className="mt-4 border-t border-bg-border pt-4" aria-label="Division ladder">
+              <div className="flex items-center justify-between"><strong className="text-xs uppercase tracking-[0.14em] text-gray-400">Division ladder</strong><span className="text-[10px] text-gray-500">Return thresholds</span></div>
+              <div className="mt-3 grid grid-cols-5 gap-1 text-center text-[9px] font-bold"><span className="border border-bg-border py-2 text-gray-400">Iron<br />0%</span><span className="border border-amber-600/40 py-2 text-amber-600">Bronze<br />5%</span><span className="border border-gray-300/40 py-2 text-gray-200">Silver<br />15%</span><span className="border border-accent-yellow/40 py-2 text-accent-yellow">Gold<br />25%</span><span className="border border-accent-blue/50 py-2 text-accent-blue">Diamond<br />40%</span></div>
+              <p className="mt-3 text-[11px] leading-4 text-gray-500">Diamond begins at 40% return. Your current return and rank points update through the same competition calculation as the board.</p>
+            </section>
           </>
         ) : null}
         <button type="button" onClick={onClose} className="btn-ghost mt-4 w-full border border-bg-border py-2 text-xs">
@@ -120,6 +127,27 @@ export default function LeaderboardPage() {
   const [rankDetail, setRankDetail] = useState<RankDetail | null>(null);
   const [rankLoading, setRankLoading] = useState(false);
   const [rankError, setRankError] = useState("");
+  const [myRank, setMyRank] = useState<RankDetail | null>(null);
+  const [myRankLoading, setMyRankLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function loadMyRank() {
+      try {
+        const meRes = await fetch("/api/me", { cache: "no-store" });
+        if (!meRes.ok) { if (active) setMyRankLoading(false); return; }
+        const me = await meRes.json();
+        const accountId = me.account?.id;
+        if (!accountId) { if (active) setMyRankLoading(false); return; }
+        const rankRes = await fetch(`/api/rank?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" });
+        if (rankRes.ok && active) setMyRank(await rankRes.json());
+      } finally {
+        if (active) setMyRankLoading(false);
+      }
+    }
+    loadMyRank();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -194,6 +222,8 @@ export default function LeaderboardPage() {
           <Metric label="Avg return" value={formatPct(avgReturn)} tone={avgReturn >= 0 ? "text-accent-green" : "text-accent-red"} caption={lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : undefined} />
         </div>
       </header>
+
+      <YourRankHero detail={myRank} loading={myRankLoading} />
 
       {podium.length > 0 && (
         <section className="grid gap-4 md:grid-cols-3">
@@ -307,6 +337,51 @@ export default function LeaderboardPage() {
         />
       )}
     </div>
+  );
+}
+
+function YourRankHero({ detail, loading }: { detail: RankDetail | null; loading: boolean }) {
+  const TIERS = [
+    { name: "Iron", pct: "0%", cls: "text-gray-400 border-gray-500/40" },
+    { name: "Bronze", pct: "5%", cls: "text-amber-600 border-amber-600/40" },
+    { name: "Silver", pct: "15%", cls: "text-gray-200 border-gray-300/40" },
+    { name: "Gold", pct: "25%", cls: "text-accent-yellow border-accent-yellow/40" },
+    { name: "Diamond", pct: "40%", cls: "text-accent-blue border-accent-blue/50" },
+  ];
+  return (
+    <section className="card overflow-hidden border-accent-green/40 bg-accent-green/[0.04] p-5" aria-label="Your standing">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-accent-green">
+          <Shield className="h-3.5 w-3.5" /> Your standing
+        </div>
+        {detail && <span className="text-xs text-gray-500">{formatPct(detail.return_pct)} return</span>}
+      </div>
+      {loading ? (
+        <div className="py-6 text-center text-sm text-gray-500"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></div>
+      ) : detail ? (
+        <>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-base font-black uppercase tracking-wider", TIER_STYLES[detail.tier_name] ?? "text-gray-400 border-bg-border")}>
+              {tierGlyph(detail.tier_name)} {detail.tier_name}
+              {detail.tier_name === "Diamond" && detail.division > 1 ? ` D${detail.division}` : ""}
+            </span>
+            <div className="text-sm text-gray-400">
+              <span className="font-bold text-white tabular-nums">{detail.rank_points}</span> rank points · Division <span className="font-bold text-white">{detail.division}</span>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-5 gap-1 text-center text-[10px] font-bold" aria-label="Division ladder">
+            {TIERS.map((t) => (
+              <span key={t.name} className={cn("border py-2.5", t.cls, detail.tier_name === t.name ? "bg-accent-green/15 ring-1 ring-accent-green" : "opacity-60")}>
+                {t.name}<br />{t.pct}
+              </span>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] leading-4 text-gray-500">Diamond begins at 40% return. Climb the ladder by growing your invested capital faster than the field.</p>
+        </>
+      ) : (
+        <p className="py-4 text-sm text-gray-500">Start trading to earn your first rank. Your tier and division will appear here.</p>
+      )}
+    </section>
   );
 }
 
