@@ -149,7 +149,7 @@ export default function MarketPage() {
       // trade through the dedicated prediction ticket, not this ticker-based flow.
       // Until that screen lands here, route to Polymarket's own page (matches the
       // "Polymarket · research only" card elsewhere on this page).
-      const url = predictionMarkets.find((m) => m.id === result.marketId)?.url;
+      const url = result.url ?? predictionMarkets.find((m) => m.id === result.marketId)?.url;
       if (url) window.open(url, "_blank", "noreferrer");
       return;
     }

@@ -28,6 +28,7 @@ test("'fed' surfaces a Fed prediction market via injected predictionDb", async (
   const hit = results.find((r) => r.assetClass === "prediction");
   assert.ok(hit, `expected a prediction hit, got ${JSON.stringify(results.map((r) => [r.symbol, r.assetClass]))}`);
   assert.equal(hit.marketId, "0xfed");
+  assert.equal(hit.url, "https://polymarket.com/x");
   assert.equal(hit.tradable, true);
 });
 

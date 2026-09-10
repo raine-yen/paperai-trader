@@ -29,6 +29,8 @@ export interface Instrument {
   tradable: boolean;
   displaySymbol: string; // user-facing symbol (crypto shows BASE, e.g. "BTC")
   displayMarket: string; // e.g. "NASDAQ", "Cryptocurrency · Crypto"
+  /** External research page; supplied for prediction-market search results. */
+  url?: string | null;
 }
 
 interface SeedEntry {
@@ -315,6 +317,7 @@ function predictionToInstrument(row: PredictionSearchRow): Instrument {
     tradable: row.status === "active",
     displaySymbol: row.id,
     displayMarket: row.category ?? "Prediction market",
+    url: row.url,
   };
 }
 
