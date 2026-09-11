@@ -161,19 +161,24 @@ export async function POST(req: NextRequest) {
   if (!account) return NextResponse.json({ error: "account not found" }, { status: 404 });
 
   if (action === "reset") {
-    await Promise.all([
+    const [{ error: stockPositionError }, { error: predictionPositionError }, { error: predictionFillError }, { error: orderError }] = await Promise.all([
       db.from("positions").delete().eq("account_id", account_id),
+      db.from("prediction_positions").delete().eq("account_id", account_id),
+      db.from("prediction_fills").delete().eq("account_id", account_id),
       db
         .from("orders")
         .update({ status: "canceled", canceled_at: new Date().toISOString() })
         .eq("account_id", account_id)
         .eq("status", "new"),
     ]);
-    await db
+    const resetError = stockPositionError ?? predictionPositionError ?? predictionFillError ?? orderError;
+    if (resetError) return NextResponse.json({ error: resetError.message }, { status: 500 });
+    const { error: accountError } = await db
       .from("accounts")
       .update({ cash: account.starting_cash, equity: account.starting_cash })
       .eq("id", account_id);
-    return NextResponse.json({ ok: true, message: "Account reset to starting cash" });
+    if (accountError) return NextResponse.json({ error: accountError.message }, { status: 500 });
+    return NextResponse.json({ ok: true, message: "All stock and prediction assets reset to starting cash" });
   }
 
   if (action === "disable") {

@@ -13,6 +13,9 @@ test("admin controls require authenticated administrator and expose bounded time
   assert.match(route, /duration_minutes must be an integer from 1 to 43200/);
   assert.match(route, /suspended_until: suspendedUntil/);
   assert.match(route, /action === "delete_user"/);
+  assert.match(route, /action === "reset"/);
+  assert.match(route, /from\("prediction_positions"\)\.delete\(\)/);
+  assert.match(route, /from\("prediction_fills"\)\.delete\(\)/);
   assert.match(route, /cannot delete your own admin account/);
   assert.match(route, /auth\.admin\.deleteUser/);
 });
