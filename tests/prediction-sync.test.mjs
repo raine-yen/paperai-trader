@@ -6,6 +6,7 @@ import {
   parseGammaMarket,
   fetchActiveMarkets,
   syncPredictionCatalog,
+  persistCatalogRows,
   liveMidpoint,
 } from "../src/lib/prediction-sync.ts";
 
@@ -95,6 +96,15 @@ test("syncPredictionCatalog upserts rows with onConflict=id", async () => {
   const n = await syncPredictionCatalog(db, fakeFetch);
   assert.equal(n, 2);
   assert.deepEqual(upserted, [[2, "id"]]);
+});
+
+test("fallback catalog rows persist with the catalog primary key", async () => {
+  const calls = [];
+  const db = { from: (table) => ({ upsert: async (rows, opts) => { calls.push({ table, rows, opts }); return { error: null }; } }) };
+  const count = await persistCatalogRows(db, [parseGammaMarket(gammaRow())]);
+  assert.equal(count, 1);
+  assert.equal(calls[0].table, "prediction_markets");
+  assert.equal(calls[0].opts.onConflict, "id");
 });
 
 test("liveMidpoint prefers midpoint, then book, then last-known", async () => {

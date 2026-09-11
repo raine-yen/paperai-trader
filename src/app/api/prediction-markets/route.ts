@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   fetchActiveMarkets,
   liveMidpoint,
+  persistCatalogRows,
   type PredictionMarketRow,
 } from "@/lib/prediction-sync";
 
@@ -74,6 +75,9 @@ export async function GET() {
     // (and let the next cron persist it). Keeps the endpoint usable immediately.
     if (!rows || rows.length === 0) {
       rows = await fetchActiveMarkets();
+      // A first visitor should repair an empty catalog, not merely receive a
+      // transient fallback that still cannot be traded or charted.
+      await persistCatalogRows(db, rows);
     }
 
     // Refresh live midpoints per market (Gamma's own prices can lag).

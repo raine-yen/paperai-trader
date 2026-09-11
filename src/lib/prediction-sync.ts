@@ -113,6 +113,16 @@ export interface CatalogDb {
   };
 }
 
+export async function persistCatalogRows(
+  db: CatalogDb,
+  rows: PredictionMarketRow[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const { error } = await db.from("prediction_markets").upsert(rows, { onConflict: "id" });
+  if (error) throw new Error(`catalog upsert failed: ${error.message ?? "unknown"}`);
+  return rows.length;
+}
+
 /**
  * Upsert the fetched catalog into prediction_markets (conflict on id).
  * Prices are intentionally NOT overwritten here (live quote path owns them);
@@ -123,10 +133,7 @@ export async function syncPredictionCatalog(
   fetchImpl: FetchLike = fetch,
 ): Promise<number> {
   const rows = await fetchActiveMarkets(fetchImpl);
-  if (rows.length === 0) return 0;
-  const { error } = await db.from("prediction_markets").upsert(rows, { onConflict: "id" });
-  if (error) throw new Error(`catalog upsert failed: ${error.message ?? "unknown"}`);
-  return rows.length;
+  return persistCatalogRows(db, rows);
 }
 
 /**

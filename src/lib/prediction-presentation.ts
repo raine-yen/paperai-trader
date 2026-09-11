@@ -6,6 +6,22 @@ const CATEGORY_RULES: Array<{ category: string; pattern: RegExp }> = [
   { category: "Sports", pattern: /\b(nfl|nba|mlb|nhl|soccer|football|baseball|basketball|tennis|ufc|formula 1|fifa|champions league|super bowl|seahawks|dodgers|fc)\b/i },
 ];
 
+/** "Live · ends in 2d 14h" style countdown used on discovery rows. */
+export function predictionCountdown(endDate: string | null | undefined, now: number = Date.now()): string {
+  if (!endDate) return "Resolution date pending";
+  const end = new Date(endDate).getTime();
+  if (Number.isNaN(end)) return "Resolution date pending";
+  const ms = end - now;
+  if (ms <= 0) return "Settling";
+  const minutes = Math.floor(ms / 60_000);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (days > 0) return `Live · ${days}d ${hours}h left`;
+  const mins = minutes % 60;
+  if (hours > 0) return `Live · ${hours}h ${mins}m left`;
+  return `Live · ${mins}m left`;
+}
+
 export function formatPredictionHistoryLabel(timestamp: string | number, days: number): string {
   const numeric = Number(timestamp);
   const epochMs = Number.isFinite(numeric) ? (numeric < 10_000_000_000 ? numeric * 1000 : numeric) : NaN;

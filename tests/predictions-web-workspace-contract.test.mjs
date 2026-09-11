@@ -26,14 +26,14 @@ test("Predictions is a first-class in-app workspace with a real paper trade and 
   // Side selectors configure; one clearly named final action submits the live API.
   assert.match(workspace, /\/api\/predictions\/trade/);
   assert.match(workspace, /client_order_id/);
-  assert.match(workspace, /Review buy/);
+  assert.match(workspace, /Confirm buy/);
   assert.match(workspace, /Place paper buy/);
 
   // Early close follows the approved partial-or-Max paper trading model.
   assert.match(workspace, /\/api\/predictions\/close/);
   assert.match(workspace, /close_all/);
   assert.match(workspace, />Max</);
-  assert.match(workspace, /Review sell/);
+  assert.match(workspace, /Confirm sell/);
 });
 
 test("the app shell keeps the five-destination Vanta navigation visible on phones", async () => {
@@ -51,16 +51,14 @@ test("the app shell keeps the five-destination Vanta navigation visible on phone
   assert.match(css, /padding-bottom:.*5\.5rem/s);
 });
 
-test("desktop app pages retain the prototype's paper-account watchlist and order-status rail", async () => {
-  const [layout, rail] = await Promise.all([
+test("Discover owns the paper-account watchlist as a selectable market list", async () => {
+  const [layout, market] = await Promise.all([
     source("src/app/(app)/layout.tsx"),
-    source("src/components/watchlist-rail.tsx"),
+    source("src/app/(app)/market/page.tsx"),
   ]);
 
-  assert.match(layout, /WatchlistRail/);
-  assert.match(rail, /\/api\/watchlists/);
-  assert.match(rail, /\/api\/quotes/);
-  assert.match(rail, /Paper account/);
-  assert.match(rail, /Watchlist/);
-  assert.match(rail, /Order status/);
+  assert.doesNotMatch(layout, /WatchlistRail/, "Watchlist must not compete with the Discover information hierarchy as a global rail");
+  assert.match(market, /\["Owned", "Watchlist"/, "Discover filters must include owned assets and watchlist");
+  assert.match(market, /Nothing pinned yet/, "The Watchlist filter needs an explicit empty state");
+  assert.match(market, /\/api\/watchlists/, "The Discover list must continue using the real watchlist API");
 });
