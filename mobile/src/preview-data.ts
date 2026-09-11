@@ -1,4 +1,4 @@
-import type { Bar, LeaderboardEntry, Me, Quote, Session } from "./types";
+import type { Bar, LeaderboardEntry, Me, PredictionHistoryPoint, PredictionMarket, Quote, Session } from "./types";
 
 /**
  * Stable, fictional paper-trading data for App Store screenshots.
@@ -177,6 +177,34 @@ export const PREVIEW_ME: Me = {
   },
   transfers: [],
   is_admin: false,
+  prediction_positions: [
+    {
+      id: "preview-prediction-position-01",
+      market_id: "preview-market-fed-cut",
+      outcome: "yes",
+      shares: 120,
+      avg_cost: 0.42,
+      question: "Will the Fed cut rates at the next meeting?",
+      current_price: 0.46,
+      market_value: 55.2,
+      cost_basis: 50.4,
+      unrealized_pl: 4.8,
+    },
+  ],
+  prediction_positions_value: 55.2,
+  prediction_fills: [
+    {
+      id: "preview-prediction-fill-01",
+      market_id: "preview-market-fed-cut",
+      outcome: "yes",
+      side: "buy",
+      shares: 120,
+      price: 0.42,
+      total: 50.4,
+      cash_after: 28_694.85,
+      created_at: "2026-07-30T18:12:00.000Z",
+    },
+  ],
 };
 
 export const PREVIEW_QUOTES: Record<string, Quote> = {
@@ -406,3 +434,72 @@ export const PREVIEW_LEADERBOARD: LeaderboardEntry[] = [
   { account_id: "preview-account-03", competition_id: "paperai-summer-2026", display_name: "Zoe Martin", equity: 104_672.22, starting_cash: 100_000, return_pct: 4.67222 },
   { account_id: "preview-account-02", competition_id: "paperai-summer-2026", display_name: "Leo Nguyen", equity: 102_984.76, starting_cash: 100_000, return_pct: 2.98476 },
 ];
+
+export const PREVIEW_PREDICTION_MARKETS: PredictionMarket[] = [
+  {
+    id: "preview-market-fed-cut",
+    question: "Will the Fed cut rates at the next meeting?",
+    category: "Economics",
+    outcomes: ["Yes", "No"],
+    yesPrice: 0.46,
+    noPrice: 0.54,
+    volume24hr: 1_284_500,
+    endDate: "2026-09-18T00:00:00.000Z",
+    image: null,
+    url: null,
+  },
+  {
+    id: "preview-market-btc-100k",
+    question: "Will Bitcoin close above $100K this quarter?",
+    category: "Crypto & Markets",
+    outcomes: ["Yes", "No"],
+    yesPrice: 0.62,
+    noPrice: 0.38,
+    volume24hr: 842_100,
+    endDate: "2026-09-30T00:00:00.000Z",
+    image: null,
+    url: null,
+  },
+  {
+    id: "preview-market-ai-launch",
+    question: "Will a major lab ship a new frontier model before year end?",
+    category: "Technology",
+    outcomes: ["Yes", "No"],
+    yesPrice: 0.71,
+    noPrice: 0.29,
+    volume24hr: 512_400,
+    endDate: "2026-12-31T00:00:00.000Z",
+    image: null,
+    url: null,
+  },
+];
+
+export const PREVIEW_PREDICTION_HISTORY: Record<string, PredictionHistoryPoint[]> = {
+  "preview-market-fed-cut": [
+    { t: "2026-07-24T00:00:00.000Z", p: 0.38 },
+    { t: "2026-07-25T00:00:00.000Z", p: 0.4 },
+    { t: "2026-07-26T00:00:00.000Z", p: 0.41 },
+    { t: "2026-07-27T00:00:00.000Z", p: 0.43 },
+    { t: "2026-07-28T00:00:00.000Z", p: 0.44 },
+    { t: "2026-07-29T00:00:00.000Z", p: 0.45 },
+    { t: "2026-07-30T00:00:00.000Z", p: 0.46 },
+  ],
+  "preview-market-btc-100k": [
+    { t: "2026-07-24T00:00:00.000Z", p: 0.55 },
+    { t: "2026-07-25T00:00:00.000Z", p: 0.57 },
+    { t: "2026-07-26T00:00:00.000Z", p: 0.58 },
+    { t: "2026-07-27T00:00:00.000Z", p: 0.6 },
+    { t: "2026-07-28T00:00:00.000Z", p: 0.59 },
+    { t: "2026-07-29T00:00:00.000Z", p: 0.61 },
+    { t: "2026-07-30T00:00:00.000Z", p: 0.62 },
+  ],
+  "preview-market-ai-launch": [
+    { t: "2026-07-24T00:00:00.000Z", p: 0.64 },
+    { t: "2026-07-25T00:00:00.000Z", p: 0.66 },
+    { t: "2026-07-26T00:00:00.000Z", p: 0.67 },
+    { t: "2026-07-27T00:00:00.000Z", p: 0.68 },
+    { t: "2026-07-28T00:00:00.000Z", p: 0.69 },
+    { t: "2026-07-29T00:00:00.000Z", p: 0.7 },
+    { t: "2026-07-30T00:00:00.000Z", p: 0.71 },
+  ],
+};

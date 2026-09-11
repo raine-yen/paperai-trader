@@ -3,6 +3,109 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fetchYahooPrices } from "@/lib/prices";
 import { getSessionUser } from "@/lib/session-user";
 import { calculateInvestedPerformance } from "@/lib/performance";
+import { rankForAccount, rankMovement, type RankMovement } from "@/lib/ranks";
+
+const RECOMPUTE_COOLDOWN_MS = 60_000;
+const lastRecompute = new Map<string, number>();
+
+interface StandingRow {
+  account_id: string;
+  competition_id: string;
+  display_name: string;
+  raw_display_name: string;
+  equity: number;
+  starting_cash: number;
+  cost_basis: number;
+  gain_amount: number;
+  return_pct: number;
+  invested_growth_pct: number;
+  position: number;
+  /** Internal-only: used to persist ranks/rank_history, stripped before the response goes out. */
+  _tier: number;
+  _tier_name: string;
+  _division: number;
+  _rank_points: number;
+  _movement: RankMovement;
+  _movement_amount: number;
+}
+
+async function recomputeRanks(competitionId: string, standings: StandingRow[]): Promise<void> {
+  const db = supabaseAdmin();
+  const now = Date.now();
+  if (now - (lastRecompute.get(competitionId) ?? 0) < RECOMPUTE_COOLDOWN_MS) return;
+  lastRecompute.set(competitionId, now);
+
+  const { data: season } = await db
+    .from("seasons")
+    .select("id")
+    .eq("competition_id", competitionId)
+    .eq("status", "active")
+    .order("starts_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const seasonId = (season as { id: string } | null)?.id ?? null;
+
+  // Previous snapshot (before this recompute) for movement deltas.
+  const previousPositions = new Map<string, number>();
+  if (standings.length > 0) {
+    const ids = standings.map((s) => s.account_id);
+    const { data: history } = await db
+      .from("rank_history")
+      .select("account_id, position")
+      .in("account_id", ids)
+      .order("recorded_at", { ascending: false })
+      .limit(ids.length * 5);
+    for (const row of (history ?? []) as { account_id: string; position: number }[]) {
+      if (!previousPositions.has(row.account_id)) previousPositions.set(row.account_id, Number(row.position));
+    }
+  }
+
+  for (const entry of standings) {
+    const mv = rankMovement({ current: entry.position, previous: previousPositions.get(entry.account_id) ?? null });
+    entry._movement = mv.movement;
+    entry._movement_amount = mv.movementAmount;
+
+    await db.from("ranks").upsert(
+      {
+        account_id: entry.account_id,
+        season_id: seasonId,
+        tier: entry._tier,
+        division: entry._division,
+        rank_points: entry._rank_points,
+        position_in_tier: entry.position,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "account_id,season_id" },
+    );
+
+    if (!previousPositions.has(entry.account_id) || previousPositions.get(entry.account_id) !== entry.position) {
+      await db.from("rank_history").insert({
+        account_id: entry.account_id,
+        season_id: seasonId,
+        position: entry.position,
+        tier: entry._tier,
+        division: entry._division,
+        rank_points: entry._rank_points,
+      });
+    }
+  }
+
+  // Trim history to the latest 20 snapshots per account.
+  const stale = await db
+    .from("rank_history")
+    .select("id, account_id")
+    .in("account_id", standings.map((s) => s.account_id))
+    .order("recorded_at", { ascending: false })
+    .limit(500);
+  const keep = new Map<string, number>();
+  const dropIds: string[] = [];
+  for (const row of (stale.data ?? []) as { id: string; account_id: string }[]) {
+    const count = keep.get(row.account_id) ?? 0;
+    if (count >= 20) dropIds.push(row.id);
+    keep.set(row.account_id, count + 1);
+  }
+  if (dropIds.length > 0) await db.from("rank_history").delete().in("id", dropIds);
+}
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser(req);
@@ -76,12 +179,15 @@ export async function GET(req: NextRequest) {
     duplicateNameCounts.set(key, (duplicateNameCounts.get(key) ?? 0) + 1);
   }
 
-  // Compute live equity and return_pct, then sort
-  const entries = (accounts as AccountRow[])
+  // Live equity; primary sort metric is PORTFOLIO-RELATIVE return against the
+  // account's own starting capital (never a fixed 10k assumption and never
+  // invested-cost-basis growth, which leaves cash-heavy traders unrankable).
+  const standings: StandingRow[] = (accounts as AccountRow[])
     .map((a) => {
       const performance = calculateInvestedPerformance(positionsByAccount.get(a.id) ?? []);
       const posValue = performance.market_value;
       const liveEquity = Number(a.cash) + posValue;
+      const rank = rankForAccount({ equity: liveEquity, startingCash: Number(a.starting_cash) });
       const duplicateName = (duplicateNameCounts.get(a.display_name.trim().toLowerCase()) ?? 0) > 1;
       const safeSuffix = a.id.replace(/-/g, "").slice(0, 4).toUpperCase();
       return {
@@ -93,10 +199,33 @@ export async function GET(req: NextRequest) {
         starting_cash: Number(a.starting_cash),
         cost_basis: performance.cost_basis,
         gain_amount: performance.gain_amount,
-        return_pct: performance.growth_pct,
+        return_pct: rank.returnPct,
+        invested_growth_pct: performance.growth_pct,
+        position: 0,
+        _tier: rank.tier,
+        _tier_name: rank.tierName,
+        _division: rank.division,
+        _rank_points: rank.rankPoints,
+        _movement: "new" as RankMovement,
+        _movement_amount: 0,
       };
     })
     .sort((a, b) => b.return_pct - a.return_pct);
+
+  standings.forEach((entry, index) => {
+    entry.position = index + 1;
+  });
+
+  try {
+    await recomputeRanks(viewerAccount.competition_id as string, standings);
+  } catch {
+    // Rank persistence is best-effort: the board must still render if writes fail.
+  }
+
+  // Public leaderboard is intentionally lean: no tier/division/movement here.
+  // Those live behind the dedicated GET /api/rank drill-in (tap-to-open icon),
+  // per product decision — the list itself must not show rank badges.
+  const entries = standings.map(({ _tier, _tier_name, _division, _rank_points, _movement, _movement_amount, ...rest }) => rest);
 
   return NextResponse.json({ entries });
 }

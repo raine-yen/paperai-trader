@@ -86,6 +86,13 @@ export default function MessagesPage() {
     }
 
     void refresh(true);
+    // Marking read is an explicit action tied to opening the conversation,
+    // not a side effect of every poll — the server's GET is read-only.
+    void fetch("/api/messages", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: conversationAccountId }),
+    }).catch(() => {});
     const intervalId = window.setInterval(() => void refresh(), 10_000);
     return () => {
       active = false;

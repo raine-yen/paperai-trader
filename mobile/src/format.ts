@@ -73,3 +73,37 @@ export function rangeLabel(low: number | null | undefined, high: number | null |
   if (low == null || high == null) return "--";
   return `${usd(low, 0)} - ${usd(high, 0)}`;
 }
+
+export function cents(value: number | string | null | undefined) {
+  const n = Number(value);
+  if (value == null || !Number.isFinite(n)) return "—";
+  return `${Math.round(n * 100)}¢`;
+}
+
+export function probability(value: number | string | null | undefined) {
+  const n = Number(value);
+  if (value == null || !Number.isFinite(n)) return "—";
+  return `${Math.round(n * 100)}%`;
+}
+
+export function predictionEndLabel(endDate: string | null | undefined) {
+  if (!endDate) return "Resolution date pending";
+  const date = new Date(endDate);
+  return Number.isNaN(date.getTime())
+    ? endDate
+    : date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+export function predictionCategory(question: string, sourceCategory: string | null | undefined): string {
+  const rules: Array<[RegExp, string]> = [
+    [/\b(election|president|congress|senate|house|governor|parliament|minister|democrat|republican|trump|biden|tariff|government|bill)\b/i, "Politics"],
+    [/\b(fed|federal reserve|interest rate|inflation|gdp|jobs report|unemployment|recession|cpi|yield|central bank)\b/i, "Economics"],
+    [/\b(bitcoin|ethereum|crypto|solana|token|fdv|market cap|s&p|nasdaq|dow|stock market|ipo)\b/i, "Crypto & Markets"],
+    [/\b(ai|artificial intelligence|nvidia|model|openai|anthropic|apple|google|microsoft|laptop|chip|semiconductor|technology)\b/i, "Technology"],
+    [/\b(nfl|nba|mlb|nhl|soccer|football|baseball|basketball|tennis|ufc|formula 1|fifa|champions league|super bowl|seahawks|dodgers|fc)\b/i, "Sports"],
+  ];
+  const matched = rules.find(([pattern]) => pattern.test(question));
+  if (matched) return matched[1];
+  const source = sourceCategory?.trim();
+  return source && !/^general$/i.test(source) ? source : "General";
+}

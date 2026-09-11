@@ -161,29 +161,65 @@ export async function POST(req: NextRequest) {
   if (!account) return NextResponse.json({ error: "account not found" }, { status: 404 });
 
   if (action === "reset") {
-    await Promise.all([
+    const [{ error: stockPositionError }, { error: predictionPositionError }, { error: predictionFillError }, { error: orderError }] = await Promise.all([
       db.from("positions").delete().eq("account_id", account_id),
+      db.from("prediction_positions").delete().eq("account_id", account_id),
+      db.from("prediction_fills").delete().eq("account_id", account_id),
       db
         .from("orders")
         .update({ status: "canceled", canceled_at: new Date().toISOString() })
         .eq("account_id", account_id)
         .eq("status", "new"),
     ]);
-    await db
+    const resetError = stockPositionError ?? predictionPositionError ?? predictionFillError ?? orderError;
+    if (resetError) return NextResponse.json({ error: resetError.message }, { status: 500 });
+    const { error: accountError } = await db
       .from("accounts")
       .update({ cash: account.starting_cash, equity: account.starting_cash })
       .eq("id", account_id);
-    return NextResponse.json({ ok: true, message: "Account reset to starting cash" });
+    if (accountError) return NextResponse.json({ error: accountError.message }, { status: 500 });
+    return NextResponse.json({ ok: true, message: "All stock and prediction assets reset to starting cash" });
   }
 
   if (action === "disable") {
-    await db.from("accounts").update({ status: "disabled" }).eq("id", account_id);
-    return NextResponse.json({ ok: true });
+    const { error } = await db.from("accounts").update({ status: "disabled", suspended_until: null }).eq("id", account_id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, message: "Account disabled" });
+  }
+
+  if (action === "timeout") {
+    const { duration_minutes } = body as { duration_minutes?: number };
+    const durationMinutes = Number(duration_minutes);
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 43200) {
+      return NextResponse.json({ error: "duration_minutes must be an integer from 1 to 43200" }, { status: 400 });
+    }
+    const suspendedUntil = new Date(Date.now() + durationMinutes * 60_000).toISOString();
+    const { error } = await db.from("accounts").update({ status: "disabled", suspended_until: suspendedUntil }).eq("id", account_id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, message: "Account timed out", suspended_until: suspendedUntil });
   }
 
   if (action === "enable") {
-    await db.from("accounts").update({ status: "active" }).eq("id", account_id);
-    return NextResponse.json({ ok: true });
+    const { error } = await db.from("accounts").update({ status: "active", suspended_until: null }).eq("id", account_id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, message: "Account enabled" });
+  }
+
+  if (action === "delete_user") {
+    if (account.user_id === user.id) return NextResponse.json({ error: "cannot delete your own admin account" }, { status: 400 });
+    const [{ error: positionError }, { error: predictionPositionError }, { error: predictionFillError }, { error: orderError }] = await Promise.all([
+      db.from("positions").delete().eq("account_id", account_id),
+      db.from("prediction_positions").delete().eq("account_id", account_id),
+      db.from("prediction_fills").delete().eq("account_id", account_id),
+      db.from("orders").delete().eq("account_id", account_id),
+    ]);
+    const cleanupError = positionError ?? predictionPositionError ?? predictionFillError ?? orderError;
+    if (cleanupError) return NextResponse.json({ error: cleanupError.message }, { status: 500 });
+    const { error: accountError } = await db.from("accounts").delete().eq("id", account_id);
+    if (accountError) return NextResponse.json({ error: accountError.message }, { status: 500 });
+    const { error: userError } = await db.auth.admin.deleteUser(account.user_id);
+    if (userError) return NextResponse.json({ error: userError.message }, { status: 500 });
+    return NextResponse.json({ ok: true, message: "User and paper account permanently removed" });
   }
 
   if (action === "adjust_cash") {

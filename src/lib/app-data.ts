@@ -35,7 +35,22 @@ export async function getCurrentAccount(req: NextRequest) {
     .maybeSingle();
 
   if (error) return { response: NextResponse.json({ error: error.message }, { status: 500 }) };
-  if (!account) return { response: NextResponse.json({ error: "no account" }, { status: 400 }) };
+  if (!account) return { response: NextResponse.json({ error: "no paper account" }, { status: 403 }) };
+
+  const suspendedUntil = typeof account.suspended_until === "string" ? Date.parse(account.suspended_until) : NaN;
+  if (account.status === "disabled" && Number.isFinite(suspendedUntil) && suspendedUntil <= Date.now()) {
+    const { data: restored, error: restoreError } = await db
+      .from("accounts")
+      .update({ status: "active", suspended_until: null })
+      .eq("id", account.id)
+      .select("*")
+      .maybeSingle();
+    if (restoreError) return { response: NextResponse.json({ error: restoreError.message }, { status: 500 }) };
+    return { user, account: restored as SessionAccount, db };
+  }
+  if (account.status !== "active") {
+    return { response: NextResponse.json({ error: "account disabled" }, { status: 403 }) };
+  }
   return { user, account: account as SessionAccount, db };
 }
 

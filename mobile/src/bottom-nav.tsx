@@ -6,6 +6,7 @@ import type { Tab } from "./types";
 const navItems: Array<{ key: Tab; icon: keyof typeof Feather.glyphMap; label: string }> = [
   { key: "portfolio", icon: "home", label: "Home" },
   { key: "discover", icon: "bar-chart-2", label: "Markets" },
+  { key: "predictions", icon: "target", label: "Predict" },
   { key: "compete", icon: "award", label: "Compete" },
   { key: "profile", icon: "user", label: "Profile" },
 ];
@@ -107,7 +108,7 @@ function NavItem({
       testID={`nav-${item.key}`}
       onPress={onPress}
       style={({ pressed }) => ({
-        width: tablet ? 68 : 76,
+        width: tablet ? 68 : 64,
         minHeight: tablet ? 64 : 58,
         borderRadius: radius.sm,
         alignItems: "center",

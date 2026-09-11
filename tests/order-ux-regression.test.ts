@@ -67,12 +67,16 @@ test("order UI preserves the flat black-lime rail and neutral sell treatment", (
   const flow = read("src/components/order-flow.tsx");
   const mobile = read("mobile/src/screens.tsx");
 
-  assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+284px/);
+  assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+clamp\(340px,/);
   assert.match(market, /label="Order side"/);
   assert.match(market, /label="Order type"/);
   assert.match(market, /label="Amount mode"/);
   assert.match(market, /role="tablist" aria-label=\{label\}/);
-  assert.match(market, />Max<|>Max\s*</);
+  // Robinhood/Webull-style quick sizing: percentage chips replace the lone Max button.
+  assert.match(market, /aria-label="Quick size order to 25% of available/);
+  assert.match(market, /aria-label="Quick size order to 50% of available/);
+  assert.match(market, /aria-label="Quick size order to 75% of available/);
+  assert.match(market, /aria-label="Use all available/);
   assert.match(css, /\.vanta-amount input[^}]*font-size:\s*30px/s);
   assert.doesNotMatch(flow, /bullish\s*\?\s*"bg-accent-green\/15"\s*:\s*"bg-accent-red\/15"/);
   assert.doesNotMatch(flow, /order-sheet card/);
@@ -114,7 +118,10 @@ test("every selected stock has a permanent Buy/Sell rail with no hide or close a
   assert.doesNotMatch(market, /vanta-rail-close/);
   assert.doesNotMatch(market, /Close order ticket/);
   assert.match(market, /Place another order/);
-  assert.match(css, /\.vanta-workspace\.has-open-ticket \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 284px/s);
+  assert.match(css, /\.vanta-workspace\.has-open-ticket \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) clamp\(340px,/s);
+  // The retired watchlist rail must not leave a dead gutter on any page.
+  assert.doesNotMatch(css, /\.vanta-app-main[^}]*xl:mr-\[280px\]/);
+  assert.doesNotMatch(css, /\.vanta-detail \{ width: min\(100%, 940px\)/);
   assert.match(css, /\.vanta-order-rail\.is-open \{[^}]*display:\s*flex/s);
   assert.match(market, /<footer className="vanta-order-footer">[\s\S]*Confirm \$\{side === "buy" \? "Buy" : "Sell"\}/);
   assert.match(css, /\.vanta-order-footer \{[^}]*flex:\s*none/s);

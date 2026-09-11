@@ -37,6 +37,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Persist the Supabase session so the client-side layout can detect the user.
+  const sbForCookies = await supabaseServer();
+  await sbForCookies.auth.setSession({
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+  });
+
   return NextResponse.json({
     ok: true,
     access_token: data.session.access_token,
