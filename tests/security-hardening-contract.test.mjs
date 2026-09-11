@@ -41,8 +41,9 @@ test("fix 3b: the messages page marks read via an explicit PATCH, not inside the
   assert.match(page, /fetch\("\/api\/messages", \{/);
 });
 
-test("fix 4: getCurrentAccount filters status='active' and returns 403 when none", async () => {
+test("fix 4: getCurrentAccount denies disabled accounts and auto-restores expired timeouts", async () => {
   const lib = await source("src/lib/app-data.ts");
-  assert.match(lib, /\.eq\("status", "active"\)/);
+  assert.match(lib, /account\.status !== "active"/);
+  assert.match(lib, /suspended_until: null/);
   assert.match(lib, /status: 403/);
 });

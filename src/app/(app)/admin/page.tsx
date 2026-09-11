@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import {
   Users, TrendingUp, DollarSign, BarChart2,
-  RotateCcw, BanIcon, CheckCircle, AlertTriangle,
+  RotateCcw, BanIcon, CheckCircle, AlertTriangle, Timer, Trash2,
   Loader2, Pencil, Search,
   Eye,
 } from "lucide-react";
@@ -304,7 +304,22 @@ export default function AdminPage() {
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Disable/Enable */}
+                          {!isDisabled && (
+                            <button
+                              title="Timeout account for 24 hours"
+                              onClick={() => setPendingAction({ accountId: a.id, type: "timeout" })}
+                              className="p-1.5 rounded-lg hover:bg-yellow-500/20 text-gray-500 hover:text-yellow-400 transition-colors"
+                            >
+                              <Timer className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            title="Permanently delete user"
+                            onClick={() => setPendingAction({ accountId: a.id, type: "delete_user" })}
+                            className="p-1.5 rounded-lg hover:bg-accent-red/20 text-gray-500 hover:text-accent-red transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                           {isDisabled ? (
                             <button
                               title="Enable account"
@@ -395,18 +410,22 @@ export default function AdminPage() {
       {/* Confirm action modal */}
       {pendingAction && (
         <ConfirmModal
-          title={pendingAction.type === "reset" ? "Reset Portfolio?" : pendingAction.type === "disable" ? "Disable Account?" : "Enable Account?"}
+          title={pendingAction.type === "reset" ? "Reset Portfolio?" : pendingAction.type === "disable" ? "Disable Account?" : pendingAction.type === "timeout" ? "Timeout Account for 24 Hours?" : pendingAction.type === "delete_user" ? "Permanently Delete User?" : "Enable Account?"}
           description={
             pendingAction.type === "reset"
               ? "This will delete all positions, cancel open orders, and restore the account to its starting cash. This cannot be undone."
               : pendingAction.type === "disable"
               ? "This account will be hidden from the leaderboard and cannot trade."
+              : pendingAction.type === "timeout"
+              ? "The account cannot trade for 24 hours and is restored automatically when the timeout expires."
+              : pendingAction.type === "delete_user"
+              ? "This permanently removes the auth user, account, stock positions, prediction positions, fills, and orders. This cannot be undone."
               : "This account will be re-enabled and appear on the leaderboard."
           }
-          confirmLabel={pendingAction.type === "reset" ? "Yes, Reset" : pendingAction.type === "disable" ? "Disable" : "Enable"}
-          danger={pendingAction.type === "reset" || pendingAction.type === "disable"}
+          confirmLabel={pendingAction.type === "reset" ? "Yes, Reset" : pendingAction.type === "disable" ? "Disable" : pendingAction.type === "timeout" ? "Timeout 24h" : pendingAction.type === "delete_user" ? "Delete permanently" : "Enable"}
+          danger={pendingAction.type !== "enable"}
           loading={actionLoading}
-          onConfirm={() => runAction(pendingAction.accountId, pendingAction.type)}
+          onConfirm={() => runAction(pendingAction.accountId, pendingAction.type, pendingAction.type === "timeout" ? { duration_minutes: 1440 } : undefined)}
           onCancel={() => setPendingAction(null)}
         />
       )}
