@@ -7,6 +7,8 @@ import {
   fetchActiveMarkets,
   syncPredictionCatalog,
   persistCatalogRows,
+  hydratePredictionMarketPrices,
+  catalogNeedsQuoteRepair,
   liveMidpoint,
 } from "../src/lib/prediction-sync.ts";
 
@@ -50,14 +52,19 @@ test("parseGammaMarket maps a binary market and rejects non-binary", () => {
   assert.equal(noQuestion, null);
 });
 
+test("parseGammaMarket retains valid upstream outcome-price fallbacks", () => {
+  const row = parseGammaMarket(gammaRow({ outcomePrices: '["0.62", "0.38"]' }));
+  assert.equal(row?.yes_price, 0.62);
+  assert.equal(row?.no_price, 0.38);
+});
 test("fetchActiveMarkets paginates by 100 and stops on short page", async () => {
   const calls = [];
-  const mkPage = (n) =>
-    Array.from({ length: n }, (_, i) => gammaRow({ conditionId: `0x${i}`, id: i }));
+  const mkPage = (n, offset = 0) =>
+    Array.from({ length: n }, (_, i) => gammaRow({ conditionId: `0x${offset + i}`, id: offset + i }));
   const fakeFetch = async (url) => {
     calls.push(url);
     // first page full (100), second short (3) -> stop after 2 calls
-    const rows = calls.length === 1 ? mkPage(100) : mkPage(3);
+    const rows = calls.length === 1 ? mkPage(100) : mkPage(3, 100);
     return { ok: true, status: 200, json: async () => rows };
   };
   const rows = await fetchActiveMarkets(fakeFetch);
@@ -66,6 +73,19 @@ test("fetchActiveMarkets paginates by 100 and stops on short page", async () => 
   assert.equal(rows.length, 103);
 });
 
+test("fetchActiveMarkets removes duplicate condition IDs across paginated results", async () => {
+  let call = 0;
+  const fakeFetch = async () => {
+    call += 1;
+    const rows = call === 1
+      ? Array.from({ length: 100 }, (_, index) => gammaRow({ conditionId: index === 0 ? "0xfirst" : index === 1 ? "0xshared" : `0xpage-one-${index}` }))
+      : [gammaRow({ conditionId: "0xshared" }), gammaRow({ conditionId: "0xsecond" })];
+    return { ok: true, status: 200, json: async () => rows };
+  };
+  const rows = await fetchActiveMarkets(fakeFetch, 2);
+  assert.equal(rows.filter((row) => row.id === "0xshared").length, 1);
+  assert.equal(rows.at(-1)?.id, "0xsecond");
+});
 test("fetchActiveMarkets throws on non-OK upstream", async () => {
   await assert.rejects(
     () => fetchActiveMarkets(async () => ({ ok: false, status: 503 })),
@@ -107,6 +127,19 @@ test("fallback catalog rows persist with the catalog primary key", async () => {
   assert.equal(calls[0].opts.onConflict, "id");
 });
 
+test("catalog quote repair runs only when every visible market lacks both prices", () => {
+  assert.equal(catalogNeedsQuoteRepair([parseGammaMarket(gammaRow())]), true);
+  assert.equal(catalogNeedsQuoteRepair([parseGammaMarket(gammaRow({ outcomePrices: '["0.62", "0.38"]' }))]), false);
+});
+test("catalog quote hydration retains both outcome prices for later trade fallback", async () => {
+  const hydrated = await hydratePredictionMarketPrices(
+    [parseGammaMarket(gammaRow())],
+    async (url) => ({ ok: true, json: async () => ({ mid: url.includes("323382") ? "0.62" : "0.38" }) }),
+    1,
+  );
+  assert.equal(hydrated[0].yes_price, 0.62);
+  assert.equal(hydrated[0].no_price, 0.38);
+});
 test("liveMidpoint prefers midpoint, then book, then last-known", async () => {
   // midpoint happy path
   let calls = [];

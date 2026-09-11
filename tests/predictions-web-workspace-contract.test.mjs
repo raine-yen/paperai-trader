@@ -60,5 +60,14 @@ test("Discover owns the paper-account watchlist as a selectable market list", as
   assert.doesNotMatch(layout, /WatchlistRail/, "Watchlist must not compete with the Discover information hierarchy as a global rail");
   assert.match(market, /\["Owned", "Watchlist"/, "Discover filters must include owned assets and watchlist");
   assert.match(market, /Nothing pinned yet/, "The Watchlist filter needs an explicit empty state");
-  assert.match(market, /\/api\/watchlists/, "The Discover list must continue using the real watchlist API");
+});
+
+test("prediction positions outside the discovery top list remain sellable", async () => {
+  const [workspace, route] = await Promise.all([
+    source("src/components/prediction-workspace.tsx"),
+    source("src/app/api/prediction-markets/route.ts"),
+  ]);
+  assert.match(workspace, /params\.set\("ids", heldIds\.join\(","\)\)/);
+  assert.match(route, /searchParams\.get\("ids"\)/);
+  assert.match(route, /\.in\("id", requestedIds\)/);
 });

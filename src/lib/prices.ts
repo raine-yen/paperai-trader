@@ -45,6 +45,27 @@ export interface DetailedQuote extends PriceQuote {
 const CACHE_TTL_MS = 5_000;
 const memCache = new Map<string, { price: number; prevClose: number | null; ts: number }>();
 
+export type ChartRange = "1h" | "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y";
+export type ChartInterval = "1d" | "1h" | "15m" | "5m" | "1m";
+
+/**
+ * Yahoo restricts intraday history by range. Keep the range/interval contract
+ * explicit so the chart stays detailed without asking the provider for an
+ * unsupported combination. `trailingBars` makes 1H mean the last tradable
+ * hour even when the exchange is closed.
+ */
+export function resolveChartRequest(range: ChartRange): { interval: ChartInterval; yahooRange: ChartRange; trailingBars: number | null } {
+  switch (range) {
+    case "1h": return { interval: "1m", yahooRange: "1d", trailingBars: 60 };
+    case "1d": return { interval: "5m", yahooRange: "1d", trailingBars: null };
+    case "5d": return { interval: "15m", yahooRange: "5d", trailingBars: null };
+    case "1mo": return { interval: "1h", yahooRange: "1mo", trailingBars: null };
+    case "3mo": return { interval: "1d", yahooRange: "3mo", trailingBars: null };
+    case "6mo": return { interval: "1d", yahooRange: "6mo", trailingBars: null };
+    case "1y": return { interval: "1d", yahooRange: "1y", trailingBars: null };
+  }
+}
+
 const YAHOO_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
@@ -304,14 +325,13 @@ export async function getPrice(symbol: string, options: { forceLive?: boolean; m
 
 export async function getHistoricalBars(
   symbol: string,
-  interval: "1d" | "1h" | "5m" | "15m" | "1m" = "1d",
-  range: "1h" | "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" = "1mo"
+  interval: ChartInterval = "1d",
+  range: ChartRange = "1mo"
 ): Promise<Array<{ t: string; o: number; h: number; l: number; c: number; v: number }>> {
   const upper = symbol.toUpperCase();
-  const intervalMap: Record<string, string> = { "1d": "1d", "1h": "1h", "5m": "5m", "15m": "15m", "1m": "1m" };
-  const yInterval = intervalMap[interval] ?? "1d";
-  const yahooRange = range === "1h" ? "1d" : range;
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?interval=${yInterval}&range=${yahooRange}`;
+  const resolved = resolveChartRequest(range);
+  const requestedInterval = interval === "1d" ? resolved.interval : interval;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?interval=${requestedInterval}&range=${resolved.yahooRange}`;
   try {
     const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 0 } });
     if (!res.ok) return [];
@@ -320,8 +340,7 @@ export async function getHistoricalBars(
     if (!result) return [];
     const timestamps: number[] = result.timestamp ?? [];
     const ohlcv = result.indicators?.quote?.[0] ?? {};
-    const oneHourAgo = Date.now() - 60 * 60 * 1000;
-    return timestamps
+    const bars = timestamps
       .map((t: number, i: number) => ({
         t: new Date(t * 1000).toISOString(),
         o: Number(ohlcv.open?.[i] ?? ohlcv.close?.[i] ?? 0),
@@ -330,8 +349,8 @@ export async function getHistoricalBars(
         c: Number(ohlcv.close?.[i] ?? 0),
         v: Number(ohlcv.volume?.[i] ?? 0),
       }))
-      .filter((b) => range !== "1h" || new Date(b.t).getTime() >= oneHourAgo)
       .filter((b) => b.c > 0);
+    return resolved.trailingBars == null ? bars : bars.slice(-resolved.trailingBars);
   } catch {
     return [];
   }

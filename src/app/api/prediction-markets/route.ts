@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   fetchActiveMarkets,
-  liveMidpoint,
+  catalogNeedsQuoteRepair,
+  hydratePredictionMarketPrices,
   persistCatalogRows,
   type PredictionMarketRow,
 } from "@/lib/prediction-sync";
@@ -33,6 +34,7 @@ function toMarket(row: {
   yes_token_id: string | null;
   no_token_id: string | null;
   yes_price: number | null;
+  no_price: number | null;
   volume_24h: number | null;
   end_date: string | null;
   status: string;
@@ -47,7 +49,7 @@ function toMarket(row: {
     noTokenId: row.no_token_id,
     outcomes: ["Yes", "No"],
     yesPrice: row.yes_price,
-    noPrice: row.yes_price == null ? null : Math.round((1 - row.yes_price) * 10000) / 10000,
+    noPrice: row.no_price ?? (row.yes_price == null ? null : Math.round((1 - row.yes_price) * 10000) / 10000),
     volume24hr: row.volume_24h,
     endDate: row.end_date,
     image: row.image,
@@ -56,8 +58,11 @@ function toMarket(row: {
   };
 }
 
-export async function GET() {
-  if (liveCache && liveCache.expiresAt > Date.now()) {
+export async function GET(req: NextRequest) {
+  const searchParams = new URL(req.url).searchParams;
+  const forceRefresh = searchParams.get("refresh") === "1";
+  const requestedIds = Array.from(new Set((searchParams.get("ids") ?? "").split(",").map((id) => id.trim()).filter(Boolean))).slice(0, 50);
+  if (!forceRefresh && liveCache && liveCache.expiresAt > Date.now()) {
     return NextResponse.json({ items: liveCache.markets, cached: true });
   }
   try {
@@ -71,6 +76,13 @@ export async function GET() {
         .limit(20)
     ).data as PredictionMarketRow[] | null;
 
+    if (requestedIds.length) {
+      const heldRows = (await db.from("prediction_markets").select("*").in("id", requestedIds)).data as PredictionMarketRow[] | null;
+      const merged = new Map((rows ?? []).map((row) => [row.id, row]));
+      for (const row of heldRows ?? []) merged.set(row.id, row);
+      rows = Array.from(merged.values());
+    }
+
     // First run before the cron has populated the catalog: fetch Gamma directly
     // (and let the next cron persist it). Keeps the endpoint usable immediately.
     if (!rows || rows.length === 0) {
@@ -78,15 +90,23 @@ export async function GET() {
       // A first visitor should repair an empty catalog, not merely receive a
       // transient fallback that still cannot be traded or charted.
       await persistCatalogRows(db, rows);
+    } else if (catalogNeedsQuoteRepair(rows)) {
+      // Repair a legacy all-null catalog promptly. Two pages keep this request
+      // bounded; the cron continues to fill the full 1,000-market catalog.
+      try {
+        const refreshed = await fetchActiveMarkets(fetch, 2);
+        await persistCatalogRows(db, refreshed);
+        rows = refreshed.slice(0, 20);
+      } catch {
+        console.warn("Legacy catalog repair failed; serving cached rows");
+      }
     }
 
-    // Refresh live midpoints per market (Gamma's own prices can lag).
-    const markets: PredictionMarket[] = await Promise.all(
-      (rows ?? []).map(async (row) => {
-        const yes = await liveMidpoint(row.yes_token_id, fetch, row.yes_price);
-        return toMarket({ ...row, yes_price: yes });
-      })
-    );
+    // Hydrate a bounded batch and persist usable values. A later CLOB timeout
+    // can then fall back to a recent, real quote rather than disabling trading.
+    const quotedRows = await hydratePredictionMarketPrices(rows ?? [], fetch, 4);
+    await persistCatalogRows(db, quotedRows);
+    const markets = quotedRows.map(toMarket);
 
     liveCache = { expiresAt: Date.now() + LIVE_CACHE_MS, markets };
     return NextResponse.json({ items: markets, cached: false });

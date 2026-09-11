@@ -104,13 +104,17 @@ export function PredictionWorkspace() {
   const [category, setCategory] = useState("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    const [marketResponse, meResponse] = await Promise.all([
-      fetch("/api/prediction-markets", { cache: "no-store" }),
-      fetch("/api/me", { cache: "no-store" }),
-    ]);
-    if (!marketResponse.ok || !meResponse.ok) throw new Error("Prediction markets are temporarily unavailable.");
-    const [marketPayload, mePayload] = await Promise.all([marketResponse.json(), meResponse.json()]);
+  const refresh = useCallback(async (forceQuotes = false) => {
+    const meResponse = await fetch("/api/me", { cache: "no-store" });
+    if (!meResponse.ok) throw new Error("Your paper account is temporarily unavailable.");
+    const mePayload = await meResponse.json();
+    const heldIds = Array.from(new Set((mePayload.prediction_positions ?? []).map((position: PredictionPosition) => position.market_id)));
+    const params = new URLSearchParams();
+    if (heldIds.length) params.set("ids", heldIds.join(","));
+    if (forceQuotes) params.set("refresh", "1");
+    const marketResponse = await fetch(`/api/prediction-markets${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
+    if (!marketResponse.ok) throw new Error("Prediction markets are temporarily unavailable.");
+    const marketPayload = await marketResponse.json();
     setMarkets(marketPayload.items ?? []);
     setAccount({ account: mePayload.account ?? null, prediction_positions: mePayload.prediction_positions ?? [] });
   }, []);

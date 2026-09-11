@@ -35,6 +35,7 @@ interface GammaMarket {
   archived?: boolean;
   image?: string;
   clobTokenIds?: string;
+  outcomePrices?: string | Array<string | number>;
 }
 
 export function price01(value: unknown): number | null {
@@ -60,15 +61,18 @@ export function parseGammaMarket(raw: GammaMarket): PredictionMarketRow | null {
   if (!id || !question) return null;
   // Only binary Yes/No markets are tradable in this paper app.
   const tokens = parseJsonArray(raw.clobTokenIds);
+  const prices = parseJsonArray(raw.outcomePrices);
   if (tokens.length !== 2) return null;
+  const yesPrice = price01(prices[0]);
+  const noPrice = price01(prices[1]);
   return {
     id,
     question,
     category: raw.category ? String(raw.category) : null,
     yes_token_id: tokens[0] ?? null,
     no_token_id: tokens[1] ?? null,
-    yes_price: null,
-    no_price: null,
+    yes_price: yesPrice,
+    no_price: noPrice,
     volume_24h: Number.isFinite(Number(raw.volume24hr)) ? Number(raw.volume24hr) : null,
     end_date: typeof raw.endDate === "string" ? raw.endDate : null,
     status: raw.closed ? "closed" : "active",
@@ -84,9 +88,10 @@ export function parseGammaMarket(raw: GammaMarket): PredictionMarketRow | null {
  */
 export async function fetchActiveMarkets(
   fetchImpl: FetchLike = fetch,
-  maxPages = 2,
+  maxPages = 10,
 ): Promise<PredictionMarketRow[]> {
   const out: PredictionMarketRow[] = [];
+  const seen = new Set<string>();
   for (let page = 0; page < maxPages; page++) {
     const url =
       "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=100" +
@@ -97,11 +102,36 @@ export async function fetchActiveMarkets(
     if (!Array.isArray(data) || data.length === 0) break;
     for (const raw of data) {
       const row = parseGammaMarket(raw);
-      if (row) out.push(row);
+      if (row && !seen.has(row.id)) { seen.add(row.id); out.push(row); }
     }
     if (data.length < 100) break;
   }
   return out;
+}
+
+export function catalogNeedsQuoteRepair(rows: Array<Pick<PredictionMarketRow, "yes_price" | "no_price">>): boolean {
+  return rows.length > 0 && rows.every((row) => row.yes_price == null && row.no_price == null);
+}
+
+export async function hydratePredictionMarketPrices(
+  rows: PredictionMarketRow[],
+  fetchImpl: FetchLike = fetch,
+  concurrency = 4,
+): Promise<PredictionMarketRow[]> {
+  const hydrated: PredictionMarketRow[] = [];
+  const width = Math.max(1, Math.floor(concurrency));
+  for (let index = 0; index < rows.length; index += width) {
+    const batch = rows.slice(index, index + width);
+    const priced = await Promise.all(batch.map(async (row) => {
+      const [yesPrice, noPrice] = await Promise.all([
+        liveMidpoint(row.yes_token_id, fetchImpl, row.yes_price),
+        liveMidpoint(row.no_token_id, fetchImpl, row.no_price),
+      ]);
+      return { ...row, yes_price: yesPrice, no_price: noPrice };
+    }));
+    hydrated.push(...priced);
+  }
+  return hydrated;
 }
 
 export interface CatalogDb {
