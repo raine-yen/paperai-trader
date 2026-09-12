@@ -47,14 +47,23 @@ export function formatPredictionHistoryLabel(timestamp: string | number, days: n
 /** Source-market category values are inconsistent. This gives the discovery UI
  * a stable, user-readable taxonomy while preserving a meaningful non-generic
  * source label when the question does not match a known Vanta category. */
-export function predictionCategory(question: string, sourceCategory: string | null | undefined): string {
+export function predictionCategory(question: string, sourceCategory: string | null | undefined, tags?: string[] | null): string {
+  // Gamma's tag taxonomy is the reliable signal — its `category` field is empty
+  // for every live market. Esports is checked before Sports (tag "Esports").
+  const tagSet = new Set((tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean));
+  if (tagSet.has("esports")) return "Esports";
+  if (tagSet.has("sports")) return "Sports";
   const matched = CATEGORY_RULES.find((rule) => rule.pattern.test(question));
   if (matched) return matched.category;
   const source = sourceCategory?.trim();
   return source && !/^general$/i.test(source) ? source : "General";
 }
 
-/** A more specific grouping used only inside the Sports discovery category. */
-export function predictionSportCategory(question: string): string | null {
+export function predictionSportCategory(question: string, tags?: string[] | null): string | null {
+  const tagSet = (tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+  // Gamma sport tags may be league names ("nba") or full names ("basketball").
+  for (const rule of SPORT_RULES) {
+    if (tagSet.some((tag) => tag === rule.sport.toLowerCase() || rule.pattern.test(tag))) return rule.sport;
+  }
   return SPORT_RULES.find((rule) => rule.pattern.test(question))?.sport ?? null;
 }

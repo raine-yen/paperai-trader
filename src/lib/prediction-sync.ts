@@ -9,6 +9,8 @@ export interface PredictionMarketRow {
   id: string;
   question: string;
   category: string | null;
+  event_slug?: string | null;
+  tags?: string[] | null;
   yes_token_id: string | null;
   no_token_id: string | null;
   yes_price: number | null;
@@ -36,6 +38,7 @@ interface GammaMarket {
   image?: string;
   clobTokenIds?: string;
   outcomePrices?: string | Array<string | number>;
+  tags?: string[] | string;
 }
 
 export function price01(value: unknown): number | null {
@@ -45,10 +48,17 @@ export function price01(value: unknown): number | null {
 }
 
 function parseJsonArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(String);
+  if (Array.isArray(value)) {
+    return value
+      .map((item) =>
+        item && typeof item === "object"
+          ? String((item as Record<string, unknown>).label ?? (item as Record<string, unknown>).slug ?? "")
+          : String(item))
+      .filter(Boolean);
+  }
   try {
     const parsed = JSON.parse(String(value ?? "[]"));
-    return Array.isArray(parsed) ? parsed.map(String) : [];
+    return Array.isArray(parsed) ? parseJsonArray(parsed) : [];
   } catch {
     return [];
   }
@@ -69,6 +79,8 @@ export function parseGammaMarket(raw: GammaMarket): PredictionMarketRow | null {
     id,
     question,
     category: raw.category ? String(raw.category) : null,
+    event_slug: raw.slug ? String(raw.slug) : null,
+    tags: parseJsonArray(raw.tags),
     yes_token_id: tokens[0] ?? null,
     no_token_id: tokens[1] ?? null,
     yes_price: yesPrice,
@@ -92,7 +104,12 @@ const POLYMARKET_HEADERS = {
 };
 
 /**
- * Fetch all active binary markets from Gamma (paginated, up to `maxPages`).
+ * Fetch all active binary markets from Gamma via the /events endpoint
+ * (paginated, up to `maxPages` events pages). Events carry the tag taxonomy
+ * that the /markets endpoint omits, so sports/esports discovery works; each
+ * event embeds its markets, which are parsed exactly like /markets rows and
+ * annotated with the parent event's tags + slug. Gamma rejects offsets beyond
+ * ~2000 on this endpoint (422 "offset too large") — treated as end of data.
  */
 export async function fetchActiveMarkets(
   fetchImpl: FetchLike = fetch,
@@ -105,13 +122,14 @@ export async function fetchActiveMarkets(
       "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=100" +
       `&offset=${page * 100}&order=volume24hr&ascending=false`;
     const res = await fetchImpl(url, { headers: POLYMARKET_HEADERS });
-    // Gamma rejects offsets beyond ~2000 ("offset too large", 422) — that is
-    // the end of the offset-paginated window, not a failure.
+    // Gamma rejects deep offsets ("offset too large", 422) — that is the end
+    // of the offset-paginated window, not a failure.
     if (res.status === 422) break;
     if (!res.ok) throw new Error(`Gamma returned ${res.status}`);
     const data = (await res.json()) as GammaMarket[];
     if (!Array.isArray(data) || data.length === 0) break;
     for (const raw of data) {
+      if (raw.closed || raw.active === false) continue;
       const row = parseGammaMarket(raw);
       if (row && !seen.has(row.id)) { seen.add(row.id); out.push(row); }
     }
@@ -160,7 +178,13 @@ export async function persistCatalogRows(
 ): Promise<number> {
   if (rows.length === 0) return 0;
   const { error } = await db.from("prediction_markets").upsert(rows, { onConflict: "id" });
-  if (error) throw new Error(`catalog upsert failed: ${error.message ?? "unknown"}`);
+  if (error) {
+    // If the taxonomy columns haven't been migrated yet (20260912_prediction_taxonomy.sql),
+    // retry with the pre-migration shape so discovery keeps working on old schemas.
+    const legacy = rows.map(({ event_slug: _e, tags: _t, ...rest }) => rest);
+    const retry = await db.from("prediction_markets").upsert(legacy, { onConflict: "id" });
+    if (retry.error) throw new Error(`catalog upsert failed: ${retry.error ?? error.message ?? "unknown"}`);
+  }
   return rows.length;
 }
 

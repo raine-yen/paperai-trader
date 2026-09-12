@@ -15,6 +15,7 @@ type PredictionMarket = {
   id: string;
   question: string;
   category: string | null;
+  tags?: string[];
   yesPrice: number | null;
   noPrice: number | null;
   volume24hr: number | null;
@@ -90,7 +91,7 @@ function categoryMark(category: string | null) {
 }
 
 function displayCategory(market: PredictionMarket) {
-  return predictionCategory(market.question, market.category);
+  return predictionCategory(market.question, market.category, market.tags);
 }
 
 function endLabel(endDate: string | null) {
@@ -192,7 +193,7 @@ export function PredictionWorkspace() {
   const categories = useMemo(() => ["All", ...categoryOrder.filter((item) => orderedMarkets.some((market) => displayCategory(market) === item)), ...Array.from(new Set(orderedMarkets.map(displayCategory))).filter((item) => !categoryOrder.includes(item))], [orderedMarkets]);
   const categoryMarkets = category === "All" ? orderedMarkets : orderedMarkets.filter((market) => displayCategory(market) === category);
   const visibleMarkets = category === "Sports" && sportFilter !== "All sports"
-    ? categoryMarkets.filter((market) => predictionSportCategory(market.question) === sportFilter)
+    ? categoryMarkets.filter((market) => predictionSportCategory(market.question, market.tags) === sportFilter)
     : categoryMarkets;
   const selected = markets.find((market) => market.id === selectedId) ?? null;
 

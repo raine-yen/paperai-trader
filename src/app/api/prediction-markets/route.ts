@@ -12,6 +12,7 @@ export interface PredictionMarket {
   id: string; // condition id (catalog PK; matches /api/predictions/* routes)
   question: string;
   category: string | null;
+  tags?: string[];
   yesTokenId: string | null;
   noTokenId: string | null;
   outcomes: string[];
@@ -44,6 +45,7 @@ function toMarket(row: {
   id: string;
   question: string;
   category: string | null;
+  tags?: string[] | null;
   yes_token_id: string | null;
   no_token_id: string | null;
   yes_price: number | null;
@@ -58,6 +60,7 @@ function toMarket(row: {
     id: row.id,
     question: row.question,
     category: row.category,
+    tags: Array.isArray(row.tags) ? row.tags : [],
     yesTokenId: row.yes_token_id,
     noTokenId: row.no_token_id,
     outcomes: ["Yes", "No"],
