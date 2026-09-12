@@ -54,7 +54,7 @@ export async function settlePredictionMarkets(
     const chunk = marketIds.slice(i, i + 20);
     const url = `https://gamma-api.polymarket.com/markets?closed=true&limit=${chunk.length}&${chunk.map((id) => `condition_ids=${encodeURIComponent(id)}`).join("&")}`;
     try {
-      const res = await fetchImpl(url, { headers: { Accept: "application/json" } });
+      const res = await fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" } });
       if (!res.ok) continue;
       const rows = (await res.json()) as Array<{ conditionId?: string } & Parameters<typeof gammaWinner>[0]>;
       for (const row of rows) {

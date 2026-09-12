@@ -83,6 +83,14 @@ export function parseGammaMarket(raw: GammaMarket): PredictionMarketRow | null {
   };
 }
 
+// Gamma and CLOB sit behind Cloudflare, which returns 403 (error 1010) for
+// requests without a browser-like User-Agent.
+const POLYMARKET_HEADERS = {
+  Accept: "application/json",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+};
+
 /**
  * Fetch all active binary markets from Gamma (paginated, up to `maxPages`).
  */
@@ -96,8 +104,8 @@ export async function fetchActiveMarkets(
     const url =
       "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=100" +
       `&offset=${page * 100}&order=volume24hr&ascending=false`;
-    const res = await fetchImpl(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`Gamma returned ${res.status}`);
+    const res = await fetchImpl(url, { headers: POLYMARKET_HEADERS });
+        if (!res.ok) throw new Error(`Gamma returned ${res.status}`);
     const data = (await res.json()) as GammaMarket[];
     if (!Array.isArray(data) || data.length === 0) break;
     for (const raw of data) {
@@ -179,8 +187,8 @@ export async function liveMidpoint(
   if (!tokenId) return lastKnown;
   try {
     const res = await fetchImpl(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(tokenId)}`, {
-      headers: { Accept: "application/json" },
-    });
+          headers: POLYMARKET_HEADERS,
+        });
     if (res.ok) {
       const body = (await res.json()) as { mid?: string | number; midpoint?: string | number };
       const mid = price01(body.mid ?? body.midpoint);
@@ -191,8 +199,8 @@ export async function liveMidpoint(
   }
   try {
     const res = await fetchImpl(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}`, {
-      headers: { Accept: "application/json" },
-    });
+          headers: POLYMARKET_HEADERS,
+        });
     if (res.ok) {
       const book = (await res.json()) as { bids?: Array<{ price: string | number }>; asks?: Array<{ price: string | number }> };
       // Gamma/CLOB return bids ascending, asks descending; top of book is the extreme.
@@ -223,8 +231,8 @@ export async function fetchProbabilityHistory(
     "https://clob.polymarket.com/prices-history?market=" + encodeURIComponent(tokenId) +
     `&startTs=${now - days * 86400}&endTs=${now}&fidelity=${fidelityMinutes}`;
   try {
-    const res = await fetchImpl(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) return [];
+    const res = await fetchImpl(url, { headers: POLYMARKET_HEADERS });
+        if (!res.ok) return [];
     const body = (await res.json()) as { history?: Array<{ t?: number; p?: number }> };
     return (body.history ?? [])
       .map((h) => ({ t: Number(h.t), p: price01(h.p) }))
