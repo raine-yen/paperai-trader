@@ -98,8 +98,7 @@ export default function DocsPage() {
       <div>
         <h1 className="text-3xl font-semibold mb-2">Getting Started</h1>
         <p className="text-gray-400">
-          Paper Trader's API is compatible with Alpaca's REST API. If your code works with Alpaca,
-          it works here — just change the base URL.
+          Vanta uses Alpaca-compatible REST paths and credentials for its paper accounts. Use a Vanta-generated key and change your client&apos;s base URL.
         </p>
       </div>
 
@@ -163,7 +162,7 @@ export default function DocsPage() {
       </Section>
 
       <Section title="Authentication headers">
-        <p className="text-sm text-gray-400 mb-3">Every API request needs these two headers:</p>
+        <p className="text-sm text-gray-400 mb-3">Every API request accepts these standard Alpaca headers. Legacy HTTP Basic authentication with the key ID as the username and secret as the password also works.</p>
         <div className="card p-4 font-mono text-xs space-y-1">
           <div>APCA-API-KEY-ID: <span className="text-accent">PK...</span></div>
           <div>APCA-API-SECRET-KEY: <span className="text-accent">...</span></div>

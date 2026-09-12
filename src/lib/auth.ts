@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Buffer } from "node:buffer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { verifySecret } from "@/lib/api-keys";
 import type { Account, ApiKey } from "@/lib/types";
@@ -8,14 +9,27 @@ export interface ApiAuth {
   apiKey: ApiKey;
 }
 
-// Validate Alpaca-style headers: APCA-API-KEY-ID + APCA-API-SECRET-KEY
+/** Reads either Alpaca's standard headers or its legacy HTTP Basic form. */
+export function alpacaCredentials(req: Pick<NextRequest, "headers">): { keyId: string; secret: string } | null {
+  const keyId = req.headers.get("apca-api-key-id");
+  const secret = req.headers.get("apca-api-secret-key");
+  if (keyId && secret) return { keyId, secret };
+
+  const basic = req.headers.get("authorization")?.match(/^Basic\s+(.+)$/i)?.[1];
+  if (!basic) return null;
+  const decoded = Buffer.from(basic, "base64").toString("utf8");
+  const separator = decoded.indexOf(":");
+  if (separator <= 0 || separator === decoded.length - 1) return null;
+  return { keyId: decoded.slice(0, separator), secret: decoded.slice(separator + 1) };
+}
+
+// Validate Alpaca-style headers: APCA-API-KEY-ID + APCA-API-SECRET-KEY.
 export async function authenticateApiKey(req: NextRequest): Promise<
   { ok: true; auth: ApiAuth } | { ok: false; response: NextResponse }
 > {
-  const keyId = req.headers.get("apca-api-key-id");
-  const secret = req.headers.get("apca-api-secret-key");
+  const credentials = alpacaCredentials(req);
 
-  if (!keyId || !secret) {
+  if (!credentials) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -24,6 +38,7 @@ export async function authenticateApiKey(req: NextRequest): Promise<
       ),
     };
   }
+  const { keyId, secret } = credentials;
 
   const db = supabaseAdmin();
 

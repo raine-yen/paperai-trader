@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowLeft, Loader2, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, Loader2, Search, TrendingDown, TrendingUp, X } from "lucide-react";
 import { FaceIdSuccessMark } from "@/components/order-flow";
 import { cn, formatUSD } from "@/lib/utils";
-import { formatPredictionHistoryLabel, predictionCategory, predictionCountdown } from "@/lib/prediction-presentation";
+import { formatPredictionHistoryLabel, predictionCategory, predictionCountdown, predictionSportCategory } from "@/lib/prediction-presentation";
 
 type Outcome = "yes" | "no";
 type TradeMode = "buy" | "sell";
@@ -54,6 +54,8 @@ const RANGE_DAYS = [
   { label: "1W", days: 7 },
   { label: "1M", days: 30 },
 ] as const;
+
+const SPORT_FILTERS = ["All sports", "Basketball", "Football", "Baseball", "Soccer", "Hockey", "Tennis", "Combat", "Motorsports"];
 
 const fallbackHistory = (price: number) => [
   { t: "Open", p: Math.max(0.01, price - 0.025) },
@@ -109,9 +111,12 @@ export function PredictionWorkspace() {
   const [hasMore, setHasMore] = useState(false);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sportFilter, setSportFilter] = useState("All sports");
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const refresh = useCallback(async (forceQuotes = false) => {
+  const refresh = useCallback(async (forceQuotes = false, query = "") => {
     const meResponse = await fetch("/api/me", { cache: "no-store" });
     if (!meResponse.ok) throw new Error("Your paper account is temporarily unavailable.");
     const mePayload = await meResponse.json();
@@ -119,7 +124,8 @@ export function PredictionWorkspace() {
     const params = new URLSearchParams();
     params.set("limit", String(pageSize));
     params.set("offset", "0");
-    if (heldIds.length) params.set("ids", heldIds.join(","));
+    if (query) params.set("q", query);
+    if (heldIds.length && !query) params.set("ids", heldIds.join(","));
     if (forceQuotes) params.set("refresh", "1");
     const marketResponse = await fetch(`/api/prediction-markets${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
     if (!marketResponse.ok) throw new Error("Prediction markets are temporarily unavailable.");
@@ -131,17 +137,25 @@ export function PredictionWorkspace() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setSearchQuery(searchInput.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
     let alive = true;
     setLoading(true);
-    void refresh().catch((error: Error) => { if (alive) setLoadError(error.message); }).finally(() => { if (alive) setLoading(false); });
+    setLoadError("");
+    void refresh(false, searchQuery).catch((error: Error) => { if (alive) setLoadError(error.message); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [refresh]);
+  }, [refresh, searchQuery]);
 
   const loadMore = useCallback(async () => {
     if (loading || loadingMore || nextOffset == null) return;
     setLoadingMore(true);
     try {
-      const response = await fetch(`/api/prediction-markets?limit=${pageSize}&offset=${nextOffset}`, { cache: "no-store" });
+      const params = new URLSearchParams({ limit: String(pageSize), offset: String(nextOffset) });
+      if (searchQuery) params.set("q", searchQuery);
+      const response = await fetch(`/api/prediction-markets?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error("More prediction markets are temporarily unavailable.");
       const payload = await response.json();
       setMarkets((current) => {
@@ -156,7 +170,7 @@ export function PredictionWorkspace() {
     } finally {
       setLoadingMore(false);
     }
-  }, [loading, loadingMore, nextOffset, pageSize]);
+  }, [loading, loadingMore, nextOffset, pageSize, searchQuery]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -176,11 +190,14 @@ export function PredictionWorkspace() {
   const categoryOrder = ["Esports", "Sports", "General", "Politics", "Economics", "Crypto & Markets", "Technology"];
   const orderedMarkets = useMemo(() => [...markets].sort((a, b) => Number(b.volume24hr ?? 0) - Number(a.volume24hr ?? 0)), [markets]);
   const categories = useMemo(() => ["All", ...categoryOrder.filter((item) => orderedMarkets.some((market) => displayCategory(market) === item)), ...Array.from(new Set(orderedMarkets.map(displayCategory))).filter((item) => !categoryOrder.includes(item))], [orderedMarkets]);
-  const visibleMarkets = category === "All" ? orderedMarkets : orderedMarkets.filter((market) => displayCategory(market) === category);
+  const categoryMarkets = category === "All" ? orderedMarkets : orderedMarkets.filter((market) => displayCategory(market) === category);
+  const visibleMarkets = category === "Sports" && sportFilter !== "All sports"
+    ? categoryMarkets.filter((market) => predictionSportCategory(market.question) === sportFilter)
+    : categoryMarkets;
   const selected = markets.find((market) => market.id === selectedId) ?? null;
 
   if (selected) {
-    return <PredictionDetail market={selected} account={account} onBack={() => setSelectedId(null)} onChanged={() => void refresh()} />;
+    return <PredictionDetail market={selected} account={account} onBack={() => setSelectedId(null)} onChanged={() => void refresh(true, searchQuery)} />;
   }
 
   return (
@@ -197,8 +214,15 @@ export function PredictionWorkspace() {
       </header>
 
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Prediction category">
-        {categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} onClick={() => setCategory(item)} className={cn("shrink-0 min-h-11 rounded-full px-3.5 py-1.5 text-xs font-bold transition", category === item ? "bg-accent-green text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}
+        {categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} onClick={() => { setCategory(item); if (item !== "Sports") setSportFilter("All sports"); }} className={cn("shrink-0 min-h-11 rounded-full px-3.5 py-1.5 text-xs font-bold transition", category === item ? "bg-accent-green text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}
       </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <label className="relative min-w-[min(100%,19rem)] flex-1"><span className="sr-only">Search prediction markets</span><Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="min-h-11 w-full border border-bg-border bg-bg-soft py-2 pl-10 pr-10 text-sm outline-none transition focus:border-accent-green" placeholder="Search prediction markets" />{searchInput ? <button type="button" aria-label="Clear prediction search" onClick={() => setSearchInput("")} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-white"><X className="h-4 w-4" /></button> : null}</label>
+        {searchQuery ? <span className="text-xs text-gray-500">Search results</span> : null}
+      </div>
+
+      {category === "Sports" ? <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Sports filters">{SPORT_FILTERS.map((item) => <button key={item} type="button" aria-pressed={sportFilter === item} onClick={() => setSportFilter(item)} className={cn("shrink-0 min-h-9 rounded-full px-3 py-1 text-xs font-bold transition", sportFilter === item ? "bg-white text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}</div> : null}
 
       {account?.prediction_positions?.length ? (
         <section className="mt-6" aria-labelledby="your-prediction-positions">
@@ -216,7 +240,7 @@ export function PredictionWorkspace() {
 
       <section className="mt-7" aria-labelledby="active-prediction-markets">
         <div className="flex items-center justify-between gap-3"><h2 id="active-prediction-markets" className="text-xs font-bold uppercase tracking-[0.16em] text-gray-500">Markets</h2><span className="text-[10px] font-bold tracking-[0.14em] text-gray-600">TAP A PRICE TO TRADE</span></div>
-        {loading ? <div className="flex min-h-48 items-center justify-center text-sm text-gray-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading active markets</div> : loadError ? <p role="alert" className="mt-4 border border-accent-red/40 bg-accent-red/10 p-4 text-sm text-accent-red">{loadError}</p> : <><div className="mt-2 divide-y divide-bg-border border-y border-bg-border">{visibleMarkets.map((market) => <MarketRow key={market.id} market={market} onOpen={setSelectedId} />)}</div><div ref={loadMoreRef} className="flex min-h-16 items-center justify-center py-4" aria-live="polite">{loadingMore ? <span className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading more markets</span> : hasMore ? <button type="button" onClick={() => void loadMore()} className="min-h-11 rounded-full border border-bg-border px-4 text-xs font-bold text-gray-300 transition hover:border-gray-500 hover:text-white">Load more markets</button> : <span className="text-xs text-gray-600">You&apos;re all caught up.</span>}</div></>}
+        {loading ? <div className="flex min-h-48 items-center justify-center text-sm text-gray-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading active markets</div> : loadError ? <p role="alert" className="mt-4 border border-accent-red/40 bg-accent-red/10 p-4 text-sm text-accent-red">{loadError}</p> : <>{visibleMarkets.length ? <div className="mt-2 divide-y divide-bg-border border-y border-bg-border">{visibleMarkets.map((market) => <MarketRow key={market.id} market={market} onOpen={setSelectedId} />)}</div> : <p className="mt-3 border-y border-bg-border py-8 text-center text-sm text-gray-500">No prediction markets match these filters.</p>}<div ref={loadMoreRef} className="flex min-h-16 items-center justify-center py-4" aria-live="polite">{loadingMore ? <span className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading more markets</span> : hasMore ? <button type="button" onClick={() => void loadMore()} className="min-h-11 rounded-full border border-bg-border px-4 text-xs font-bold text-gray-300 transition hover:border-gray-500 hover:text-white">Load more markets</button> : <span className="text-xs text-gray-600">You&apos;re all caught up.</span>}</div></>}
       </section>
     </section>
   );

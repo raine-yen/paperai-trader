@@ -7,6 +7,17 @@ const CATEGORY_RULES: Array<{ category: string; pattern: RegExp }> = [
   { category: "Technology", pattern: /\b(ai|artificial intelligence|nvidia|model|openai|anthropic|apple|google|microsoft|laptop|chip|semiconductor|technology)\b/i },
 ];
 
+const SPORT_RULES: Array<{ sport: string; pattern: RegExp }> = [
+  { sport: "Basketball", pattern: /\b(nba|wnba|ncaab|ncaa basketball|basketball|euroleague)\b/i },
+  { sport: "Football", pattern: /\b(nfl|ncaaf|college football|american football|super bowl|football)\b/i },
+  { sport: "Baseball", pattern: /\b(mlb|baseball|world series)\b/i },
+  { sport: "Soccer", pattern: /\b(soccer|mls|premier league|champions league|la liga|bundesliga|serie a|fifa|world cup)\b/i },
+  { sport: "Hockey", pattern: /\b(nhl|hockey)\b/i },
+  { sport: "Tennis", pattern: /\b(tennis|atp|wta|wimbledon|us open|french open)\b/i },
+  { sport: "Combat", pattern: /\b(ufc|mma|boxing|fight night|wwe)\b/i },
+  { sport: "Motorsports", pattern: /\b(formula 1|\bf1\b|nascar|indycar|motogp)\b/i },
+];
+
 /** "Live · ends in 2d 14h" style countdown used on discovery rows. */
 export function predictionCountdown(endDate: string | null | undefined, now: number = Date.now()): string {
   if (!endDate) return "Resolution date pending";
@@ -41,4 +52,9 @@ export function predictionCategory(question: string, sourceCategory: string | nu
   if (matched) return matched.category;
   const source = sourceCategory?.trim();
   return source && !/^general$/i.test(source) ? source : "General";
+}
+
+/** A more specific grouping used only inside the Sports discovery category. */
+export function predictionSportCategory(question: string): string | null {
+  return SPORT_RULES.find((rule) => rule.pattern.test(question))?.sport ?? null;
 }
