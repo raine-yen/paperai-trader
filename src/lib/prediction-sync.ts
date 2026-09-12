@@ -105,7 +105,10 @@ export async function fetchActiveMarkets(
       "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=100" +
       `&offset=${page * 100}&order=volume24hr&ascending=false`;
     const res = await fetchImpl(url, { headers: POLYMARKET_HEADERS });
-        if (!res.ok) throw new Error(`Gamma returned ${res.status}`);
+    // Gamma rejects offsets beyond ~2000 ("offset too large", 422) — that is
+    // the end of the offset-paginated window, not a failure.
+    if (res.status === 422) break;
+    if (!res.ok) throw new Error(`Gamma returned ${res.status}`);
     const data = (await res.json()) as GammaMarket[];
     if (!Array.isArray(data) || data.length === 0) break;
     for (const raw of data) {
