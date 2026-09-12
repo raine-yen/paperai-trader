@@ -88,7 +88,7 @@ export function parseGammaMarket(raw: GammaMarket): PredictionMarketRow | null {
  */
 export async function fetchActiveMarkets(
   fetchImpl: FetchLike = fetch,
-  maxPages = 10,
+  maxPages = 100,
 ): Promise<PredictionMarketRow[]> {
   const out: PredictionMarketRow[] = [];
   const seen = new Set<string>();
@@ -161,8 +161,9 @@ export async function persistCatalogRows(
 export async function syncPredictionCatalog(
   db: CatalogDb,
   fetchImpl: FetchLike = fetch,
+  maxPages = 100,
 ): Promise<number> {
-  const rows = await fetchActiveMarkets(fetchImpl);
+  const rows = await fetchActiveMarkets(fetchImpl, maxPages);
   return persistCatalogRows(db, rows);
 }
 

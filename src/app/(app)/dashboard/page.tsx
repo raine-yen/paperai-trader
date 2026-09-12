@@ -54,6 +54,8 @@ type Quest = {
   decimals?: number;
 };
 
+type QuestCycle = { id: string; label: string };
+
 export default function Dashboard() {
   const [data, setData] = useState<MeData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -63,6 +65,9 @@ export default function Dashboard() {
   const [claimedRewards, setClaimedRewards] = useState<string[]>([]);
   const [claimingReward, setClaimingReward] = useState<string | null>(null);
   const [rewardMessage, setRewardMessage] = useState("");
+  const [quests, setQuests] = useState<Quest[]>([]);
+  const [rewardCycle, setRewardCycle] = useState<QuestCycle>({ id: "daily-pending", label: "Today" });
+  const [questTier, setQuestTier] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -103,19 +108,16 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    if (!data?.account?.id) return;
-    const raw = window.localStorage.getItem(`paper-trader:rewards:${data.account.id}`);
-    setClaimedRewards(raw ? JSON.parse(raw) : []);
-  }, [data?.account?.id]);
-
-  useEffect(() => {
     let active = true;
     async function fetchRewards() {
       const r = await fetch("/api/quests", { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
       if (active && Array.isArray(j.claims)) {
-        setClaimedRewards((prev) => Array.from(new Set([...prev, ...j.claims])));
+        setClaimedRewards(j.claims);
+        setQuests(Array.isArray(j.quests) ? j.quests : []);
+        if (j.cycle?.id && j.cycle?.label) setRewardCycle(j.cycle);
+        setQuestTier(typeof j.tier === "string" ? j.tier : "");
       }
     }
     fetchRewards();
@@ -150,15 +152,6 @@ export default function Dashboard() {
   const investedGrowthPct = data.performance?.growth_pct ?? (costBasis > 0 ? (investedGrowth / costBasis) * 100 : 0);
   const isUp = investedGrowth >= 0;
   const allocationBase = Math.max(account.equity, 1);
-  const rewardCycle = getRewardCycle();
-  const quests = getQuests({
-    totalReturnPct: investedGrowthPct,
-    holdings: positions.length,
-    orders: orders.length,
-    scheduledOrders: orders.filter((o) => !!o.scheduled_at).length,
-    cash: account.cash,
-  }, rewardCycle.week);
-
   async function recordQuestPoints(quest: { id: string }) {
     const claimKey = `${rewardCycle.id}:${quest.id}`;
     if (claimedRewards.includes(claimKey)) return;
@@ -177,7 +170,6 @@ export default function Dashboard() {
     }
     const next = [...claimedRewards, claimKey];
     setClaimedRewards(next);
-    window.localStorage.setItem(`paper-trader:rewards:${account.id}`, JSON.stringify(next));
     setRewardMessage(`Quest complete — ${Number(j.points ?? 200)} recognition points. Your $10,000 paper allocation is unchanged.`);
     setClaimingReward(null);
   }
@@ -281,7 +273,7 @@ export default function Dashboard() {
             </div>
             <h2 className="mt-2 font-semibold">Learning goals and recognition</h2>
           </div>
-          <div className="text-sm text-gray-400">Week {rewardCycle.week} cycle - {quests.filter((q) => claimedRewards.includes(`${rewardCycle.id}:${q.id}`)).length}/{quests.length} complete</div>
+          <div className="text-sm text-gray-400">Daily {questTier ? `${questTier} ` : ""}cycle · {quests.filter((q) => claimedRewards.includes(`${rewardCycle.id}:${q.id}`)).length}/{quests.length} complete</div>
         </div>
         {rewardMessage && <div className="border-b border-bg-border bg-bg-elevated px-5 py-3 text-sm font-semibold text-gray-300">{rewardMessage}</div>}
         <div className="grid gap-4 p-5 lg:grid-cols-3">
@@ -451,71 +443,6 @@ export default function Dashboard() {
 function competitionLabel(competition?: { rank: number | null; participants: number }) {
   if (!competition?.rank) return "Unranked";
   return `#${competition.rank} of ${competition.participants}`;
-}
-
-function getRewardCycle(now = new Date()) {
-  const start = Date.UTC(2026, 0, 5);
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const weekIndex = Math.max(0, Math.floor((today - start) / (7 * 24 * 60 * 60 * 1000)));
-  const week = (weekIndex % 2) + 1;
-  return { id: `2026-w${weekIndex + 1}-set${week}`, week };
-}
-
-function getQuests(stats: { totalReturnPct: number; holdings: number; orders: number; scheduledOrders: number; cash: number }, week: number): Quest[] {
-  const weekOne: Quest[] = [
-    {
-      id: "first-order",
-      title: "First Bell",
-      description: "Place your first trade.",
-      progress: stats.orders,
-      goal: 1,
-      reward: "$200 practice credit",
-    },
-    {
-      id: "three-holdings",
-      title: "Diversifier",
-      description: "Hold three different symbols at once.",
-      progress: stats.holdings,
-      goal: 3,
-      reward: "$200 practice credit",
-    },
-    {
-      id: "green-portfolio",
-      title: "Green Day",
-      description: "Get your all-time return above 2%.",
-      progress: Math.max(0, stats.totalReturnPct),
-      goal: 2,
-      decimals: 1,
-      reward: "$200 practice credit",
-    },
-  ];
-  const weekTwo: Quest[] = [
-    {
-      id: "active-trader",
-      title: "Active Trader",
-      description: "Submit five total orders.",
-      progress: stats.orders,
-      goal: 5,
-      reward: "$200 practice credit",
-    },
-    {
-      id: "cash-buffer",
-      title: "Risk Buffer",
-      description: "Keep at least $10,000 in cash.",
-      progress: Math.min(stats.cash, 10000),
-      goal: 10000,
-      reward: "$200 practice credit",
-    },
-    {
-      id: "timekeeper",
-      title: "Timekeeper",
-      description: "Create one scheduled price order.",
-      progress: stats.scheduledOrders,
-      goal: 1,
-      reward: "$200 practice credit",
-    },
-  ];
-  return week === 1 ? weekOne : weekTwo;
 }
 
 function Metric({ label, value, caption, icon: Icon }: { label: string; value: string; caption?: string; icon: React.ComponentType<{ className?: string }> }) {

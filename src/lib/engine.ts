@@ -125,7 +125,10 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
 
   if (input.type === "market") {
     const filled = await fillOrder(final, price);
-    if (filled) final = filled;
+    if (!filled) {
+      return { ok: false, error: "The market order could not be filled. Your account was not updated." };
+    }
+    final = filled;
   } else {
     // Limit orders that are immediately satisfiable should also fill now
     const fillable =
@@ -133,7 +136,10 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
       (input.side === "sell" && price >= input.limit_price!);
     if (fillable) {
       const filled = await fillOrder(final, price);
-      if (filled) final = filled;
+      if (!filled) {
+        return { ok: false, error: "The limit order could not be filled. Your account was not updated." };
+      }
+      final = filled;
     }
   }
 
@@ -183,20 +189,23 @@ export async function fillOrder(order: Order, price: number): Promise<Order | nu
       ? (Number(existingPos.qty) * Number(existingPos.avg_entry_price) + notional) / newQty
       : price;
 
-    await db.from("accounts").update({ cash: newCash }).eq("id", acct.id);
+    const { error: cashError } = await db.from("accounts").update({ cash: newCash }).eq("id", acct.id);
+    if (cashError) return null;
 
     if (existingPos) {
-      await db
+      const { error: positionError } = await db
         .from("positions")
         .update({ qty: newQty, avg_entry_price: newAvg, updated_at: now })
         .eq("id", existingPos.id);
+      if (positionError) return null;
     } else {
-      await db.from("positions").insert({
+      const { error: positionError } = await db.from("positions").insert({
         account_id: acct.id,
         symbol: order.symbol,
         qty: newQty,
         avg_entry_price: newAvg,
       });
+      if (positionError) return null;
     }
   } else {
     // sell
@@ -210,19 +219,22 @@ export async function fillOrder(order: Order, price: number): Promise<Order | nu
     const newCash = Number(acct.cash) + notional;
     const newQty = Number(existingPos.qty) - qty;
 
-    await db.from("accounts").update({ cash: newCash }).eq("id", acct.id);
+    const { error: cashError } = await db.from("accounts").update({ cash: newCash }).eq("id", acct.id);
+    if (cashError) return null;
 
     if (newQty <= 0.0001) {
-      await db.from("positions").delete().eq("id", existingPos.id);
+      const { error: positionError } = await db.from("positions").delete().eq("id", existingPos.id);
+      if (positionError) return null;
     } else {
-      await db
+      const { error: positionError } = await db
         .from("positions")
         .update({ qty: newQty, updated_at: now })
         .eq("id", existingPos.id);
+      if (positionError) return null;
     }
   }
 
-  await db.from("fills").insert({
+  const { error: fillError } = await db.from("fills").insert({
     order_id: order.id,
     account_id: acct.id,
     symbol: order.symbol,
@@ -230,8 +242,9 @@ export async function fillOrder(order: Order, price: number): Promise<Order | nu
     price,
     side: order.side,
   });
+  if (fillError) return null;
 
-  const { data: updated } = await db
+  const { data: updated, error: orderError } = await db
     .from("orders")
     .update({
       status: "filled",
@@ -243,6 +256,7 @@ export async function fillOrder(order: Order, price: number): Promise<Order | nu
     .select("*")
     .single();
 
+  if (orderError) return null;
   return (updated as Order | null) ?? null;
 }
 

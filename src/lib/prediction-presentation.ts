@@ -1,9 +1,10 @@
 const CATEGORY_RULES: Array<{ category: string; pattern: RegExp }> = [
+  { category: "Esports", pattern: /\b(e-?sports?|counter-strike|cs2|valorant|dota\s*2?|league of legends|\blol\b|lck|lcs|lec|cblol|fissure|thunderpick|pgl|overwatch|call of duty|fortnite)\b/i },
+  { category: "Sports", pattern: /\b(nfl|nba|mlb|nhl|soccer|football|baseball|basketball|tennis|ufc|formula 1|fifa|champions league|super bowl|seahawks|dodgers|fc|vs\.?|spread|o\/u|playoffs|tournament|athletic club)\b/i },
   { category: "Politics", pattern: /\b(election|president|congress|senate|house|governor|parliament|minister|democrat|republican|trump|biden|tariff|government|bill)\b/i },
   { category: "Economics", pattern: /\b(fed|federal reserve|interest rate|inflation|gdp|jobs report|unemployment|recession|cpi|yield|central bank)\b/i },
   { category: "Crypto & Markets", pattern: /\b(bitcoin|ethereum|crypto|solana|token|fdv|market cap|s&p|nasdaq|dow|stock market|ipo)\b/i },
   { category: "Technology", pattern: /\b(ai|artificial intelligence|nvidia|model|openai|anthropic|apple|google|microsoft|laptop|chip|semiconductor|technology)\b/i },
-  { category: "Sports", pattern: /\b(nfl|nba|mlb|nhl|soccer|football|baseball|basketball|tennis|ufc|formula 1|fifa|champions league|super bowl|seahawks|dodgers|fc)\b/i },
 ];
 
 /** "Live · ends in 2d 14h" style countdown used on discovery rows. */

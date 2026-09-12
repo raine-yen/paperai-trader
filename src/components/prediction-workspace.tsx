@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowLeft, CheckCircle2, Loader2, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, Loader2, TrendingDown, TrendingUp } from "lucide-react";
+import { FaceIdSuccessMark } from "@/components/order-flow";
 import { cn, formatUSD } from "@/lib/utils";
 import { formatPredictionHistoryLabel, predictionCategory, predictionCountdown } from "@/lib/prediction-presentation";
 
@@ -77,6 +78,7 @@ function compactMoney(value: number | null | undefined) {
 
 function categoryMark(category: string | null) {
   const name = (category ?? "").toLowerCase();
+  if (name.includes("esport")) return "ESP";
   if (name.includes("polit")) return "POL";
   if (name.includes("crypto") || name.includes("market")) return "CRY";
   if (name.includes("tech")) return "TEC";
@@ -96,6 +98,7 @@ function endLabel(endDate: string | null) {
 }
 
 export function PredictionWorkspace() {
+  const pageSize = 50;
   const searchParams = useSearchParams();
   const [markets, setMarkets] = useState<PredictionMarket[]>([]);
   const [account, setAccount] = useState<AccountData | null>(null);
@@ -103,6 +106,10 @@ export function PredictionWorkspace() {
   const [loadError, setLoadError] = useState("");
   const [category, setCategory] = useState("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const refresh = useCallback(async (forceQuotes = false) => {
     const meResponse = await fetch("/api/me", { cache: "no-store" });
@@ -110,12 +117,16 @@ export function PredictionWorkspace() {
     const mePayload = await meResponse.json();
     const heldIds = Array.from(new Set((mePayload.prediction_positions ?? []).map((position: PredictionPosition) => position.market_id)));
     const params = new URLSearchParams();
+    params.set("limit", String(pageSize));
+    params.set("offset", "0");
     if (heldIds.length) params.set("ids", heldIds.join(","));
     if (forceQuotes) params.set("refresh", "1");
     const marketResponse = await fetch(`/api/prediction-markets${params.size ? `?${params.toString()}` : ""}`, { cache: "no-store" });
     if (!marketResponse.ok) throw new Error("Prediction markets are temporarily unavailable.");
     const marketPayload = await marketResponse.json();
     setMarkets(marketPayload.items ?? []);
+    setHasMore(Boolean(marketPayload.hasMore));
+    setNextOffset(marketPayload.nextOffset ?? null);
     setAccount({ account: mePayload.account ?? null, prediction_positions: mePayload.prediction_positions ?? [] });
   }, []);
 
@@ -126,13 +137,46 @@ export function PredictionWorkspace() {
     return () => { alive = false; };
   }, [refresh]);
 
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore || nextOffset == null) return;
+    setLoadingMore(true);
+    try {
+      const response = await fetch(`/api/prediction-markets?limit=${pageSize}&offset=${nextOffset}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("More prediction markets are temporarily unavailable.");
+      const payload = await response.json();
+      setMarkets((current) => {
+        const merged = new Map(current.map((market) => [market.id, market]));
+        for (const market of payload.items ?? []) merged.set(market.id, market);
+        return Array.from(merged.values());
+      });
+      setHasMore(Boolean(payload.hasMore));
+      setNextOffset(payload.nextOffset ?? null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "More prediction markets are temporarily unavailable.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loading, loadingMore, nextOffset, pageSize]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore || loading || loadingMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: "480px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, loadMore]);
+
   useEffect(() => {
     const marketId = searchParams.get("marketId");
     if (marketId && markets.some((market) => market.id === marketId)) setSelectedId(marketId);
   }, [markets, searchParams]);
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(markets.map(displayCategory)))], [markets]);
-  const visibleMarkets = category === "All" ? markets : markets.filter((market) => displayCategory(market) === category);
+  const categoryOrder = ["Esports", "Sports", "General", "Politics", "Economics", "Crypto & Markets", "Technology"];
+  const orderedMarkets = useMemo(() => [...markets].sort((a, b) => Number(b.volume24hr ?? 0) - Number(a.volume24hr ?? 0)), [markets]);
+  const categories = useMemo(() => ["All", ...categoryOrder.filter((item) => orderedMarkets.some((market) => displayCategory(market) === item)), ...Array.from(new Set(orderedMarkets.map(displayCategory))).filter((item) => !categoryOrder.includes(item))], [orderedMarkets]);
+  const visibleMarkets = category === "All" ? orderedMarkets : orderedMarkets.filter((market) => displayCategory(market) === category);
   const selected = markets.find((market) => market.id === selectedId) ?? null;
 
   if (selected) {
@@ -172,7 +216,7 @@ export function PredictionWorkspace() {
 
       <section className="mt-7" aria-labelledby="active-prediction-markets">
         <div className="flex items-center justify-between gap-3"><h2 id="active-prediction-markets" className="text-xs font-bold uppercase tracking-[0.16em] text-gray-500">Markets</h2><span className="text-[10px] font-bold tracking-[0.14em] text-gray-600">TAP A PRICE TO TRADE</span></div>
-        {loading ? <div className="flex min-h-48 items-center justify-center text-sm text-gray-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading active markets</div> : loadError ? <p role="alert" className="mt-4 border border-accent-red/40 bg-accent-red/10 p-4 text-sm text-accent-red">{loadError}</p> : <div className="mt-2 divide-y divide-bg-border border-y border-bg-border">{visibleMarkets.map((market) => <MarketRow key={market.id} market={market} onOpen={setSelectedId} />)}</div>}
+        {loading ? <div className="flex min-h-48 items-center justify-center text-sm text-gray-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading active markets</div> : loadError ? <p role="alert" className="mt-4 border border-accent-red/40 bg-accent-red/10 p-4 text-sm text-accent-red">{loadError}</p> : <><div className="mt-2 divide-y divide-bg-border border-y border-bg-border">{visibleMarkets.map((market) => <MarketRow key={market.id} market={market} onOpen={setSelectedId} />)}</div><div ref={loadMoreRef} className="flex min-h-16 items-center justify-center py-4" aria-live="polite">{loadingMore ? <span className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading more markets</span> : hasMore ? <button type="button" onClick={() => void loadMore()} className="min-h-11 rounded-full border border-bg-border px-4 text-xs font-bold text-gray-300 transition hover:border-gray-500 hover:text-white">Load more markets</button> : <span className="text-xs text-gray-600">You&apos;re all caught up.</span>}</div></>}
       </section>
     </section>
   );
@@ -291,7 +335,7 @@ function PredictionDetail({ market, account, onBack, onChanged }: { market: Pred
 
           <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500"><span>Vol {compactMoney(market.volume24hr)} 24h</span><span aria-hidden>·</span><span>{predictionCountdown(market.endDate)}</span></div>
 
-          <section className="mt-8 border-y border-bg-border py-6" aria-label="Prediction probability history"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-bold tracking-[0.16em] text-gray-500">{outcome.toUpperCase()} ODDS HISTORY</p><h2 className="mt-1 text-xl font-black">{cents(currentPrice)} · {probability(currentPrice)} implied probability</h2></div><div className="flex gap-1" role="tablist" aria-label="Prediction chart period">{RANGE_DAYS.map((item) => <button key={item.days} role="tab" aria-selected={range === item.days} type="button" onClick={() => setRange(item.days)} className={cn("min-h-9 px-3 text-xs font-bold", range === item.days ? "bg-accent-green text-black" : "border border-bg-border text-gray-400")}>{item.label}</button>)}</div></div><div className="mt-5 h-52" aria-label="Interactive Yes odds probability chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="predictionOdds" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="rgb(var(--color-accent))" stopOpacity={0.28} /><stop offset="100%" stopColor="rgb(var(--color-accent))" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="label" tick={{ fill: "rgb(var(--color-gray-500))", fontSize: 10 }} tickLine={false} axisLine={false} /><YAxis domain={[0, 1]} tickFormatter={(value) => `${Math.round(value * 100)}¢`} tick={{ fill: "rgb(var(--color-gray-500))", fontSize: 10 }} tickLine={false} axisLine={false} width={34} /><Tooltip formatter={(value) => [cents(Number(value)), `${outcome.toUpperCase()} odds`]} contentStyle={{ background: "#101010", border: "1px solid #262626", borderRadius: 0 }} /><Area type="monotone" dataKey="p" stroke="rgb(var(--color-accent))" strokeWidth={2} fill="url(#predictionOdds)" /></AreaChart></ResponsiveContainer></div></section>
+          <section className="mt-8 border-y border-bg-border py-6" aria-label="Prediction probability history"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-bold tracking-[0.16em] text-gray-500">{outcome.toUpperCase()} ODDS HISTORY</p><h2 className="mt-1 text-xl font-black">{cents(currentPrice)} · {probability(currentPrice)} implied probability</h2></div><div className="flex gap-1" role="tablist" aria-label="Prediction chart period">{RANGE_DAYS.map((item) => <button key={item.days} role="tab" aria-selected={range === item.days} type="button" onClick={() => setRange(item.days)} className={cn("min-h-9 px-3 text-xs font-bold", range === item.days ? "bg-accent-green text-black" : "border border-bg-border text-gray-400")}>{item.label}</button>)}</div></div><div className="vanta-pencil-chart mt-5 h-52" aria-label="Interactive Yes odds probability chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="predictionOdds" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="rgb(var(--color-accent))" stopOpacity={0.28} /><stop offset="100%" stopColor="rgb(var(--color-accent))" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="label" tick={{ fill: "rgb(var(--color-gray-500))", fontSize: 10 }} tickLine={false} axisLine={false} /><YAxis domain={[0, 1]} tickFormatter={(value) => `${Math.round(value * 100)}¢`} tick={{ fill: "rgb(var(--color-gray-500))", fontSize: 10 }} tickLine={false} axisLine={false} width={34} /><Tooltip formatter={(value) => [cents(Number(value)), `${outcome.toUpperCase()} odds`]} contentStyle={{ background: "#101010", border: "1px solid #262626", borderRadius: 0 }} /><Area key={`${market.id}:${outcome}:${range}:${chartData.length}:${chartData.at(-1)?.t ?? ""}`} type="monotone" dataKey="p" stroke="rgb(var(--color-accent))" strokeWidth={2} fill="url(#predictionOdds)" isAnimationActive={false} /></AreaChart></ResponsiveContainer></div></section>
 
           {position ? <section className="mt-8 border border-bg-border bg-bg-soft p-4" aria-labelledby="prediction-position-heading"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold tracking-[0.16em] text-gray-500">YOUR POSITION</p><h2 id="prediction-position-heading" className="mt-1 text-xl font-black">{position.outcome.toUpperCase()} outcome shares</h2></div><button type="button" onClick={() => setMode("sell")} className="border border-bg-border px-3 py-2 text-xs font-bold text-gray-300 hover:border-accent-red hover:text-white">Sell position</button></div><div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4"><Metric label="Shares" value={Number(position.shares).toFixed(2)} /><Metric label="Average cost" value={cents(position.avg_cost)} /><Metric label="Market value" value={formatUSD(position.market_value)} /><Metric label="Total return" value={`${position.unrealized_pl >= 0 ? "+" : ""}${formatUSD(position.unrealized_pl)}`} tone={position.unrealized_pl >= 0 ? "text-accent-green" : "text-accent-red"} /></div></section> : null}
 
@@ -302,7 +346,7 @@ function PredictionDetail({ market, account, onBack, onChanged }: { market: Pred
       </div>
 
       {reviewing ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="prediction-review-title"><div className="w-full max-w-md border border-bg-border bg-black p-5"><p className="text-[10px] font-bold tracking-[0.16em] text-accent-green">REVIEW ORDER</p><h2 id="prediction-review-title" className="mt-2 text-2xl font-black">{isBuy ? `Buy ${outcome.toUpperCase()}` : `Sell ${outcome.toUpperCase()}`}</h2><p className="mt-2 text-sm text-gray-400">Confirm the outcome, paper amount, and latest displayed price before placing this paper order.</p><div className="mt-5 border-y border-bg-border py-4"><Estimate label="Market" value={market.question} /><Estimate label="Outcome" value={`${outcome.toUpperCase()} · ${cents(currentPrice)} each`} /><Estimate label={isBuy ? "Paper amount" : "Shares"} value={isBuy ? formatUSD(parsedAmount) : estimatedShares.toFixed(2)} /><Estimate label={isBuy ? "Outcome shares" : "Estimated proceeds"} value={isBuy ? estimatedShares.toFixed(2) : formatUSD(total)} /></div><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setReviewing(false)} disabled={submitting} className="min-h-11 border border-bg-border text-sm font-bold text-gray-300">Edit</button><button type="button" onClick={() => void submit()} disabled={submitting} className={cn("min-h-11 text-sm font-black", isBuy ? "bg-accent-green text-black" : "bg-accent-red text-white")}>{submitting ? <><Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Securing order</> : isBuy ? `Place paper buy ${outcome}` : `Place paper sell ${outcome}`}</button></div></div></div> : null}
-      {receipt ? <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="prediction-receipt-title"><div className="w-full max-w-md border border-bg-border bg-black p-6 text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-accent-green" /><p className="mt-4 text-[10px] font-bold tracking-[0.16em] text-gray-500">PAPER ORDER FILLED</p><h2 id="prediction-receipt-title" className="mt-2 text-2xl font-black">{receipt.title}</h2><p className="mt-2 text-sm text-gray-400">{receipt.detail}</p><dl className="mt-5 border-y border-bg-border py-4 text-left"><Estimate label="Status" value="Filled" tone="text-accent-green" /><Estimate label="Quantity" value={`${receipt.amount} ${outcome.toUpperCase()} shares`} /><Estimate label="Fill price" value={cents(receipt.price)} /></dl><button type="button" onClick={() => setReceipt(null)} className="mt-5 min-h-11 w-full bg-white text-sm font-black text-black">Done</button></div></div> : null}
+      {receipt ? <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="prediction-receipt-title"><div className="w-full max-w-md border border-bg-border bg-black p-6 text-center"><FaceIdSuccessMark className="mx-auto h-14 w-14 text-accent-green" /><p className="mt-4 text-[10px] font-bold tracking-[0.16em] text-gray-500">PAPER ORDER FILLED</p><h2 id="prediction-receipt-title" className="mt-2 text-2xl font-black">{receipt.title}</h2><p className="mt-2 text-sm text-gray-400">{receipt.detail}</p><dl className="mt-5 border-y border-bg-border py-4 text-left"><Estimate label="Status" value="Filled" tone="text-accent-green" /><Estimate label="Quantity" value={`${receipt.amount} ${outcome.toUpperCase()} shares`} /><Estimate label="Fill price" value={cents(receipt.price)} /></dl><button type="button" onClick={() => setReceipt(null)} className="mt-5 min-h-11 w-full bg-white text-sm font-black text-black">Done</button></div></div> : null}
     </section>
   );
 }

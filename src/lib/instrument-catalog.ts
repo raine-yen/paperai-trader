@@ -321,6 +321,12 @@ function predictionToInstrument(row: PredictionSearchRow): Instrument {
   };
 }
 
+function assetSearchPriority(assetClass: AssetClass): number {
+  if (assetClass === "stock" || assetClass === "etf") return 3;
+  if (assetClass === "crypto") return 2;
+  return 1;
+}
+
 async function searchPredictionMarkets(db: PredictionCatalogDb, query: string): Promise<ScoredInstrument[]> {
   const { data, error } = await db.from("prediction_markets").select("*").eq("status", "active");
   if (error || !data) return [];
@@ -362,7 +368,11 @@ export async function searchInstruments(rawQuery: string, options: SearchOptions
   const predictionMatches = predictionDb ? await searchPredictionMarkets(predictionDb, query) : [];
 
   const merged0 = [...local, ...predictionMatches];
-  merged0.sort((a, b) => b.score - a.score);
+  merged0.sort((a, b) =>
+    Math.floor(b.score) - Math.floor(a.score) ||
+    assetSearchPriority(b.instrument.assetClass) - assetSearchPriority(a.instrument.assetClass) ||
+    b.score - a.score,
+  );
 
   const provider = await yahooSearch(query);
   const seen = new Set(merged0.map((l) => l.instrument.symbol));
@@ -372,7 +382,8 @@ export async function searchInstruments(rawQuery: string, options: SearchOptions
       instrument,
       // Provider hits always rank below any local hit (< 400); preserve provider order.
       score: 399.9 - idx * 0.1,
-    }));
+    }))
+    .sort((a, b) => assetSearchPriority(b.instrument.assetClass) - assetSearchPriority(a.instrument.assetClass) || b.score - a.score);
 
   const merged: InstrumentSearchResult[] = [
     ...merged0.map(({ instrument, score }) => ({

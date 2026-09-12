@@ -28,7 +28,7 @@ test("visible equities use authoritative polling with no interpolated presentati
 });
 
 test("charts preserve sharp linear geometry across web and Expo", () => {
-  assert.match(read("src/app/(app)/market/page.tsx"), /<Area type="linear"/);
+  assert.match(read("src/app/(app)/market/page.tsx"), /<Area[^>]*type="linear"/);
   assert.match(read("mobile/src/screens.tsx"), /InteractiveLineChart/);
 });
 

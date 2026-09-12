@@ -17,37 +17,46 @@ const tradeSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser(req);
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  try {
+    const user = await getSessionUser(req);
+    if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => null);
-  const parsed = tradeSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
+    const body = await req.json().catch(() => null);
+    const parsed = tradeSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
+    }
+
+    const db = supabaseAdmin();
+    const { data: account, error: accountError } = await db
+      .from("accounts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (accountError) {
+      console.error("paper trade account lookup failed", accountError);
+      return NextResponse.json({ error: "Your paper account is temporarily unavailable." }, { status: 503 });
+    }
+    if (!account) return NextResponse.json({ error: "no account" }, { status: 400 });
+
+    const order = await placeOrder({
+      account,
+      symbol: parsed.data.symbol,
+      qty: parsed.data.qty,
+      side: parsed.data.side,
+      type: parsed.data.type,
+      limit_price: parsed.data.limit_price,
+      client_order_id: parsed.data.client_order_id,
+      scheduled_at: parsed.data.scheduled_at,
+    });
+
+    if (!order.ok) return NextResponse.json({ error: order.error }, { status: 422 });
+    return NextResponse.json(toAlpacaOrder(order.order!));
+  } catch (error) {
+    console.error("paper trade submission failed", error);
+    return NextResponse.json({ error: "Order service is temporarily unavailable. Please try again." }, { status: 503 });
   }
-
-  const db = supabaseAdmin();
-  const { data: account } = await db
-    .from("accounts")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (!account) return NextResponse.json({ error: "no account" }, { status: 400 });
-
-  const order = await placeOrder({
-    account,
-    symbol: parsed.data.symbol,
-    qty: parsed.data.qty,
-    side: parsed.data.side,
-    type: parsed.data.type,
-    limit_price: parsed.data.limit_price,
-    client_order_id: parsed.data.client_order_id,
-    scheduled_at: parsed.data.scheduled_at,
-  });
-
-  if (!order.ok) return NextResponse.json({ error: order.error }, { status: 422 });
-  return NextResponse.json(toAlpacaOrder(order.order!));
 }

@@ -25,7 +25,16 @@ export interface PredictionMarket {
 }
 
 const LIVE_CACHE_MS = 60_000;
-let liveCache: { expiresAt: number; markets: PredictionMarket[] } | null = null;
+interface CatalogPage {
+  items: PredictionMarket[];
+  cached: boolean;
+  hasMore: boolean;
+  nextOffset: number | null;
+}
+let liveCache: { expiresAt: number; key: string; page: CatalogPage } | null = null;
+const DEFAULT_LIST_LIMIT = 50;
+const MAX_LIST_LIMIT = 100;
+const LIVE_QUOTE_LIMIT = 12;
 
 function toMarket(row: {
   id: string;
@@ -61,32 +70,41 @@ function toMarket(row: {
 export async function GET(req: NextRequest) {
   const searchParams = new URL(req.url).searchParams;
   const forceRefresh = searchParams.get("refresh") === "1";
+  const requestedLimit = Number(searchParams.get("limit"));
+  const listLimit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(MAX_LIST_LIMIT, Math.floor(requestedLimit))) : DEFAULT_LIST_LIMIT;
+  const requestedOffset = Number(searchParams.get("offset"));
+  const listOffset = Number.isFinite(requestedOffset) ? Math.max(0, Math.min(100_000, Math.floor(requestedOffset))) : 0;
   const requestedIds = Array.from(new Set((searchParams.get("ids") ?? "").split(",").map((id) => id.trim()).filter(Boolean))).slice(0, 50);
-  if (!forceRefresh && liveCache && liveCache.expiresAt > Date.now()) {
-    return NextResponse.json({ items: liveCache.markets, cached: true });
+  const cacheKey = `${listOffset}:${listLimit}`;
+  if (!forceRefresh && !requestedIds.length && liveCache?.key === cacheKey && liveCache.expiresAt > Date.now()) {
+    return NextResponse.json({ ...liveCache.page, cached: true });
   }
   try {
     const db = supabaseAdmin();
-    let rows = (
+    const catalogRows = (
       await db
         .from("prediction_markets")
         .select("*")
         .eq("status", "active")
         .order("volume_24h", { ascending: false })
-        .limit(20)
+        .range(listOffset, listOffset + listLimit)
     ).data as PredictionMarketRow[] | null;
+    let hasMore = (catalogRows?.length ?? 0) > listLimit;
+    let rows = (catalogRows ?? []).slice(0, listLimit);
 
-    if (requestedIds.length) {
+    if (requestedIds.length && listOffset === 0) {
       const heldRows = (await db.from("prediction_markets").select("*").in("id", requestedIds)).data as PredictionMarketRow[] | null;
-      const merged = new Map((rows ?? []).map((row) => [row.id, row]));
+      const merged = new Map(rows.map((row) => [row.id, row]));
       for (const row of heldRows ?? []) merged.set(row.id, row);
       rows = Array.from(merged.values());
     }
 
     // First run before the cron has populated the catalog: fetch Gamma directly
     // (and let the next cron persist it). Keeps the endpoint usable immediately.
-    if (!rows || rows.length === 0) {
-      rows = await fetchActiveMarkets();
+    if (rows.length === 0 && listOffset === 0) {
+      const fallbackRows = await fetchActiveMarkets(fetch, 100);
+      rows = fallbackRows.slice(0, listLimit);
+      hasMore = fallbackRows.length > listLimit;
       // A first visitor should repair an empty catalog, not merely receive a
       // transient fallback that still cannot be traded or charted.
       await persistCatalogRows(db, rows);
@@ -96,7 +114,8 @@ export async function GET(req: NextRequest) {
       try {
         const refreshed = await fetchActiveMarkets(fetch, 2);
         await persistCatalogRows(db, refreshed);
-        rows = refreshed.slice(0, 20);
+      rows = refreshed.slice(0, listLimit);
+      hasMore = refreshed.length > listLimit;
       } catch {
         console.warn("Legacy catalog repair failed; serving cached rows");
       }
@@ -104,16 +123,18 @@ export async function GET(req: NextRequest) {
 
     // Hydrate a bounded batch and persist usable values. A later CLOB timeout
     // can then fall back to a recent, real quote rather than disabling trading.
-    const quotedRows = await hydratePredictionMarketPrices(rows ?? [], fetch, 4);
+    const quotedRows = await hydratePredictionMarketPrices(rows.slice(0, LIVE_QUOTE_LIMIT), fetch, 4);
     await persistCatalogRows(db, quotedRows);
-    const markets = quotedRows.map(toMarket);
+    const liveRows = new Map(quotedRows.map((row) => [row.id, row]));
+    const markets = rows.map((row) => toMarket(liveRows.get(row.id) ?? row));
 
-    liveCache = { expiresAt: Date.now() + LIVE_CACHE_MS, markets };
-    return NextResponse.json({ items: markets, cached: false });
+    const page: CatalogPage = { items: markets, cached: false, hasMore, nextOffset: hasMore ? listOffset + listLimit : null };
+    if (!requestedIds.length) liveCache = { expiresAt: Date.now() + LIVE_CACHE_MS, key: cacheKey, page };
+    return NextResponse.json(page);
   } catch (e) {
     console.error("prediction-markets list failed", e);
     return NextResponse.json(
-      { items: liveCache?.markets ?? [], unavailable: true },
+      { ...(liveCache?.page ?? { items: [], hasMore: false, nextOffset: null }), unavailable: true },
       { status: liveCache ? 200 : 503 }
     );
   }

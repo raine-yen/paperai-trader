@@ -16,7 +16,7 @@ test("market order ticket is one-tap: confirm button at the bottom of the bar, r
   assert.doesNotMatch(market, /Review paper order/);
   assert.doesNotMatch(market, /vanta-review-scrim/);
   // A single prominent confirm button carries the live side/symbol/notional and submits directly.
-  assert.match(market, /className=\{cn\("vanta-confirm-button", side === "sell" && "is-sell"\)\}\s*disabled=\{!valid \|\| submitting\}\s*onClick=\{submit\}/);
+  assert.match(market, /className=\{cn\("vanta-confirm-button", side === "sell" && "is-sell"\)\}\s*disabled=\{submitting\}\s*onClick=\{submit\}/);
   assert.match(market, /Enter" && valid && !submitting\) submit\(\)/);
   // The receipt renders inside the same order bar (is-receipt), not a separate overlay.
   assert.match(market, /vanta-order-rail is-open is-receipt/);
@@ -27,6 +27,15 @@ test("market order ticket is one-tap: confirm button at the bottom of the bar, r
   assert.match(css, /@keyframes rail-receipt-in/);
 });
 
+test("the market ticket removes the redundant simulated-only disclosure and explains an incomplete confirm", () => {
+  const market = read("src/app/(app)/market/page.tsx");
+
+  assert.doesNotMatch(market, /Paper \/ simulated only — no real money\./);
+  assert.match(market, /Enter an order amount to continue\./);
+  assert.match(market, /client_order_id: clientOrderIdRef\.current/);
+  assert.match(market, /type === "market" && status !== "filled"/);
+});
+
 test("the permanent rail owns the only paper-order submission action for a selected stock", () => {
   const market = read("src/app/(app)/market/page.tsx");
 
@@ -35,7 +44,7 @@ test("the permanent rail owns the only paper-order submission action for a selec
   assert.doesNotMatch(market, /vanta-sell-action/);
   assert.doesNotMatch(market, /vanta-buy-action/);
   // The rail's bottom confirmation is the sole functional /api/trade entry point.
-  assert.match(market, /fetch\("\/api\/trade", \{ method: "POST"/);
+  assert.match(market, /fetch\("\/api\/trade", \{\s*method: "POST"/);
   assert.match(market, /className=\{cn\("vanta-confirm-button", side === "sell" && "is-sell"\)\}[\s\S]*onClick=\{submit\}/);
 });
 
@@ -72,12 +81,14 @@ test("order UI preserves the flat black-lime rail and neutral sell treatment", (
   assert.match(market, /label="Order type"/);
   assert.match(market, /label="Amount mode"/);
   assert.match(market, /role="tablist" aria-label=\{label\}/);
+  assert.match(market, /options=\{\[\["shares", "Shares"\], \["dollars", "Dollars"\]\]\}/);
   // Robinhood/Webull-style quick sizing: percentage chips replace the lone Max button.
-  assert.match(market, /aria-label="Quick size order to 25% of available/);
-  assert.match(market, /aria-label="Quick size order to 50% of available/);
-  assert.match(market, /aria-label="Quick size order to 75% of available/);
-  assert.match(market, /aria-label="Use all available/);
+  assert.match(market, /\[0\.25, 0\.5, 0\.75, 1\]\.map/);
+  assert.match(market, /Quick size order to \$\{pct \* 100\}% of available/);
+  assert.match(market, /Use all available \$\{side === "sell" \? "shares" : "buying power"\}/);
   assert.match(css, /\.vanta-amount input[^}]*font-size:\s*30px/s);
+  assert.match(market, /FaceIdSuccessMark/);
+  assert.match(css, /@keyframes face-id-check/);
   assert.doesNotMatch(flow, /bullish\s*\?\s*"bg-accent-green\/15"\s*:\s*"bg-accent-red\/15"/);
   assert.doesNotMatch(flow, /order-sheet card/);
   assert.doesNotMatch(mobile, /side === "buy" \? colors\.bullishSoft : colors\.bearishSoft/);

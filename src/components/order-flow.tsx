@@ -14,6 +14,22 @@ export type OrderReceipt = {
   amount: string;
 };
 
+/** A brief Face ID-inspired scan that resolves into a confirmation check. */
+export function FaceIdSuccessMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={cn("face-id-success", className)} aria-hidden="true">
+      <g className="face-id-frame" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <path d="M8 18v-5a5 5 0 0 1 5-5h5" />
+        <path d="M30 8h5a5 5 0 0 1 5 5v5" />
+        <path d="M40 30v5a5 5 0 0 1-5 5h-5" />
+        <path d="M18 40h-5a5 5 0 0 1-5-5v-5" />
+      </g>
+      <path className="face-id-scan" d="M13 24h22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path className="face-id-check" d="M15.5 24.5 21.5 30 33 17.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /**
  * Restrained purchase flow: after an order is accepted the success state
  * resolves with a check-mark draw, a short "processing" dwell, and the receipt

@@ -6,6 +6,7 @@ test("prediction presentation categories keep the approved discovery taxonomy wh
   assert.equal(predictionCategory("Will the Fed decrease interest rates?", "General"), "Economics");
   assert.equal(predictionCategory("Bitcoin above $120,000 by year end?", null), "Crypto & Markets");
   assert.equal(predictionCategory("Major AI lab ships a flagship model?", "General"), "Technology");
+  assert.equal(predictionCategory("Will Team A win the Valorant Champions final?", "Sports"), "Esports");
   assert.equal(predictionCategory("Will San Diego FC win on Sunday?", "General"), "Sports");
   assert.equal(predictionCategory("Will the Senate pass the bill?", "General"), "Politics");
   assert.equal(predictionCategory("A narrowly worded local event", "World"), "World");

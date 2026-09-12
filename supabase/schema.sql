@@ -69,16 +69,18 @@ create table if not exists orders (
   client_order_id text,
   symbol text not null,
   side text not null check (side in ('buy','sell')),
-  order_type text not null check (order_type in ('market','limit')) default 'market',
+  type text not null check (type in ('market','limit')) default 'market',
   qty numeric not null default 0,
-  price_limit numeric, -- limit order price; null for market orders
+  limit_price numeric, -- limit order price; null for market orders
   status text not null default 'new' check (status in ('new','filled','partially_filled','canceled','rejected','expired')),
   filled_qty numeric not null default 0,
-  filled_avg_price numeric not null default 0,
-  remaining_qty numeric not null default 0,
+  filled_avg_price numeric,
+  reject_reason text,
   time_in_force text not null default 'gtc' check (time_in_force in ('gtc','day','ioc')),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  filled_at timestamptz,
+  canceled_at timestamptz,
+  scheduled_at timestamptz
 );
 
 create index if not exists idx_orders_account on orders(account_id);
@@ -87,6 +89,20 @@ create index if not exists idx_orders_symbol on orders(symbol);
 create index if not exists idx_orders_scheduled on orders(scheduled_at);
 -- Idempotency: one order per client_order_id per account
 create unique index if not exists idx_orders_account_client_order on orders(account_id, client_order_id) where client_order_id is not null;
+
+create table if not exists fills (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references orders(id) on delete cascade,
+  account_id uuid not null references accounts(id) on delete cascade,
+  symbol text not null,
+  qty numeric not null check (qty > 0),
+  price numeric not null check (price > 0),
+  side text not null check (side in ('buy','sell')),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_fills_account on fills(account_id, created_at desc);
+create index if not exists idx_fills_order on fills(order_id);
 
 -- =====================================================================
 -- LEDGER — immutable fill records; every fill is a separate row
@@ -276,15 +292,13 @@ create table if not exists quest_points (
 -- =====================================================================
 
 create table if not exists prices (
-  id uuid primary key default gen_random_uuid(),
-  symbol text not null,
+  symbol text primary key,
   price numeric not null default 0,
-  source text not null default 'yahoo',
-  captured_at timestamptz not null default now()
+  prev_close numeric,
+  updated_at timestamptz not null default now()
 );
 
-create index if not exists idx_prices_symbol on prices(symbol);
-create index if not exists idx_prices_captured_at on prices(captured_at desc);
+create index if not exists idx_prices_updated_at on prices(updated_at desc);
 
 -- =====================================================================
 -- Vanta compliance: one-time $10,000 virtual cash at account creation only.
