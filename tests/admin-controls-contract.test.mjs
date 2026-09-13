@@ -13,6 +13,9 @@ test("admin controls require authenticated administrator and expose bounded time
   assert.match(route, /duration_minutes must be an integer from 1 to 43200/);
   assert.match(route, /suspended_until: suspendedUntil/);
   assert.match(route, /action === "delete_user"/);
+  assert.match(route, /action === "delete_users"/);
+  assert.match(route, /select at least one account/);
+  assert.match(route, /slice\(0, 100\)/);
   assert.match(route, /action === "reset"/);
   assert.match(route, /from\("prediction_positions"\)\.delete\(\)/);
   assert.match(route, /from\("prediction_fills"\)\.delete\(\)/);
@@ -24,5 +27,8 @@ test("admin page makes timeout and permanent deletion explicit confirmation acti
   const page = await source("src/app/(app)/admin/page.tsx");
   assert.match(page, /Timeout account for 24 hours/);
   assert.match(page, /Permanently delete user/);
+  assert.match(page, /Delete selected/);
+  assert.match(page, /Select all removable users shown/);
+  assert.match(page, /Permanently Delete \$\{pendingAction\.accountIds/);
   assert.match(page, /This permanently removes the auth user/);
 });

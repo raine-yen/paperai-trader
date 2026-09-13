@@ -40,6 +40,7 @@ interface AdminStats {
 }
 
 interface AdminData {
+  admin_user_id: string;
   accounts: AdminAccount[];
   stats: AdminStats;
   moderation?: {
@@ -48,7 +49,7 @@ interface AdminData {
   };
 }
 
-type ActionState = { accountId: string; type: string; symbol?: string } | null;
+type ActionState = { accountId?: string; accountIds?: string[]; type: string; symbol?: string } | null;
 
 export default function AdminPage() {
   const [data, setData] = useState<AdminData | null>(null);
@@ -63,6 +64,7 @@ export default function AdminPage() {
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [expandedAssets, setExpandedAssets] = useState<Record<string, boolean>>({});
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 
   async function fetchData() {
     const r = await fetch("/api/admin", { cache: "no-store" });
@@ -78,6 +80,7 @@ export default function AdminPage() {
     }
     const j = await r.json();
     setData(j);
+    setSelectedAccountIds((selected) => selected.filter((id) => j.accounts.some((account: AdminAccount) => account.id === id)));
     setLoading(false);
   }
 
@@ -85,7 +88,7 @@ export default function AdminPage() {
     fetchData();
   }, []);
 
-  async function runAction(accountId: string, action: string, extra?: Record<string, unknown>) {
+  async function runAction(accountId: string | undefined, action: string, extra?: Record<string, unknown>) {
     setActionLoading(true);
     setActionResult(null);
     const r = await fetch("/api/admin", {
@@ -131,6 +134,19 @@ export default function AdminPage() {
       a.display_name.toLowerCase().includes(search.toLowerCase()) ||
       a.email.toLowerCase().includes(search.toLowerCase())
   );
+  const selectableFiltered = filtered.filter((account) => account.user_id !== data.admin_user_id);
+  const selectedCount = selectedAccountIds.length;
+  const allFilteredSelected = selectableFiltered.length > 0 && selectableFiltered.every((account) => selectedAccountIds.includes(account.id));
+
+  function toggleAccount(id: string) {
+    setSelectedAccountIds((selected) => selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
+  }
+
+  function toggleAllFiltered() {
+    setSelectedAccountIds((selected) => allFilteredSelected
+      ? selected.filter((id) => !selectableFiltered.some((account) => account.id === id))
+      : Array.from(new Set([...selected, ...selectableFiltered.map((account) => account.id)])));
+  }
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl">
@@ -196,9 +212,9 @@ export default function AdminPage() {
 
       {/* Accounts table */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-bg-border flex items-center justify-between gap-4">
+        <div className="px-5 py-4 border-b border-bg-border flex flex-wrap items-center justify-between gap-4">
           <h2 className="font-semibold">All Accounts</h2>
-          <div className="flex items-center gap-2 bg-bg-elevated border border-bg-border rounded-lg px-3 py-2 w-64">
+          <div className="flex flex-wrap items-center justify-end gap-2"><div className="flex items-center gap-2 bg-bg-elevated border border-bg-border rounded-lg px-3 py-2 w-64">
             <Search className="w-3.5 h-3.5 text-gray-500 shrink-0" />
             <input
               className="bg-transparent text-sm outline-none placeholder-gray-500 flex-1"
@@ -206,13 +222,14 @@ export default function AdminPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
+          </div>{selectedCount > 0 ? <><span className="text-xs font-semibold text-gray-400">{selectedCount} selected</span><button type="button" onClick={() => setPendingAction({ type: "delete_users", accountIds: selectedAccountIds })} className="min-h-11 rounded-lg bg-accent-red px-3 text-xs font-bold text-white hover:bg-red-500">Delete selected</button><button type="button" onClick={() => setSelectedAccountIds([])} className="min-h-11 px-2 text-xs font-semibold text-gray-400 hover:text-white">Clear</button></> : null}</div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-xs text-gray-500 uppercase tracking-wider bg-bg-elevated/60">
               <tr>
+                <th className="py-3 px-3"><input type="checkbox" aria-label="Select all removable users shown" checked={allFilteredSelected} onChange={toggleAllFiltered} className="h-4 w-4 accent-accent-red" /></th>
                 <th className="text-left py-3 px-4 font-medium">#</th>
                 <th className="text-left py-3 px-4 font-medium">Trader</th>
                 <th className="text-left py-3 px-4 font-medium">Email</th>
@@ -237,6 +254,7 @@ export default function AdminPage() {
                         isDisabled && "opacity-50"
                       )}
                     >
+                      <td className="py-3 px-3"><input type="checkbox" aria-label={`Select ${a.display_name} for permanent deletion`} checked={selectedAccountIds.includes(a.id)} onChange={() => toggleAccount(a.id)} disabled={a.user_id === data.admin_user_id} className="h-4 w-4 accent-accent-red disabled:cursor-not-allowed disabled:opacity-30" /></td>
                       <td className="py-3 px-4 text-gray-500 tabular-nums">{i + 1}</td>
                       <td className="py-3 px-4 font-medium">{a.display_name}</td>
                       <td className="py-3 px-4 text-gray-400 text-xs">{a.email}</td>
@@ -342,7 +360,7 @@ export default function AdminPage() {
                     </tr>
                     {expandedAssets[a.id] && (
                       <tr className="bg-bg-elevated/35">
-                        <td colSpan={10} className="px-4 py-4">
+                        <td colSpan={11} className="px-4 py-4">
                           {a.positions.length === 0 ? (
                             <div className="text-sm text-gray-500">{a.display_name} has no open assets.</div>
                           ) : (
@@ -410,7 +428,7 @@ export default function AdminPage() {
       {/* Confirm action modal */}
       {pendingAction && (
         <ConfirmModal
-          title={pendingAction.type === "reset" ? "Reset Portfolio?" : pendingAction.type === "close_position" ? `Close ${pendingAction.symbol} position?` : pendingAction.type === "disable" ? "Disable Account?" : pendingAction.type === "timeout" ? "Timeout Account for 24 Hours?" : pendingAction.type === "delete_user" ? "Permanently Delete User?" : "Enable Account?"}
+          title={pendingAction.type === "reset" ? "Reset Portfolio?" : pendingAction.type === "close_position" ? `Close ${pendingAction.symbol} position?` : pendingAction.type === "delete_users" ? `Permanently Delete ${pendingAction.accountIds?.length ?? 0} Users?` : pendingAction.type === "disable" ? "Disable Account?" : pendingAction.type === "timeout" ? "Timeout Account for 24 Hours?" : pendingAction.type === "delete_user" ? "Permanently Delete User?" : "Enable Account?"}
           description={
             pendingAction.type === "reset"
               ? "This will delete all positions, cancel open orders, and restore the account to its starting cash. This cannot be undone."
@@ -420,14 +438,16 @@ export default function AdminPage() {
               ? "This account will be hidden from the leaderboard and cannot trade."
               : pendingAction.type === "timeout"
               ? "The account cannot trade for 24 hours and is restored automatically when the timeout expires."
+              : pendingAction.type === "delete_users"
+              ? `This permanently removes ${pendingAction.accountIds?.length ?? 0} users, their accounts, assets, prediction positions, fills, and orders. This cannot be undone.`
               : pendingAction.type === "delete_user"
               ? "This permanently removes the auth user, account, stock positions, prediction positions, fills, and orders. This cannot be undone."
               : "This account will be re-enabled and appear on the leaderboard."
           }
-          confirmLabel={pendingAction.type === "reset" ? "Yes, Reset" : pendingAction.type === "close_position" ? "Close position" : pendingAction.type === "disable" ? "Disable" : pendingAction.type === "timeout" ? "Timeout 24h" : pendingAction.type === "delete_user" ? "Delete permanently" : "Enable"}
+          confirmLabel={pendingAction.type === "reset" ? "Yes, Reset" : pendingAction.type === "close_position" ? "Close position" : pendingAction.type === "delete_users" ? "Delete users" : pendingAction.type === "disable" ? "Disable" : pendingAction.type === "timeout" ? "Timeout 24h" : pendingAction.type === "delete_user" ? "Delete permanently" : "Enable"}
           danger={pendingAction.type !== "enable"}
           loading={actionLoading}
-          onConfirm={() => runAction(pendingAction.accountId, pendingAction.type, pendingAction.type === "timeout" ? { duration_minutes: 1440 } : pendingAction.type === "close_position" ? { symbol: pendingAction.symbol } : undefined)}
+          onConfirm={() => runAction(pendingAction.accountId, pendingAction.type, pendingAction.type === "timeout" ? { duration_minutes: 1440 } : pendingAction.type === "close_position" ? { symbol: pendingAction.symbol } : pendingAction.type === "delete_users" ? { account_ids: pendingAction.accountIds } : undefined)}
           onCancel={() => setPendingAction(null)}
         />
       )}

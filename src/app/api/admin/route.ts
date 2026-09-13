@@ -13,6 +13,23 @@ async function verifyAdmin(req: NextRequest) {
   return user;
 }
 
+type ManagedAccount = { id: string; user_id: string };
+
+async function permanentlyDeleteUserAccount(db: ReturnType<typeof supabaseAdmin>, account: ManagedAccount) {
+  const [{ error: positionError }, { error: predictionPositionError }, { error: predictionFillError }, { error: orderError }] = await Promise.all([
+    db.from("positions").delete().eq("account_id", account.id),
+    db.from("prediction_positions").delete().eq("account_id", account.id),
+    db.from("prediction_fills").delete().eq("account_id", account.id),
+    db.from("orders").delete().eq("account_id", account.id),
+  ]);
+  const cleanupError = positionError ?? predictionPositionError ?? predictionFillError ?? orderError;
+  if (cleanupError) throw new Error(cleanupError.message);
+  const { error: accountError } = await db.from("accounts").delete().eq("id", account.id);
+  if (accountError) throw new Error(accountError.message);
+  const { error: userError } = await db.auth.admin.deleteUser(account.user_id);
+  if (userError) throw new Error(userError.message);
+}
+
 export async function GET(req: NextRequest) {
   const user = await verifyAdmin(req);
   if (!user) return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -115,6 +132,7 @@ export async function GET(req: NextRequest) {
   const totalOrders = allOrders?.length ?? 0;
 
   return NextResponse.json({
+    admin_user_id: user.id,
     accounts: enriched,
     stats: {
       total_users: enriched.length,
@@ -153,6 +171,28 @@ export async function POST(req: NextRequest) {
     const { error } = await db.from("message_reports").update({ status: "dismissed", reviewed_at: new Date().toISOString() }).eq("id", report_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, message: "Report dismissed" });
+  }
+
+  if (action === "delete_users") {
+    const rawAccountIds: unknown[] = Array.isArray(body.account_ids) ? body.account_ids : [];
+    const accountIds = Array.from(new Set(rawAccountIds.filter((id): id is string => typeof id === "string"))).slice(0, 100);
+    if (accountIds.length === 0) return NextResponse.json({ error: "select at least one account" }, { status: 400 });
+    const { data: accounts } = await db.from("accounts").select("id, user_id").in("id", accountIds);
+    if (!accounts || accounts.length !== accountIds.length) return NextResponse.json({ error: "one or more accounts were not found" }, { status: 404 });
+    if (accounts.some((account) => account.user_id === user.id)) {
+      return NextResponse.json({ error: "cannot delete your own admin account" }, { status: 400 });
+    }
+
+    let deleted = 0;
+    for (const account of accounts as ManagedAccount[]) {
+      try {
+        await permanentlyDeleteUserAccount(db, account);
+        deleted += 1;
+      } catch (error) {
+        return NextResponse.json({ error: `Deleted ${deleted} account(s) before the batch stopped: ${error instanceof Error ? error.message : "unknown error"}` }, { status: 500 });
+      }
+    }
+    return NextResponse.json({ ok: true, message: `${deleted} user${deleted === 1 ? "" : "s"} and their paper data permanently removed` });
   }
 
   if (!account_id) return NextResponse.json({ error: "account_id required" }, { status: 400 });
@@ -233,18 +273,11 @@ export async function POST(req: NextRequest) {
 
   if (action === "delete_user") {
     if (account.user_id === user.id) return NextResponse.json({ error: "cannot delete your own admin account" }, { status: 400 });
-    const [{ error: positionError }, { error: predictionPositionError }, { error: predictionFillError }, { error: orderError }] = await Promise.all([
-      db.from("positions").delete().eq("account_id", account_id),
-      db.from("prediction_positions").delete().eq("account_id", account_id),
-      db.from("prediction_fills").delete().eq("account_id", account_id),
-      db.from("orders").delete().eq("account_id", account_id),
-    ]);
-    const cleanupError = positionError ?? predictionPositionError ?? predictionFillError ?? orderError;
-    if (cleanupError) return NextResponse.json({ error: cleanupError.message }, { status: 500 });
-    const { error: accountError } = await db.from("accounts").delete().eq("id", account_id);
-    if (accountError) return NextResponse.json({ error: accountError.message }, { status: 500 });
-    const { error: userError } = await db.auth.admin.deleteUser(account.user_id);
-    if (userError) return NextResponse.json({ error: userError.message }, { status: 500 });
+    try {
+      await permanentlyDeleteUserAccount(db, account as ManagedAccount);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "delete failed" }, { status: 500 });
+    }
     return NextResponse.json({ ok: true, message: "User and paper account permanently removed" });
   }
 
