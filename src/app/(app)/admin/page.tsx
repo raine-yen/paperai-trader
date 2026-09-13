@@ -48,7 +48,7 @@ interface AdminData {
   };
 }
 
-type ActionState = { accountId: string; type: string } | null;
+type ActionState = { accountId: string; type: string; symbol?: string } | null;
 
 export default function AdminPage() {
   const [data, setData] = useState<AdminData | null>(null);
@@ -351,7 +351,7 @@ export default function AdminPage() {
                                 <div key={p.symbol} className="rounded-lg border border-bg-border bg-bg-card p-3">
                                   <div className="flex items-center justify-between gap-3">
                                     <div className="font-mono font-bold">{p.symbol}</div>
-                                    <div className="text-sm font-semibold tabular-nums">{formatUSD(p.market_value)}</div>
+                                    <div className="flex items-center gap-2"><div className="text-sm font-semibold tabular-nums">{formatUSD(p.market_value)}</div><button type="button" title={`Close ${p.symbol} position`} onClick={() => setPendingAction({ accountId: a.id, type: "close_position", symbol: p.symbol })} className="rounded p-1 text-gray-500 transition hover:bg-accent-red/20 hover:text-accent-red"><Trash2 className="h-3.5 w-3.5" /></button></div>
                                   </div>
                                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500">
                                     <div>{p.qty.toFixed(4)} shares</div>
@@ -410,10 +410,12 @@ export default function AdminPage() {
       {/* Confirm action modal */}
       {pendingAction && (
         <ConfirmModal
-          title={pendingAction.type === "reset" ? "Reset Portfolio?" : pendingAction.type === "disable" ? "Disable Account?" : pendingAction.type === "timeout" ? "Timeout Account for 24 Hours?" : pendingAction.type === "delete_user" ? "Permanently Delete User?" : "Enable Account?"}
+          title={pendingAction.type === "reset" ? "Reset Portfolio?" : pendingAction.type === "close_position" ? `Close ${pendingAction.symbol} position?` : pendingAction.type === "disable" ? "Disable Account?" : pendingAction.type === "timeout" ? "Timeout Account for 24 Hours?" : pendingAction.type === "delete_user" ? "Permanently Delete User?" : "Enable Account?"}
           description={
             pendingAction.type === "reset"
               ? "This will delete all positions, cancel open orders, and restore the account to its starting cash. This cannot be undone."
+              : pendingAction.type === "close_position"
+              ? "This removes the holding and credits the account with the current quoted value."
               : pendingAction.type === "disable"
               ? "This account will be hidden from the leaderboard and cannot trade."
               : pendingAction.type === "timeout"
@@ -422,10 +424,10 @@ export default function AdminPage() {
               ? "This permanently removes the auth user, account, stock positions, prediction positions, fills, and orders. This cannot be undone."
               : "This account will be re-enabled and appear on the leaderboard."
           }
-          confirmLabel={pendingAction.type === "reset" ? "Yes, Reset" : pendingAction.type === "disable" ? "Disable" : pendingAction.type === "timeout" ? "Timeout 24h" : pendingAction.type === "delete_user" ? "Delete permanently" : "Enable"}
+          confirmLabel={pendingAction.type === "reset" ? "Yes, Reset" : pendingAction.type === "close_position" ? "Close position" : pendingAction.type === "disable" ? "Disable" : pendingAction.type === "timeout" ? "Timeout 24h" : pendingAction.type === "delete_user" ? "Delete permanently" : "Enable"}
           danger={pendingAction.type !== "enable"}
           loading={actionLoading}
-          onConfirm={() => runAction(pendingAction.accountId, pendingAction.type, pendingAction.type === "timeout" ? { duration_minutes: 1440 } : undefined)}
+          onConfirm={() => runAction(pendingAction.accountId, pendingAction.type, pendingAction.type === "timeout" ? { duration_minutes: 1440 } : pendingAction.type === "close_position" ? { symbol: pendingAction.symbol } : undefined)}
           onCancel={() => setPendingAction(null)}
         />
       )}

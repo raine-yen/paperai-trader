@@ -11,6 +11,8 @@ export interface PredictionMarketRow {
   category: string | null;
   event_slug?: string | null;
   tags?: string[] | null;
+  yes_label?: string | null;
+  no_label?: string | null;
   yes_token_id: string | null;
   no_token_id: string | null;
   yes_price: number | null;
@@ -38,6 +40,7 @@ interface GammaMarket {
   image?: string;
   clobTokenIds?: string;
   outcomePrices?: string | Array<string | number>;
+  outcomes?: string | Array<string | number>;
   tags?: string[] | string;
 }
 
@@ -69,9 +72,10 @@ export function parseGammaMarket(raw: GammaMarket): PredictionMarketRow | null {
   const id = String(raw.conditionId ?? raw.id ?? "").trim();
   const question = String(raw.question ?? "").trim();
   if (!id || !question) return null;
-  // Only binary Yes/No markets are tradable in this paper app.
+  // Binary markets may be phrased Yes/No or name two competing outcomes.
   const tokens = parseJsonArray(raw.clobTokenIds);
   const prices = parseJsonArray(raw.outcomePrices);
+  const outcomeLabels = parseJsonArray(raw.outcomes);
   if (tokens.length !== 2) return null;
   const yesPrice = price01(prices[0]);
   const noPrice = price01(prices[1]);
@@ -83,6 +87,8 @@ export function parseGammaMarket(raw: GammaMarket): PredictionMarketRow | null {
     tags: parseJsonArray(raw.tags),
     yes_token_id: tokens[0] ?? null,
     no_token_id: tokens[1] ?? null,
+    yes_label: outcomeLabels[0] ?? "Yes",
+    no_label: outcomeLabels[1] ?? "No",
     yes_price: yesPrice,
     no_price: noPrice,
     volume_24h: Number.isFinite(Number(raw.volume24hr)) ? Number(raw.volume24hr) : null,
@@ -181,7 +187,7 @@ export async function persistCatalogRows(
   if (error) {
     // If the taxonomy columns haven't been migrated yet (20260912_prediction_taxonomy.sql),
     // retry with the pre-migration shape so discovery keeps working on old schemas.
-    const legacy = rows.map(({ event_slug: _e, tags: _t, ...rest }) => rest);
+    const legacy = rows.map(({ event_slug: _e, tags: _t, yes_label: _yes, no_label: _no, ...rest }) => rest);
     const retry = await db.from("prediction_markets").upsert(legacy, { onConflict: "id" });
     if (retry.error) throw new Error(`catalog upsert failed: ${retry.error ?? error.message ?? "unknown"}`);
   }

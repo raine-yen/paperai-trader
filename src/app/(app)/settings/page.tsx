@@ -14,6 +14,7 @@ type Me = {
   alerts?: Alert[];
   watchlist?: Array<{ symbol: string }>;
   unread_messages?: number;
+  is_admin?: boolean;
 };
 
 export default function SettingsPage() {
@@ -133,6 +134,7 @@ export default function SettingsPage() {
           <ThemeSelector />
           <p className="mt-3 text-xs leading-5 text-gray-500">System follows your device. Midnight uses the highest-contrast trading palette.</p>
         </div>
+        {me?.is_admin ? <Link href="/admin" className="card flex items-center justify-between border-accent-green/40 p-5 transition-colors hover:border-accent-green"><div><h2 className="font-semibold">Admin controls</h2><p className="mt-1 text-sm text-gray-500">Manage virtual portfolios, accounts, timeouts, and moderation.</p></div><ShieldCheck className="h-5 w-5 text-accent-green" /></Link> : null}
         <div className="card p-5">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-accent-green" />

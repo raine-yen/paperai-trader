@@ -181,6 +181,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, message: "All stock and prediction assets reset to starting cash" });
   }
 
+  if (action === "close_position") {
+    const symbol = typeof body.symbol === "string" ? body.symbol.trim().toUpperCase() : "";
+    if (!/^[A-Z0-9./-]{1,16}$/.test(symbol)) {
+      return NextResponse.json({ error: "valid symbol required" }, { status: 400 });
+    }
+    const { data: position } = await db
+      .from("positions")
+      .select("symbol, qty, avg_entry_price")
+      .eq("account_id", account_id)
+      .eq("symbol", symbol)
+      .maybeSingle();
+    if (!position) return NextResponse.json({ error: "position not found" }, { status: 404 });
+
+    const price = (await fetchYahooPrices([symbol])).get(symbol)?.price ?? Number(position.avg_entry_price);
+    const proceeds = Number(position.qty) * Number(price);
+    const nextCash = Number(account.cash) + proceeds;
+    const { error: cashError } = await db.from("accounts").update({ cash: nextCash }).eq("id", account_id);
+    if (cashError) return NextResponse.json({ error: cashError.message }, { status: 500 });
+    const { error: positionError } = await db.from("positions").delete().eq("account_id", account_id).eq("symbol", symbol);
+    if (positionError) {
+      await db.from("accounts").update({ cash: Number(account.cash) }).eq("id", account_id);
+      return NextResponse.json({ error: positionError.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, message: `${symbol} closed and ${proceeds.toFixed(2)} credited to cash` });
+  }
+
   if (action === "disable") {
     const { error } = await db.from("accounts").update({ status: "disabled", suspended_until: null }).eq("id", account_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

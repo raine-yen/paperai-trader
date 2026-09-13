@@ -7,6 +7,7 @@ import {
   persistCatalogRows,
   type PredictionMarketRow,
 } from "@/lib/prediction-sync";
+import { predictionOutcomeLabels } from "@/lib/prediction-presentation";
 
 export interface PredictionMarket {
   id: string; // condition id (catalog PK; matches /api/predictions/* routes)
@@ -15,6 +16,8 @@ export interface PredictionMarket {
   tags?: string[];
   yesTokenId: string | null;
   noTokenId: string | null;
+  yesLabel: string;
+  noLabel: string;
   outcomes: string[];
   yesPrice: number | null; // live CLOB midpoint (0..1), last-known on failure
   noPrice: number | null;
@@ -48,6 +51,8 @@ function toMarket(row: {
   tags?: string[] | null;
   yes_token_id: string | null;
   no_token_id: string | null;
+  yes_label?: string | null;
+  no_label?: string | null;
   yes_price: number | null;
   no_price: number | null;
   volume_24h: number | null;
@@ -56,6 +61,7 @@ function toMarket(row: {
   image: string | null;
   url: string | null;
 }): PredictionMarket {
+  const [yesLabel, noLabel] = predictionOutcomeLabels(row.question, row.yes_label, row.no_label);
   return {
     id: row.id,
     question: row.question,
@@ -63,7 +69,9 @@ function toMarket(row: {
     tags: Array.isArray(row.tags) ? row.tags : [],
     yesTokenId: row.yes_token_id,
     noTokenId: row.no_token_id,
-    outcomes: ["Yes", "No"],
+    yesLabel,
+    noLabel,
+    outcomes: [yesLabel, noLabel],
     yesPrice: row.yes_price,
     noPrice: row.no_price ?? (row.yes_price == null ? null : Math.round((1 - row.yes_price) * 10000) / 10000),
     volume24hr: row.volume_24h,

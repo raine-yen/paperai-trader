@@ -67,3 +67,16 @@ export function predictionSportCategory(question: string, tags?: string[] | null
   }
   return SPORT_RULES.find((rule) => rule.pattern.test(question))?.sport ?? null;
 }
+
+/** Named outcomes come from Gamma. Older stored head-to-head rows can still
+ * be made unambiguous by reading their conventional “A vs B” question text. */
+export function predictionOutcomeLabels(question: string, yesLabel?: string | null, noLabel?: string | null): [string, string] {
+  if (yesLabel && noLabel) return [yesLabel, noLabel];
+  const pair = question.split(/\s+(?:vs\.?|versus)\s+/i);
+  if (pair.length === 2) {
+    const left = pair[0].split(/:\s*/).at(-1)?.trim() ?? "";
+    const right = pair[1].replace(/[?\s]+$/, "").trim();
+    if (left && right) return [left, right];
+  }
+  return [yesLabel || "Yes", noLabel || "No"];
+}

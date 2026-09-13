@@ -52,6 +52,18 @@ test("parseGammaMarket maps a binary market and rejects non-binary", () => {
   assert.equal(noQuestion, null);
 });
 
+test("parseGammaMarket keeps named binary outcomes for head-to-head markets", () => {
+  const row = parseGammaMarket({
+    conditionId: "sabalenka-rybakina",
+    question: "US Open WTA: Aryna Sabalenka vs Elena Rybakina",
+    clobTokenIds: '["token-a", "token-b"]',
+    outcomes: '["Aryna Sabalenka", "Elena Rybakina"]',
+    outcomePrices: '["0.62", "0.38"]',
+  });
+  assert.equal(row?.yes_label, "Aryna Sabalenka");
+  assert.equal(row?.no_label, "Elena Rybakina");
+});
+
 test("parseGammaMarket retains valid upstream outcome-price fallbacks", () => {
   const row = parseGammaMarket(gammaRow({ outcomePrices: '["0.62", "0.38"]' }));
   assert.equal(row?.yes_price, 0.62);

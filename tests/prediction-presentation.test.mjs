@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatPredictionHistoryLabel, predictionCategory, predictionSportCategory } from "@/lib/prediction-presentation";
+import { formatPredictionHistoryLabel, predictionCategory, predictionOutcomeLabels, predictionSportCategory } from "@/lib/prediction-presentation";
 
 test("prediction presentation categories keep the approved discovery taxonomy when the source category is generic", () => {
   assert.equal(predictionCategory("Will the Fed decrease interest rates?", "General"), "Economics");
@@ -13,6 +13,7 @@ test("prediction presentation categories keep the approved discovery taxonomy wh
   assert.equal(predictionSportCategory("Will the Lakers win their NBA game?"), "Basketball");
   assert.equal(predictionSportCategory("Will the Seahawks win the Super Bowl?"), "Football");
   assert.equal(predictionSportCategory("Will Team A win the Valorant Champions final?"), null);
+  assert.deepEqual(predictionOutcomeLabels("US Open WTA: Aryna Sabalenka vs Elena Rybakina", null, null), ["Aryna Sabalenka", "Elena Rybakina"]);
 });
 
 test("prediction probability history labels never expose raw epoch timestamps", () => {
