@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fetchYahooPrices } from "@/lib/prices";
 import { getSessionUser } from "@/lib/session-user";
+import { isMissingTableError } from "@/lib/app-data";
+import { isAdminEmail } from "@/lib/admin";
+import { calculateInvestedPerformance } from "@/lib/performance";
 
 // Authenticated dashboard endpoint — returns the current user's account, positions, recent orders.
 export async function GET(req: NextRequest) {
@@ -20,7 +23,17 @@ export async function GET(req: NextRequest) {
 
   if (!account) return NextResponse.json({ account: null });
 
-  const [{ data: positions }, { data: orders }, { data: fills }, { data: snapshots }] = await Promise.all([
+  const [
+    { data: positions },
+    { data: orders },
+    { data: fills },
+    { data: snapshots },
+    watchlistResult,
+    alertsResult,
+    profileResult,
+    transfersResult,
+    messagesResult,
+  ] = await Promise.all([
     db.from("positions").select("*").eq("account_id", account.id),
     db
       .from("orders")
@@ -40,6 +53,11 @@ export async function GET(req: NextRequest) {
       .eq("account_id", account.id)
       .order("created_at", { ascending: true })
       .limit(500),
+    db.from("watchlists").select("id, symbol, note, created_at").eq("account_id", account.id).order("created_at", { ascending: false }).limit(12),
+    db.from("price_alerts").select("id, symbol, direction, target_price, move_pct, status, created_at").eq("account_id", account.id).neq("status", "deleted").order("created_at", { ascending: false }).limit(12),
+    db.from("trader_profiles").select("*").eq("account_id", account.id).maybeSingle(),
+    db.from("paper_transfers").select("*").or(`sender_account_id.eq.${account.id},recipient_account_id.eq.${account.id}`).order("created_at", { ascending: false }).limit(12),
+    db.from("direct_messages").select("id").eq("recipient_account_id", account.id).is("read_at", null).eq("hidden_by_admin", false),
   ]);
 
   const symbols = (positions ?? []).map((p: { symbol: string }) => p.symbol);
@@ -62,14 +80,56 @@ export async function GET(req: NextRequest) {
 
   const positionsValue = positionsWithMarket.reduce((s, p) => s + p.market_value, 0);
   const equity = Number(account.cash) + positionsValue;
+  const performance = calculateInvestedPerformance(positionsWithMarket);
+  const leaderboard = await db
+    .from("accounts")
+    .select("id, cash, starting_cash, status")
+    .eq("competition_id", account.competition_id)
+    .eq("status", "active");
+  const accountIds = ((leaderboard.data ?? []) as Array<{ id: string }>).map((a) => a.id);
+  const rankPositions = accountIds.length
+    ? await db.from("positions").select("account_id, symbol, qty, avg_entry_price").in("account_id", accountIds)
+    : { data: [] };
+  const rankSymbols = Array.from(new Set(((rankPositions.data ?? []) as Array<{ symbol: string }>).map((p) => p.symbol)));
+  const rankPrices = rankSymbols.length ? await fetchYahooPrices(rankSymbols) : new Map<string, { price: number }>();
+  const positionValueByAccount = new Map<string, number>();
+  const positionCostByAccount = new Map<string, number>();
+  for (const p of (rankPositions.data ?? []) as Array<{ account_id: string; symbol: string; qty: number; avg_entry_price: number }>) {
+    const price = rankPrices.get(p.symbol)?.price ?? Number(p.avg_entry_price);
+    positionValueByAccount.set(p.account_id, (positionValueByAccount.get(p.account_id) ?? 0) + Number(p.qty) * price);
+    positionCostByAccount.set(p.account_id, (positionCostByAccount.get(p.account_id) ?? 0) + Number(p.qty) * Number(p.avg_entry_price));
+  }
+  const ranked = ((leaderboard.data ?? []) as Array<{ id: string; cash: number; starting_cash: number }>).map((row) => {
+    const liveEquity = Number(row.cash) + (positionValueByAccount.get(row.id) ?? 0);
+    const costBasis = positionCostByAccount.get(row.id) ?? 0;
+    const gainAmount = (positionValueByAccount.get(row.id) ?? 0) - costBasis;
+    return {
+      id: row.id,
+      equity: liveEquity,
+      return_pct: costBasis > 0 ? (gainAmount / costBasis) * 100 : 0,
+    };
+  }).sort((a, b) => b.return_pct - a.return_pct);
+  const rankIndex = ranked.findIndex((row) => row.id === account.id);
 
   return NextResponse.json({
     user: { id: user.id, email: user.email },
+    is_admin: isAdminEmail(user.email),
     account: { ...account, equity, positions_value: positionsValue },
+    performance,
     positions: positionsWithMarket,
     orders: orders ?? [],
     fills: fills ?? [],
     snapshots: snapshots ?? [],
+    watchlist: watchlistResult.error && isMissingTableError(watchlistResult.error) ? [] : watchlistResult.data ?? [],
+    alerts: alertsResult.error && isMissingTableError(alertsResult.error) ? [] : alertsResult.data ?? [],
+    profile: profileResult.error && isMissingTableError(profileResult.error) ? null : profileResult.data ?? null,
+    transfers: transfersResult.error && isMissingTableError(transfersResult.error) ? [] : transfersResult.data ?? [],
+    unread_messages: messagesResult.error && isMissingTableError(messagesResult.error) ? 0 : messagesResult.data?.length ?? 0,
+    competition: {
+      rank: rankIndex >= 0 ? rankIndex + 1 : null,
+      participants: ranked.length,
+      return_pct: ranked[rankIndex]?.return_pct ?? performance.growth_pct,
+    },
   });
 }
 

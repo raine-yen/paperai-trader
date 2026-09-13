@@ -31,10 +31,16 @@ private struct SplashView: View {
 }
 
 struct MainTabView: View {
+    @AppStorage("paperTraderAppearance") private var appearance = "dark"
+
+    private var colorScheme: ColorScheme? {
+        appearance == "light" ? .light : .dark
+    }
+
     var body: some View {
         TabView {
             NavigationStack {
-                DashboardView()
+                DashboardView(appearance: $appearance)
             }
             .tabItem { Label("Dashboard", systemImage: "chart.line.uptrend.xyaxis") }
 
@@ -59,6 +65,9 @@ struct MainTabView: View {
             .tabItem { Label("Keys", systemImage: "key") }
         }
         .tint(Color.ptGreen)
+        .preferredColorScheme(colorScheme)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarBackground(Color.ptBackground, for: .tabBar)
     }
 }
 

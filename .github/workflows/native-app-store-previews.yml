@@ -1,0 +1,304 @@
+name: Native App Store Preview Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/product-perfection
+    paths:
+      - "mobile/**"
+      - ".github/workflows/native-app-store-previews.yml"
+
+concurrency:
+  group: native-app-store-previews-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Capture four exact Apple device sizes
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      CI: "1"
+      EXPO_PUBLIC_APP_STORE_PREVIEW: "1"
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
+
+    steps:
+      - name: Check out screenshot source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.4
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Java for Maestro
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Record the capture toolchain
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/diagnostics
+          {
+            sw_vers
+            xcodebuild -version
+            node --version
+            npm --version
+            java -version
+          } > artifacts/diagnostics/toolchain.log 2>&1
+
+      - name: Install locked app dependencies
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -o pipefail
+          npm ci --no-audit --no-fund 2>&1 | tee artifacts/diagnostics/npm-ci.log
+
+      - name: Generate the Expo SDK 54 iOS project
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -o pipefail
+          npx expo prebuild --platform ios --clean --no-install 2>&1 | tee artifacts/diagnostics/expo-prebuild.log
+
+      - name: Disable OTA replacement for this capture build
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          expo_plist=$(find ios -path '*/Supporting/Expo.plist' -print -quit)
+          test -n "$expo_plist"
+
+          if /usr/libexec/PlistBuddy -c 'Print :EXUpdatesEnabled' "$expo_plist" >/dev/null 2>&1; then
+            /usr/libexec/PlistBuddy -c 'Set :EXUpdatesEnabled false' "$expo_plist"
+          else
+            /usr/libexec/PlistBuddy -c 'Add :EXUpdatesEnabled bool false' "$expo_plist"
+          fi
+
+          if /usr/libexec/PlistBuddy -c 'Print :EXUpdatesCheckOnLaunch' "$expo_plist" >/dev/null 2>&1; then
+            /usr/libexec/PlistBuddy -c 'Set :EXUpdatesCheckOnLaunch NEVER' "$expo_plist"
+          else
+            /usr/libexec/PlistBuddy -c 'Add :EXUpdatesCheckOnLaunch string NEVER' "$expo_plist"
+          fi
+
+          test "$(/usr/libexec/PlistBuddy -c 'Print :EXUpdatesEnabled' "$expo_plist")" = "false"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :EXUpdatesCheckOnLaunch' "$expo_plist")" = "NEVER"
+
+      - name: Install iOS pods
+        working-directory: mobile/ios
+        shell: bash
+        run: |
+          set -o pipefail
+          pod install --repo-update 2>&1 | tee ../artifacts/diagnostics/pod-install.log
+
+      - name: Create the exact Apple simulators
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/diagnostics
+          simulator_manifest="artifacts/diagnostics/simulators.tsv"
+          printf 'slug\tdevice_type\twidth\theight\tudid\n' > "$simulator_manifest"
+
+          runtime=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable == true and (.name | startswith("iOS")))] | last | .identifier')
+          test -n "$runtime"
+          echo "Runtime: $runtime" | tee artifacts/diagnostics/runtime.log
+
+          while IFS='|' read -r slug device_type width height; do
+            device_type_id=$(xcrun simctl list devicetypes -j | jq -r --arg name "$device_type" '.devicetypes[] | select(.name == $name) | .identifier' | head -1)
+            if [[ -z "$device_type_id" ]]; then
+              echo "Missing exact simulator device type: $device_type" | tee -a artifacts/diagnostics/runtime.log
+              exit 1
+            fi
+
+            udid=$(xcrun simctl create "PaperAI $slug $GITHUB_RUN_ID" "$device_type_id" "$runtime")
+            printf '%s\t%s\t%s\t%s\t%s\n' "$slug" "$device_type" "$width" "$height" "$udid" >> "$simulator_manifest"
+          done <<'DEVICES'
+          iphone-6.9|iPhone 16 Pro Max|1320|2868
+          iphone-6.5|iPhone 11 Pro Max|1242|2688
+          iphone-6.1|iPhone 14|1170|2532
+          ipad-13|iPad Pro 13-inch (M4)|2064|2752
+          DEVICES
+
+          build_udid=$(awk -F '\t' 'NR == 2 { print $5 }' "$simulator_manifest")
+          test -n "$build_udid"
+          echo "BUILD_SIMULATOR_UDID=$build_udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$build_udid"
+          xcrun simctl bootstatus "$build_udid" -b
+
+      - name: Compile the embedded Release app once
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$workspace"
+          scheme=$(xcodebuild -workspace "$workspace" -list -json | jq -r '.workspace.schemes[] | select(. == "PaperTrader")' | head -1)
+          test "$scheme" = "PaperTrader"
+
+          xcodebuild \
+            -workspace "$workspace" \
+            -scheme "$scheme" \
+            -configuration Release \
+            -destination "platform=iOS Simulator,id=$BUILD_SIMULATOR_UDID" \
+            -derivedDataPath ios/build \
+            ONLY_ACTIVE_ARCH=YES \
+            ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee artifacts/diagnostics/xcodebuild.log
+
+          app_path=$(find ios/build/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$app_path"
+          echo "CAPTURE_APP_PATH=$PWD/$app_path" >> "$GITHUB_ENV"
+
+      - name: Install pinned Maestro CLI
+        shell: bash
+        env:
+          MAESTRO_VERSION: "2.4.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          "$HOME/.maestro/bin/maestro" --version
+
+      - name: Capture and validate all twelve screenshots
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/previews artifacts/diagnostics
+          validation_log="artifacts/diagnostics/validation.log"
+          : > "$validation_log"
+          capture_failed=0
+
+          validate_image() {
+            local image="$1"
+            local expected_width="$2"
+            local expected_height="$3"
+            local actual_width
+            local actual_height
+            local has_alpha
+            local image_format
+
+            actual_width=$(sips -g pixelWidth "$image" | awk '/pixelWidth/ { print $2 }')
+            actual_height=$(sips -g pixelHeight "$image" | awk '/pixelHeight/ { print $2 }')
+            has_alpha=$(sips -g hasAlpha "$image" | awk '/hasAlpha/ { print tolower($2) }')
+            image_format=$(sips -g format "$image" | awk '/format/ { print tolower($2) }')
+            printf '%s\t%sx%s\talpha=%s\tformat=%s\n' "$image" "$actual_width" "$actual_height" "$has_alpha" "$image_format" | tee -a "$validation_log"
+
+            [[ "$actual_width" == "$expected_width" ]] &&
+              [[ "$actual_height" == "$expected_height" ]] &&
+              [[ "$has_alpha" == "no" ]] &&
+              [[ "$image_format" == "png" ]]
+          }
+
+          while IFS=$'\t' read -r slug device_type expected_width expected_height udid; do
+            [[ "$slug" == "slug" ]] && continue
+            echo "Capturing $device_type at ${expected_width}x${expected_height}"
+            device_diagnostics="artifacts/diagnostics/$slug"
+            device_previews="artifacts/previews/$slug"
+            mkdir -p "$device_diagnostics/maestro" "$device_previews"
+
+            xcrun simctl boot "$udid" >/dev/null 2>&1 || true
+            if ! xcrun simctl bootstatus "$udid" -b; then
+              echo "Simulator did not boot: $device_type" | tee -a "$validation_log"
+              capture_failed=1
+              continue
+            fi
+
+            if ! xcrun simctl ui "$udid" appearance light; then
+              echo "Could not normalize light appearance: $device_type" | tee -a "$validation_log"
+              capture_failed=1
+              xcrun simctl shutdown "$udid" || true
+              continue
+            fi
+            if ! xcrun simctl status_bar "$udid" override \
+              --time '9:41' \
+              --batteryState charged \
+              --batteryLevel 100 \
+              --wifiBars 3; then
+              echo "Could not normalize status bar: $device_type" | tee -a "$validation_log"
+              capture_failed=1
+              xcrun simctl shutdown "$udid" || true
+              continue
+            fi
+
+            if ! xcrun simctl install "$udid" "$CAPTURE_APP_PATH"; then
+              echo "App installation failed: $device_type" | tee -a "$validation_log"
+              xcrun simctl io "$udid" screenshot "$device_diagnostics/install-failure.png" || true
+              capture_failed=1
+              xcrun simctl shutdown "$udid" || true
+              continue
+            fi
+
+            if "$HOME/.maestro/bin/maestro" --device "$udid" test \
+              --test-output-dir="$device_diagnostics/maestro" \
+              .maestro/app-store-previews.yml 2>&1 | tee "$device_diagnostics/maestro-console.log"; then
+              device_failed=0
+              for name in 01-portfolio 02-research-and-review 03-club-rankings; do
+                source_image=$(find "$device_diagnostics/maestro" -type f -name "$name.png" -print -quit)
+                if [[ -z "$source_image" ]]; then
+                  echo "Maestro did not emit $name.png for $device_type" | tee -a "$validation_log"
+                  device_failed=1
+                  continue
+                fi
+
+                target_image="$device_previews/$name.png"
+                cp "$source_image" "$target_image"
+                if ! validate_image "$target_image" "$expected_width" "$expected_height"; then
+                  echo "Validation failed: $target_image" | tee -a "$validation_log"
+                  device_failed=1
+                fi
+              done
+
+              if [[ "$device_failed" -ne 0 ]]; then
+                capture_failed=1
+                xcrun simctl io "$udid" screenshot "$device_diagnostics/validation-failure.png" || true
+              fi
+            else
+              echo "Maestro flow failed: $device_type" | tee -a "$validation_log"
+              xcrun simctl io "$udid" screenshot "$device_diagnostics/flow-failure.png" || true
+              capture_failed=1
+            fi
+
+            xcrun simctl shutdown "$udid" || true
+          done < artifacts/diagnostics/simulators.tsv
+
+          screenshot_count=$(find artifacts/previews -type f -name '*.png' | wc -l | xargs)
+          echo "Validated screenshot count: $screenshot_count" | tee -a "$validation_log"
+          if [[ "$screenshot_count" -ne 12 ]]; then
+            capture_failed=1
+          fi
+
+          cp artifacts/diagnostics/simulators.tsv artifacts/previews/device-manifest.tsv
+          cp "$validation_log" artifacts/previews/validation.tsv
+          if [[ "$capture_failed" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload validated App Store screenshots
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paperai-trader-app-store-previews-${{ github.sha }}
+          path: mobile/artifacts/previews
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload capture diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paperai-trader-preview-diagnostics-${{ github.run_id }}
+          path: mobile/artifacts/diagnostics
+          if-no-files-found: warn
+          retention-days: 7

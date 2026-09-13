@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CheckCircle2, Clock3, Gift, Landmark, Target, Trophy, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CheckCircle2, Clock3, Landmark, Target, Trophy, Wallet } from "lucide-react";
 import { EquityChart } from "@/components/equity-chart";
 import { getCompanyName } from "@/lib/market-data";
 import { cn, formatPct, formatUSD, timeAgo } from "@/lib/utils";
@@ -37,6 +37,11 @@ interface MeData {
     scheduled_at: string | null;
   }>;
   snapshots: Array<{ equity: number; created_at: string }>;
+  watchlist?: Array<{ symbol: string; price?: number | null; changePct?: number | null }>;
+  alerts?: Array<{ id: string; symbol: string; direction: string; target_price?: number | null; move_pct?: number | null; status: string }>;
+  unread_messages?: number;
+  competition?: { rank: number | null; participants: number; return_pct: number };
+  performance?: { cost_basis: number; market_value: number; gain_amount: number; growth_pct: number };
 }
 
 type Quest = {
@@ -113,13 +118,14 @@ export default function Dashboard() {
   }
 
   const { account, positions, orders, snapshots } = data;
-  const totalReturn = account.equity - account.starting_cash;
-  const totalReturnPct = account.starting_cash > 0 ? (totalReturn / account.starting_cash) * 100 : 0;
-  const isUp = totalReturn >= 0;
+  const costBasis = data.performance?.cost_basis ?? positions.reduce((sum, position) => sum + Number(position.qty) * Number(position.avg_entry_price), 0);
+  const investedGrowth = data.performance?.gain_amount ?? positions.reduce((sum, position) => sum + Number(position.unrealized_pl), 0);
+  const investedGrowthPct = data.performance?.growth_pct ?? (costBasis > 0 ? (investedGrowth / costBasis) * 100 : 0);
+  const isUp = investedGrowth >= 0;
   const allocationBase = Math.max(account.equity, 1);
   const rewardCycle = getRewardCycle();
   const quests = getQuests({
-    totalReturnPct,
+    totalReturnPct: investedGrowthPct,
     holdings: positions.length,
     orders: orders.length,
     scheduledOrders: orders.filter((o) => !!o.scheduled_at).length,
@@ -138,7 +144,7 @@ export default function Dashboard() {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      setRewardMessage(j.error ?? "Could not claim reward");
+      setRewardMessage(j.error ?? "Could not add practice credits");
       setClaimingReward(null);
       return;
     }
@@ -153,7 +159,7 @@ export default function Dashboard() {
         equity: Number(prev.account.equity) + Number(j.amount ?? 200),
       },
     } : prev);
-    setRewardMessage(`Claimed ${formatUSD(Number(j.amount ?? 200))}.`);
+    setRewardMessage(`Added ${formatUSD(Number(j.amount ?? 200))} in practice credits.`);
     setClaimingReward(null);
   }
 
@@ -170,7 +176,7 @@ export default function Dashboard() {
               <div className="mt-3 text-5xl font-black tracking-tight tabular-nums md:text-6xl">{formatUSD(account.equity)}</div>
               <div className={cn("mt-2 flex items-center gap-1 text-sm font-semibold", isUp ? "text-accent-green" : "text-accent-red")}>
                 {isUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                {formatUSD(totalReturn)} ({formatPct(totalReturnPct)}) all time
+                {formatUSD(investedGrowth)} ({formatPct(investedGrowthPct)}) on invested capital
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:min-w-[360px]">
@@ -181,7 +187,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="p-5">
-            <EquityChart snapshots={snapshots} starting={account.starting_cash} />
+            <EquityChart snapshots={snapshots} starting={Number(snapshots[0]?.equity ?? account.equity)} />
           </div>
         </div>
 
@@ -191,7 +197,7 @@ export default function Dashboard() {
               <h2 className="font-semibold">Account Mix</h2>
               <p className="text-xs text-gray-500">Cash and open market value</p>
             </div>
-            <Link href="/market" className="text-xs font-semibold text-accent-green hover:text-white">Trade</Link>
+            <Link href="/market" className="text-xs font-semibold text-accent-green hover:text-gray-50">Trade</Link>
           </div>
           <div className="space-y-4">
             <Allocation label="Cash" value={account.cash} total={allocationBase} tone="bg-accent-blue" />
@@ -217,6 +223,31 @@ export default function Dashboard() {
         </aside>
       </section>
 
+      <section className="grid gap-5 lg:grid-cols-3">
+        <div className="card p-5">
+          <div className="stat-label">Competition pulse</div>
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <div>
+              <div className="text-3xl font-black">{competitionLabel(data.competition)}</div>
+              <p className="mt-1 text-sm text-gray-500">Current rank in the active club season.</p>
+            </div>
+            <Trophy className="h-8 w-8 text-accent-green" />
+          </div>
+        </div>
+        <div className="card p-5">
+          <div className="stat-label">Alert hub</div>
+          <div className="mt-3 text-3xl font-black">{data.alerts?.filter((a) => a.status === "active").length ?? 0}</div>
+          <p className="mt-1 text-sm text-gray-500">Active price alerts watching your market ideas.</p>
+          <Link href="/market" className="mt-4 inline-flex text-sm font-semibold text-accent-green">Create alert</Link>
+        </div>
+        <div className="card p-5">
+          <div className="stat-label">Social desk</div>
+          <div className="mt-3 text-3xl font-black">{data.unread_messages ?? 0}</div>
+          <p className="mt-1 text-sm text-gray-500">Unread direct messages from competition traders.</p>
+          <Link href="/messages" className="mt-4 inline-flex text-sm font-semibold text-accent-green">Open messages</Link>
+        </div>
+      </section>
+
       <section className="card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-bg-border p-5 md:flex-row md:items-center md:justify-between">
           <div>
@@ -224,9 +255,9 @@ export default function Dashboard() {
               <Trophy className="h-3.5 w-3.5 text-accent-green" />
               Quests
             </div>
-            <h2 className="mt-2 font-semibold">Goals and claimable rewards</h2>
+            <h2 className="mt-2 font-semibold">Learning goals and practice credits</h2>
           </div>
-          <div className="text-sm text-gray-400">Week {rewardCycle.week} cycle - {quests.filter((q) => claimedRewards.includes(`${rewardCycle.id}:${q.id}`)).length}/{quests.length} claimed</div>
+          <div className="text-sm text-gray-400">Week {rewardCycle.week} cycle - {quests.filter((q) => claimedRewards.includes(`${rewardCycle.id}:${q.id}`)).length}/{quests.length} complete</div>
         </div>
         {rewardMessage && <div className="border-b border-bg-border bg-bg-elevated px-5 py-3 text-sm font-semibold text-gray-300">{rewardMessage}</div>}
         <div className="grid gap-4 p-5 lg:grid-cols-3">
@@ -258,11 +289,10 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <div className="text-xs text-gray-500">
-                    <Gift className="mr-1 inline h-3.5 w-3.5" />
                     {quest.reward}
                   </div>
                   <button type="button" onClick={() => claimReward(quest)} disabled={!complete || claimed || claimingReward === claimKey} className="btn-primary px-3 py-1.5 text-xs">
-                    {claimingReward === claimKey ? "Claiming" : claimed ? "Claimed" : "Claim"}
+                    {claimingReward === claimKey ? "Adding" : claimed ? "Added" : "Add"}
                   </button>
                 </div>
               </div>
@@ -361,6 +391,11 @@ export default function Dashboard() {
   );
 }
 
+function competitionLabel(competition?: { rank: number | null; participants: number }) {
+  if (!competition?.rank) return "Unranked";
+  return `#${competition.rank} of ${competition.participants}`;
+}
+
 function getRewardCycle(now = new Date()) {
   const start = Date.UTC(2026, 0, 5);
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
@@ -377,7 +412,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Place your first trade.",
       progress: stats.orders,
       goal: 1,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
     {
       id: "three-holdings",
@@ -385,7 +420,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Hold three different symbols at once.",
       progress: stats.holdings,
       goal: 3,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
     {
       id: "green-portfolio",
@@ -394,7 +429,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       progress: Math.max(0, stats.totalReturnPct),
       goal: 2,
       decimals: 1,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
   ];
   const weekTwo: Quest[] = [
@@ -404,7 +439,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Submit five total orders.",
       progress: stats.orders,
       goal: 5,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
     {
       id: "cash-buffer",
@@ -412,7 +447,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Keep at least $10,000 in cash.",
       progress: Math.min(stats.cash, 10000),
       goal: 10000,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
     {
       id: "timekeeper",
@@ -420,7 +455,7 @@ function getQuests(stats: { totalReturnPct: number; holdings: number; orders: nu
       description: "Create one scheduled price order.",
       progress: stats.scheduledOrders,
       goal: 1,
-      reward: "$200 cash bonus",
+      reward: "$200 practice credit",
     },
   ];
   return week === 1 ? weekOne : weekTwo;

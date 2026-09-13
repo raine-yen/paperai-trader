@@ -10,14 +10,14 @@ const sections = [
   {
     title: "Information We Collect",
     body: [
-      "Paper Trader collects the information needed to create and operate a paper trading account. This includes your email address, display name, authentication session data, simulated account balances, positions, orders, leaderboard performance, and API key metadata.",
+      "Paper Trader collects the information needed to create and operate a paper trading account. This includes your email address, display name, authentication session data, simulated account balances, positions, orders, leaderboard performance, watchlists, alerts, direct messages, practice-credit activity, reports, blocks, and API key metadata.",
       "If you contact us for support, we may also receive the information you include in your message.",
     ],
   },
   {
     title: "How We Use Information",
     body: [
-      "We use this information to authenticate users, maintain paper trading accounts, simulate trades, display leaderboards, provide API access for bots, and support the reliability and security of the service.",
+      "We use this information to authenticate users, maintain paper trading accounts, simulate trades, display leaderboards, provide API access for bots, support social competition features, review safety reports, and support the reliability and security of the service.",
       "Paper Trader does not support real-money trading, deposits, withdrawals, or live brokerage activity.",
     ],
   },
@@ -37,7 +37,7 @@ const sections = [
   {
     title: "Your Choices",
     body: [
-      "You can request account access, correction, or deletion by contacting support. You can also revoke API keys directly inside the app.",
+      "You can delete your account from Settings inside the app. You can also request account access or correction by contacting support, and you can revoke API keys directly inside the app.",
     ],
   },
   {
@@ -50,7 +50,7 @@ const sections = [
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-bg text-white">
+    <main className="min-h-screen bg-bg text-gray-50">
       <div className="mx-auto max-w-4xl px-5 py-16">
         <div className="mb-10 flex items-center justify-between gap-4">
           <div>

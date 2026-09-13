@@ -1,0 +1,1163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper Trader Mobile V2 Prototype</title>
+    <style>
+      :root {
+        --bg: #020302;
+        --ink: #f8faf2;
+        --subtle: #8a9488;
+        --muted: #596255;
+        --line: rgba(52, 211, 153, 0.11);
+        --green: #34d399;
+        --green-2: #10b981;
+        --green-dim: rgba(52, 211, 153, 0.14);
+        --red: #ff5360;
+        --red-dim: rgba(255, 83, 96, 0.15);
+        --surface: rgba(255, 255, 255, 0.035);
+        --surface-2: rgba(255, 255, 255, 0.07);
+        --shadow: 0 28px 80px rgba(0, 0, 0, 0.52);
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        overflow-x: hidden;
+        background: #000;
+        color: var(--ink);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .stage {
+        width: min(100vw, 1240px);
+        min-height: 100vh;
+        padding: 28px;
+        display: grid;
+        grid-template-columns: 430px minmax(280px, 1fr);
+        gap: 48px;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .phone {
+        width: 390px;
+        height: 844px;
+        position: relative;
+        overflow: hidden;
+        border-radius: 38px;
+        background: var(--bg);
+        box-shadow: 0 34px 90px rgba(0, 0, 0, 0.72), inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+        isolation: isolate;
+      }
+
+      .phone::before {
+        content: "";
+        position: absolute;
+        inset: -150px -130px auto 62px;
+        height: 350px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(185, 255, 74, 0.34), rgba(49, 233, 137, 0.09) 42%, transparent 68%);
+        filter: blur(26px);
+        opacity: 0.9;
+        pointer-events: none;
+        display: none;
+      }
+
+      .phone::after {
+        content: "";
+        position: absolute;
+        inset: auto -110px -90px -80px;
+        height: 250px;
+        background: radial-gradient(circle, rgba(185, 255, 74, 0.15), transparent 66%);
+        filter: blur(32px);
+        pointer-events: none;
+        display: none;
+      }
+
+      .screen {
+        position: absolute;
+        inset: 0;
+        display: none;
+        z-index: 1;
+        padding: 52px 26px 156px;
+        overflow-y: auto;
+        scrollbar-width: none;
+        scroll-behavior: smooth;
+      }
+
+      .screen::-webkit-scrollbar {
+        display: none;
+      }
+
+      .screen.active {
+        display: block;
+      }
+
+      .topbar {
+        min-height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 275px;
+        font-size: 36px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      h2 {
+        font-size: 21px;
+        line-height: 1.15;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+
+      .hero-number {
+        margin-top: 30px;
+        font-size: 60px;
+        line-height: 0.96;
+        font-weight: 400;
+        letter-spacing: -0.055em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .stock-number {
+        margin-top: 20px;
+        font-size: 56px;
+        line-height: 0.96;
+        font-weight: 400;
+        letter-spacing: -0.05em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .delta-row,
+      .row,
+      .filters,
+      .stats,
+      .actions,
+      .tabbar,
+      .trade-segment {
+        display: flex;
+        align-items: center;
+      }
+
+      .delta-row {
+        margin-top: 16px;
+        gap: 10px;
+        color: var(--ink);
+        font-size: 18px;
+      }
+
+      .badge {
+        min-width: 72px;
+        padding: 7px 11px;
+        border-radius: 13px;
+        background: rgba(40, 217, 127, 0.16);
+        color: var(--green-2);
+        text-align: center;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .badge.red {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+
+      .icon-btn {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-radius: 50%;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.045);
+        cursor: pointer;
+      }
+
+      .icon-btn svg,
+      .tab svg {
+        width: 23px;
+        height: 23px;
+        stroke-width: 2.2;
+      }
+
+      .chart-wrap {
+        position: relative;
+        height: 286px;
+        margin: 26px -10px 0;
+      }
+
+      .stock-chart {
+        height: 318px;
+        margin-top: 18px;
+      }
+
+      .chart {
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        touch-action: none;
+        cursor: crosshair;
+      }
+
+      .chart .area {
+        fill: rgba(185, 255, 74, 0.13);
+      }
+
+      .chart .line {
+        fill: none;
+        stroke: var(--green);
+        stroke-width: 3.1;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        filter: none;
+      }
+
+      .baseline {
+        stroke: rgba(255, 255, 255, 0.22);
+        stroke-dasharray: 4 7;
+      }
+
+      .guide {
+        stroke: rgba(185, 255, 74, 0.48);
+      }
+
+      .compare-band {
+        fill: rgba(185, 255, 74, 0.08);
+      }
+
+      .point {
+        fill: #020302;
+        stroke: var(--green);
+        stroke-width: 3;
+      }
+
+      .tooltip {
+        position: absolute;
+        min-width: 132px;
+        padding: 10px 12px;
+        border-radius: 9px;
+        background: rgba(18, 22, 18, 0.92);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+        transform: translate(-50%, -110%);
+        pointer-events: none;
+      }
+
+      .tooltip .date {
+        color: var(--subtle);
+        font-size: 11px;
+      }
+
+      .tooltip .value {
+        margin-top: 2px;
+        color: var(--ink);
+        font-size: 16px;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .compare-pill {
+        position: absolute;
+        right: 18px;
+        bottom: 28px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 31px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--green);
+        color: #0b1105;
+        font-size: 13px;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      .ranges,
+      .filters {
+        margin-top: 6px;
+        gap: 10px;
+      }
+
+      .discover-screen .filters {
+        margin-top: 28px;
+      }
+
+      .discover-screen .section {
+        margin-top: 72px;
+      }
+
+      .range,
+      .filter {
+        height: 34px;
+        padding: 0 16px;
+        border: 1px solid rgba(255, 255, 255, 0.055);
+        border-radius: 12px;
+        background: transparent;
+        color: var(--subtle);
+        cursor: pointer;
+      }
+
+      .range.active,
+      .filter.active {
+        border-color: transparent;
+        background: var(--ink);
+        color: #111;
+        font-weight: 650;
+      }
+
+      .stats {
+        margin-top: 26px;
+        gap: 46px;
+      }
+
+      .stat-label {
+        color: var(--subtle);
+        font-size: 13px;
+      }
+
+      .stat-value {
+        margin-top: 7px;
+        color: var(--ink);
+        font-size: 23px;
+        font-weight: 600;
+        letter-spacing: -0.04em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .section {
+        margin-top: 28px;
+      }
+
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 9px;
+      }
+
+      .section-action {
+        color: var(--green);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .market-list {
+        display: grid;
+        gap: 0;
+      }
+
+      .market-row {
+        display: grid;
+        grid-template-columns: 40px minmax(82px, 1fr) 88px auto;
+        gap: 12px;
+        align-items: center;
+        min-height: 76px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .market-row.compact {
+        grid-template-columns: 38px 100px 92px auto;
+      }
+
+      .logo {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: rgba(185, 255, 74, 0.11);
+        color: var(--green);
+        font-size: 10px;
+        font-weight: 750;
+      }
+
+      .logo.red {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+
+      .symbol {
+        font-size: 16px;
+        font-weight: 650;
+      }
+
+      .company,
+      .subcopy {
+        margin-top: 3px;
+        color: var(--subtle);
+        font-size: 12px;
+      }
+
+      .row-value {
+        text-align: right;
+        font-size: 14px;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .mini {
+        width: 82px;
+        height: 36px;
+      }
+
+      .mini path {
+        fill: none;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .trade-cta {
+        height: 56px;
+        border: 0;
+        border-radius: 25px;
+        background: var(--green);
+        color: #111704;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        cursor: pointer;
+      }
+
+      .actions {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 104px;
+        gap: 14px;
+        min-height: 100px;
+        z-index: 4;
+        padding: 20px 24px 22px;
+        align-items: flex-end;
+        background: #000;
+        box-shadow: 0 -24px 50px rgba(0, 0, 0, 0.9);
+      }
+
+      .actions .trade-cta,
+      .buy-sell .order-button {
+        flex: 1;
+      }
+
+      .buy-sell {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        width: 100%;
+      }
+
+      .order-button {
+        height: 58px;
+        border: 0;
+        border-radius: 22px;
+        color: #101010;
+        background: var(--ink);
+        font-size: 16px;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      .order-button.buy {
+        background: var(--green);
+      }
+
+      .order-button.sell {
+        background: #242424;
+        color: var(--ink);
+      }
+
+      .stock-screen {
+        padding-bottom: 270px;
+      }
+
+      .stock-screen .section {
+        margin-top: 20px;
+      }
+
+      .stock-screen .stats {
+        margin-top: 18px;
+      }
+
+      .ticket {
+        margin-top: 18px;
+        min-height: 0;
+        padding: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+
+      .trade-segment {
+        gap: 10px;
+      }
+
+      .trade-segment button {
+        flex: 1;
+        height: 42px;
+        border: 0;
+        border-radius: 15px;
+        background: var(--surface);
+        color: var(--subtle);
+        cursor: pointer;
+      }
+
+      .trade-segment button.active {
+        background: var(--ink);
+        color: #111;
+        font-weight: 700;
+      }
+
+      .order-controls {
+        display: grid;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .ticket-number {
+        margin: 22px 0 14px;
+        font-size: 46px;
+        letter-spacing: -0.06em;
+      }
+
+      .ticket-row,
+      .settings-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 15px 0;
+        border-top: 1px solid var(--line);
+        color: var(--subtle);
+      }
+
+      .ticket-row strong,
+      .settings-row strong {
+        color: var(--ink);
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .ticket .trade-cta {
+        width: 100%;
+        margin-top: 18px;
+      }
+
+      .coming-soon {
+        min-height: 560px;
+        display: grid;
+        align-content: center;
+        gap: 18px;
+      }
+
+      .coming-soon h2 {
+        font-size: 42px;
+        line-height: 1;
+        letter-spacing: -0.06em;
+      }
+
+      .coming-soon p {
+        color: var(--subtle);
+        line-height: 1.55;
+      }
+
+      .lockup {
+        width: 76px;
+        height: 76px;
+        display: grid;
+        place-items: center;
+        border-radius: 28px;
+        background: #151515;
+        color: var(--green);
+      }
+
+      .lockup svg {
+        width: 30px;
+        height: 30px;
+      }
+
+      .profile-hero {
+        margin-top: 54px;
+      }
+
+      .profile-name {
+        font-size: 39px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: -0.05em;
+      }
+
+      .profile-meta {
+        margin-top: 10px;
+        color: var(--subtle);
+      }
+
+      .settings-list {
+        margin-top: 42px;
+      }
+
+      .settings-row {
+        min-height: 64px;
+        align-items: center;
+      }
+
+      .danger {
+        color: var(--red) !important;
+      }
+
+      .nav-dock {
+        position: absolute;
+        z-index: 5;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 104px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #000;
+        box-shadow: 0 -18px 42px rgba(0, 0, 0, 0.86);
+      }
+
+      .tabbar {
+        position: relative;
+        width: 318px;
+        height: 66px;
+        justify-content: space-between;
+        pointer-events: auto;
+        gap: 6px;
+        padding: 8px;
+        border-radius: 30px;
+        background: #202220;
+        box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
+        transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+      }
+
+      .nav-dock.tucked {
+        pointer-events: none;
+      }
+
+      .nav-dock.tucked .tabbar {
+        pointer-events: auto;
+        width: 66px;
+        min-width: 66px;
+        height: 66px;
+        min-height: 66px;
+        padding: 8px;
+        justify-content: center;
+        gap: 0;
+        border-radius: 999px;
+        transform: translateX(126px);
+        opacity: 1;
+      }
+
+      .nav-dock.tucked .tab:not(.active) {
+        position: absolute;
+        width: 0;
+        height: 0;
+        opacity: 0;
+        padding: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      .nav-dock.tucked .tab.active {
+        width: 50px;
+        min-width: 50px;
+        height: 50px;
+        min-height: 50px;
+        padding: 0;
+        border-radius: 50%;
+        background: var(--green);
+      }
+
+      .tab {
+        position: relative;
+        width: 50px;
+        height: 50px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-radius: 22px;
+        background: transparent;
+        color: #8b928b;
+        cursor: pointer;
+        transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1), background 320ms ease, color 220ms ease, transform 220ms ease;
+      }
+
+      .tab.active {
+        width: 84px;
+        color: #101010;
+        background: var(--green);
+        transform: translateY(-1px);
+      }
+
+      .tab.active::after {
+        content: none;
+      }
+
+      .notes {
+        max-width: 660px;
+      }
+
+      .notes h2 {
+        font-size: 43px;
+        line-height: 0.98;
+        letter-spacing: -0.06em;
+      }
+
+      .notes p {
+        margin-top: 18px;
+        color: var(--subtle);
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .note-grid {
+        margin-top: 34px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .note {
+        min-height: 120px;
+        padding: 18px;
+        border-top: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(185, 255, 74, 0.035), transparent);
+      }
+
+      .note strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .note span {
+        color: var(--subtle);
+        line-height: 1.45;
+      }
+
+      @media (max-width: 880px) {
+        body {
+          place-items: start center;
+        }
+
+        .stage {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          align-items: start;
+          padding: 12px 10px 24px;
+          gap: 0;
+        }
+
+        .notes {
+          display: none;
+        }
+
+        .phone {
+          width: min(100vw - 20px, 390px);
+          height: min(100dvh - 24px, 844px);
+          min-height: 760px;
+          border-radius: 32px;
+        }
+
+        .screen {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="phone" aria-label="Paper Trader mobile prototype">
+        <section class="screen active" data-screen="portfolio">
+          <div class="topbar">
+            <h1>Portfolio</h1>
+            <button class="icon-btn" data-screen-button="profile" aria-label="Open profile"></button>
+          </div>
+          <div class="hero-number">$102,415</div>
+          <div class="delta-row">
+            <span>+$2,415.60</span>
+            <span class="badge">+ 2.41%</span>
+          </div>
+          <div class="chart-wrap" data-chart="portfolio"></div>
+          <div class="ranges">
+            <button class="range">1D</button><button class="range">1W</button><button class="range">1M</button><button class="range active">3M</button><button class="range">YTD</button><button class="range">All</button>
+          </div>
+          <div class="stats">
+            <div><div class="stat-label">Practice balance</div><div class="stat-value">$74,120</div></div>
+            <div><div class="stat-label">Invested</div><div class="stat-value">$28,296</div></div>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>Holdings</h2><span class="section-action">See all</span></div>
+            <div class="market-list" id="holdings"></div>
+          </div>
+        </section>
+
+        <section class="screen discover-screen" data-screen="discover">
+          <div class="topbar">
+            <h1>Top daily<br />gainers</h1>
+            <button class="icon-btn" aria-label="Filter movers"></button>
+          </div>
+          <div class="filters">
+            <button class="filter">Today</button><button class="filter active">Yesterday</button><button class="filter">This week</button>
+          </div>
+          <div class="section">
+            <div class="market-list" id="movers"></div>
+          </div>
+          <button class="row" data-screen-button="stock" style="width:100%;margin-top:28px;border:0;background:transparent;color:var(--subtle);gap:12px;cursor:pointer">
+            <span id="search-icon"></span>
+            <span>Search stock or ETF</span>
+          </button>
+        </section>
+
+        <section class="screen stock-screen" data-screen="stock">
+          <div class="topbar">
+            <h1>NVDA</h1>
+            <button class="icon-btn" aria-label="Create price alert"></button>
+          </div>
+          <div class="stock-number">$1,143.32</div>
+          <div class="delta-row">
+            <span>+$35.18 today</span>
+            <span class="badge">+ 3.18%</span>
+          </div>
+          <div class="chart-wrap stock-chart" data-chart="stock"></div>
+          <div class="ranges">
+            <button class="range">1D</button><button class="range">1W</button><button class="range">1M</button><button class="range active">3M</button><button class="range">YTD</button><button class="range">All</button>
+          </div>
+          <div class="section">
+            <div class="section-head"><h2>Your position</h2></div>
+            <div class="stats">
+              <div><div class="stat-label">Quantity</div><div class="stat-value">12</div></div>
+              <div><div class="stat-label">Value</div><div class="stat-value">$13,719</div></div>
+            </div>
+          </div>
+          <div class="actions">
+            <div class="buy-sell">
+              <button class="order-button sell" data-order-side="sell">Sell</button>
+              <button class="order-button buy" data-order-side="buy">Buy</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="trade">
+          <div class="topbar">
+            <h1><span id="order-title-side">Buy</span> NVDA</h1>
+            <button class="icon-btn" data-screen-button="stock" aria-label="Close trade ticket"></button>
+          </div>
+          <div class="ticket">
+            <div class="trade-segment">
+              <button class="active" data-order-toggle="buy">Buy</button><button data-order-toggle="sell">Sell</button>
+            </div>
+            <div class="order-controls">
+              <div class="trade-segment">
+                <button class="active">Market</button><button>Limit</button>
+              </div>
+              <div class="trade-segment">
+                <button class="active">Shares</button><button>Dollars</button>
+              </div>
+            </div>
+            <div class="ticket-number">2 shares</div>
+            <div class="ticket-row"><span>Estimated price</span><strong>$1,143.32</strong></div>
+            <div class="ticket-row"><span>Estimated cost</span><strong>$2,286.64</strong></div>
+            <div class="ticket-row"><span>Buying power after</span><strong>$71,833.36</strong></div>
+            <button class="trade-cta">REVIEW PAPER ORDER</button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="compete">
+          <div class="topbar">
+            <h1>Competitions</h1>
+            <button class="icon-btn" aria-label="Competition locked"></button>
+          </div>
+          <div class="coming-soon">
+            <div class="lockup" id="lock-icon"></div>
+            <h2>Coming soon</h2>
+            <p>Classroom competitions will live here after the trading flow feels right. For now this section is blocked off so the prototype stays focused.</p>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="profile">
+          <div class="topbar">
+            <h1>Profile</h1>
+            <button class="icon-btn" aria-label="Edit profile"></button>
+          </div>
+          <div class="profile-hero">
+            <div class="profile-name">Raine Yen</div>
+            <p class="profile-meta">Balanced paper trader</p>
+            <p class="profile-meta" style="color:var(--green)">Classroom league rank #4 of 28</p>
+          </div>
+          <div class="settings-list">
+            <div class="settings-row"><span>Practice balance</span><strong>$74,120</strong></div>
+            <div class="settings-row"><span>Price alerts</span><strong>2 active</strong></div>
+            <div class="settings-row"><span>API keys</span><strong>Developer tools</strong></div>
+            <div class="settings-row"><span>Message safety</span><strong>Reports enabled</strong></div>
+            <div class="settings-row"><span>Delete account</span><strong class="danger">Available</strong></div>
+          </div>
+          <p class="subcopy" style="margin-top:24px;line-height:1.55">Secondary tools live here so the primary app stays portfolio, discover, and trade focused.</p>
+        </section>
+
+        <div class="nav-dock">
+          <nav class="tabbar" aria-label="Prototype navigation">
+            <button class="tab active" data-screen-button="portfolio" aria-label="Portfolio"></button>
+            <button class="tab" data-screen-button="discover" aria-label="Market"></button>
+            <button class="tab" data-screen-button="compete" aria-label="Competitions"></button>
+            <button class="tab" data-screen-button="profile" aria-label="Profile"></button>
+          </nav>
+        </div>
+      </section>
+
+      <aside class="notes">
+        <h2>Low-cost design prototype</h2>
+        <p>
+          This is a throwaway browser prototype for shaping the Paper Trader mobile redesign before Expo, Figma, TestFlight, or App Store work.
+          The chart is real SVG with pointer tooltip and compare mode, while all data is static.
+        </p>
+        <div class="note-grid">
+          <div class="note"><strong>Bubbly icon dock</strong><span>The tab bar owns a solid bottom area, animates the active bubble, and tucks right while scrolling.</span></div>
+          <div class="note"><strong>Fewer boxes</strong><span>Open sections, hairline dividers, and spacing replace the bordered card-stack look.</span></div>
+          <div class="note"><strong>Real chart behavior</strong><span>Drag across the chart for a tooltip. Toggle Compare to show two points.</span></div>
+          <div class="note"><strong>Settings tucked away</strong><span>API keys, alerts, safety, and deletion live under Profile.</span></div>
+        </div>
+      </aside>
+    </main>
+
+    <script>
+      const icons = {
+        portfolio: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="6" height="6" rx="1.6"/><rect x="14" y="4" width="6" height="6" rx="1.6"/><rect x="4" y="14" width="6" height="6" rx="1.6"/><rect x="14" y="14" width="6" height="6" rx="1.6"/></svg>',
+        discover: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8"/><path d="m15.2 8.8-2 5.3-5.1 1.7 2-5.3 5.1-1.7Z" fill="currentColor" stroke="none"/></svg>',
+        stock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 16.5 8.8 12l3.5 2.8L20 6"/><path d="M20 6v6h-6"/></svg>',
+        compete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 4h8v3a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5a3 3 0 0 0 3 3M16 6h3a3 3 0 0 1-3 3M12 11v5M9 20h6M10 16h4"/></svg>',
+        profile: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.2" r="4"/><path d="M4.8 20.2c.9-4 3.4-6.1 7.2-6.1s6.3 2.1 7.2 6.1H4.8Z"/></svg>',
+        filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 7h14M8 12h8M11 17h2"/></svg>',
+        bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 15.5V11a6 6 0 1 0-12 0v4.5L4.6 18h14.8L18 15.5Z"/><path d="M10 20h4"/></svg>',
+        more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>',
+        close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 7l10 10M17 7 7 17"/></svg>',
+        lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="10" width="14" height="10" rx="3"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/></svg>',
+      };
+
+      function setIcon(selector, icon, all = false) {
+        const targets = all ? document.querySelectorAll(selector) : [document.querySelector(selector)];
+        targets.forEach((target) => {
+          if (target) target.innerHTML = icon;
+        });
+      }
+
+      setIcon('.icon-btn[data-screen-button="profile"]', icons.profile);
+      setIcon('.topbar [aria-label="Filter movers"]', icons.filter);
+      setIcon('.topbar [aria-label="Create price alert"]', icons.bell);
+      setIcon('.topbar [aria-label="Edit profile"]', icons.more);
+      setIcon('[aria-label="More options"]', icons.more);
+      setIcon('[aria-label="Watchlist"]', icons.discover);
+      setIcon('[aria-label="Close trade ticket"]', icons.close);
+      setIcon('[aria-label="Competition locked"]', icons.lock);
+      setIcon('#lock-icon', icons.lock);
+      setIcon('#search-icon', icons.discover);
+      setIcon('.tab[data-screen-button="portfolio"]', icons.portfolio);
+      setIcon('.tab[data-screen-button="discover"]', icons.discover);
+      setIcon('.tab[data-screen-button="compete"]', icons.compete);
+      setIcon('.tab[data-screen-button="profile"]', icons.profile);
+
+      const holdings = [
+        ["NVDA", "NVIDIA", "$13,719", "+4.77%", true],
+        ["AAPL", "Apple", "$4,921", "-0.42%", false],
+      ];
+      const movers = [
+        ["NVDA", "NVIDIA", "$1,143.32", "3.45%", true],
+        ["AMD", "Advanced Micro", "$172.10", "2.98%", true],
+        ["TSLA", "Tesla", "$178.10", "2.89%", false],
+        ["SPY", "S&P 500 ETF", "$612.34", "1.05%", true],
+        ["QQQ", "Nasdaq 100", "$535.16", "0.44%", true],
+      ];
+
+      function miniPath(up) {
+        const pts = up
+          ? [[0, 22], [12, 18], [22, 20], [34, 14], [48, 16], [62, 9], [76, 12], [88, 6]]
+          : [[0, 8], [14, 11], [25, 9], [38, 15], [50, 13], [62, 20], [76, 18], [88, 25]];
+        return pts.map((p, i) => `${i ? "L" : "M"}${p[0]},${p[1]}`).join(" ");
+      }
+
+      function marketRow([symbol, company, value, pct, up], compact = false) {
+        return `<button class="market-row ${compact ? "compact" : ""}" data-screen-button="stock" style="width:100%;border-left:0;border-right:0;border-top:0;background:transparent;color:inherit;text-align:left;cursor:pointer">
+          <span class="logo ${up ? "" : "red"}">${symbol.slice(0, 2)}</span>
+          <span><span class="symbol">${symbol}</span><span class="company">${company}</span></span>
+          <svg class="mini" viewBox="0 0 88 34"><path d="${miniPath(up)}" stroke="${up ? "var(--green)" : "var(--red)"}"/></svg>
+          <span><span class="row-value">${value}</span><span class="badge ${up ? "" : "red"}" style="display:block;margin-top:6px">${pct}</span></span>
+        </button>`;
+      }
+
+      document.querySelector("#holdings").innerHTML = holdings.map((r) => marketRow(r)).join("");
+      document.querySelector("#movers").innerHTML = movers.map((r) => marketRow(r, true)).join("");
+
+      function setScreen(name) {
+        document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.dataset.screen === name));
+        document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+        const navName = name === "trade" || name === "stock" ? "discover" : name;
+        const tab = document.querySelector(`.tab[data-screen-button="${navName}"]`);
+        if (tab) tab.classList.add("active");
+        document.querySelector(".nav-dock")?.classList.remove("tucked");
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target.closest("[data-screen-button]");
+        if (!target) return;
+        const screen = target.dataset.screenButton;
+        if (["portfolio", "discover", "stock", "trade", "compete", "profile"].includes(screen)) setScreen(screen);
+      });
+
+      let orderSide = "buy";
+      function setOrderSide(side) {
+        orderSide = side;
+        document.querySelector("#order-title-side").textContent = side === "buy" ? "Buy" : "Sell";
+        document.querySelectorAll("[data-order-toggle]").forEach((button) => button.classList.toggle("active", button.dataset.orderToggle === side));
+      }
+
+      document.addEventListener("click", (event) => {
+        const sideButton = event.target.closest("[data-order-side]");
+        if (!sideButton) return;
+        setOrderSide(sideButton.dataset.orderSide);
+        setScreen("trade");
+      });
+
+      document.addEventListener("click", (event) => {
+        const toggle = event.target.closest("[data-order-toggle]");
+        if (toggle) setOrderSide(toggle.dataset.orderToggle);
+      });
+
+      const navDock = document.querySelector(".nav-dock");
+      document.querySelectorAll(".screen").forEach((screen) => {
+        let lastY = 0;
+        screen.addEventListener("scroll", () => {
+          const y = screen.scrollTop;
+          if (y > lastY + 14 && y > 80) navDock.classList.add("tucked");
+          if (y < lastY - 28 || y < 20) navDock.classList.remove("tucked");
+          lastY = y;
+        }, { passive: true });
+      });
+      navDock.addEventListener("click", () => navDock.classList.remove("tucked"));
+
+      const series = {
+        portfolio: [100000, 100480, 100120, 100900, 100660, 101180, 100820, 101620, 101940, 101780, 102340, 101980, 102620, 102415, 102820, 102610, 103120],
+        stock: [1070, 1086, 1078, 1108, 1098, 1122, 1114, 1137, 1128, 1152, 1140, 1164, 1148, 1132, 1143, 1158, 1143],
+      };
+
+      function buildChart(container, values, mode) {
+        const width = 358;
+        const height = container.classList.contains("stock-chart") ? 306 : 264;
+        const pad = 18;
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const scaleX = (i) => pad + (i / (values.length - 1)) * (width - pad * 2);
+        const scaleY = (v) => pad + (1 - (v - min) / (max - min || 1)) * (height - pad * 2);
+        const pts = values.map((v, i) => [scaleX(i), scaleY(v), v]);
+        const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+        const area = `${line} L${pts[pts.length - 1][0]},${height - pad} L${pts[0][0]},${height - pad} Z`;
+        container.innerHTML = `
+          <svg class="chart" viewBox="0 0 ${width} ${height}" data-mode="${mode}">
+            <path class="area" d="${area}"></path>
+            <line class="baseline" x1="${pad}" x2="${width - pad}" y1="${height * 0.68}" y2="${height * 0.68}"></line>
+            <rect class="compare-band" x="0" y="0" width="0" height="${height}" style="display:none"></rect>
+            <path class="line" d="${line}"></path>
+            <line class="guide" x1="0" x2="0" y1="${pad}" y2="${height - pad}" style="display:none"></line>
+            <circle class="point selected" cx="0" cy="0" r="5.5" style="display:none"></circle>
+            <circle class="point compare-a" cx="0" cy="0" r="5.5" style="display:none"></circle>
+            <circle class="point compare-b" cx="0" cy="0" r="5.5" style="display:none"></circle>
+          </svg>
+          <div class="tooltip" style="display:none"><div class="date">APR 20, 2026</div><div class="value">$0</div></div>
+          <button class="compare-pill" type="button">COMPARE</button>
+        `;
+        const svg = container.querySelector("svg");
+        const tooltip = container.querySelector(".tooltip");
+        const guide = svg.querySelector(".guide");
+        const selected = svg.querySelector(".selected");
+        const compareA = svg.querySelector(".compare-a");
+        const compareB = svg.querySelector(".compare-b");
+        const band = svg.querySelector(".compare-band");
+        let compare = false;
+
+        function nearest(clientX) {
+          const rect = svg.getBoundingClientRect();
+          const x = ((clientX - rect.left) / rect.width) * width;
+          const index = Math.max(0, Math.min(values.length - 1, Math.round(((x - pad) / (width - pad * 2)) * (values.length - 1))));
+          return { index, point: pts[index], rect };
+        }
+
+        function update(clientX) {
+          const { index, point, rect } = nearest(clientX);
+          const [x, y, value] = point;
+          tooltip.style.display = "block";
+          tooltip.style.left = `${(x / width) * 100}%`;
+          tooltip.style.top = `${(y / height) * 100}%`;
+          tooltip.querySelector(".date").textContent = `Point ${index + 1} of ${values.length}`;
+          tooltip.querySelector(".value").textContent = mode === "stock" ? `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `$${value.toLocaleString()}`;
+          guide.style.display = "block";
+          guide.setAttribute("x1", x);
+          guide.setAttribute("x2", x);
+          selected.style.display = "block";
+          selected.setAttribute("cx", x);
+          selected.setAttribute("cy", y);
+          if (compare) {
+            const start = pts[Math.max(0, index - 5)];
+            compareA.style.display = "block";
+            compareB.style.display = "block";
+            compareA.setAttribute("cx", start[0]);
+            compareA.setAttribute("cy", start[1]);
+            compareB.setAttribute("cx", x);
+            compareB.setAttribute("cy", y);
+            band.style.display = "block";
+            band.setAttribute("x", Math.min(start[0], x));
+            band.setAttribute("width", Math.abs(x - start[0]));
+          }
+        }
+
+        svg.addEventListener("pointermove", (e) => update(e.clientX));
+        svg.addEventListener("pointerdown", (e) => {
+          svg.setPointerCapture(e.pointerId);
+          update(e.clientX);
+        });
+        svg.addEventListener("pointerleave", () => {
+          if (!compare) {
+            tooltip.style.display = "none";
+            guide.style.display = "none";
+            selected.style.display = "none";
+          }
+        });
+        container.querySelector(".compare-pill").addEventListener("click", () => {
+          compare = !compare;
+          container.querySelector(".compare-pill").textContent = compare ? "2 POINTS" : "COMPARE";
+          if (!compare) {
+            compareA.style.display = "none";
+            compareB.style.display = "none";
+            band.style.display = "none";
+          }
+        });
+      }
+
+      document.querySelectorAll("[data-chart]").forEach((el) => buildChart(el, series[el.dataset.chart], el.dataset.chart));
+    </script>
+  </body>
+</html>

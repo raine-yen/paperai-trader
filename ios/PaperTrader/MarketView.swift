@@ -175,7 +175,7 @@ private struct MarketRow: View {
     }
 }
 
-private struct SymbolDetailView: View {
+struct SymbolDetailView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let symbol: String

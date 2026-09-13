@@ -86,6 +86,7 @@ export default function ApiKeysPage() {
         <h2 className="font-semibold mb-3">Create new key</h2>
         <div className="flex gap-2">
           <input
+            aria-label="API key label"
             className="input flex-1"
             placeholder="Label (e.g. 'My RSI bot')"
             value={label}
@@ -126,7 +127,7 @@ export default function ApiKeysPage() {
                     {k.revoked_at ? (
                       <span className="text-xs text-gray-500">revoked</span>
                     ) : (
-                      <button onClick={() => revoke(k.id)} className="text-gray-400 hover:text-accent-red">
+                      <button aria-label={`Revoke ${k.label ?? k.key_id}`} onClick={() => revoke(k.id)} className="rounded p-2 text-gray-400 hover:text-accent-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-green">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}

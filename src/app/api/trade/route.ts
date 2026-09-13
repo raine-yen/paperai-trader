@@ -13,6 +13,7 @@ const tradeSchema = z.object({
   type: z.enum(["market", "limit"]).default("market"),
   limit_price: z.union([z.number(), z.string()]).optional().transform((v) => (v == null ? undefined : Number(v))),
   scheduled_at: z.string().optional(),
+  client_order_id: z.string().min(8).max(128).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -43,6 +44,7 @@ export async function POST(req: NextRequest) {
     side: parsed.data.side,
     type: parsed.data.type,
     limit_price: parsed.data.limit_price,
+    client_order_id: parsed.data.client_order_id,
     scheduled_at: parsed.data.scheduled_at,
   });
 

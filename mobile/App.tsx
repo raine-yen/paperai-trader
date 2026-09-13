@@ -1,84 +1,33 @@
 import Constants from "expo-constants";
 import { fetch } from "expo/fetch";
+import * as ImagePicker from "expo-image-picker";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import type { ComponentProps, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, AppState, RefreshControl, ScrollView, Text, useColorScheme, useWindowDimensions, View } from "react-native";
+import { BottomNav } from "./src/bottom-nav";
+import { PREVIEW_BARS, PREVIEW_LEADERBOARD, PREVIEW_ME, PREVIEW_QUOTES, PREVIEW_SESSION } from "./src/preview-data";
 import {
-  ActivityIndicator,
-  Alert,
-  AppState,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TextInput,
-  TextStyle,
-  View,
-} from "react-native";
+  AdminScreen,
+  AuthScreen,
+  CompeteScreen,
+  DiscoverScreen,
+  PortfolioScreen,
+  ProfileScreen,
+  screenBottomPadding,
+} from "./src/screens";
+import { applyTheme, colors, contentMaxWidth, layoutBreakpoints, resolveTheme, space, tabletNavWidth, type ThemePreference } from "./src/theme";
+import type { AdminData, AmountMode, ApiKey, Bar, DiscoverView, LeaderboardEntry, Me, Order, OrderStage, OrderType, Quote, Session, Side, Tab } from "./src/types";
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
   "http://127.0.0.1:3000";
 
-const colors = {
-  bg: "#050607",
-  card: "#0c0f12",
-  elevated: "#12161a",
-  border: "#20262d",
-  text: "#eef2f1",
-  muted: "#8a949e",
-  green: "#00c853",
-  red: "#ff5252",
-  blue: "#3698ff",
-  amber: "#ffb300",
-};
+const starterSymbols = ["AAPL", "NVDA", "TSLA", "MSFT", "SPY", "QQQ", "AMD", "META", "AMZN", "GOOGL", "NFLX"];
+const APP_STORE_PREVIEW = process.env.EXPO_PUBLIC_APP_STORE_PREVIEW === "1";
 
-type Session = { access_token: string; refresh_token: string; expires_at?: number };
-type Tab = "dashboard" | "market" | "trade" | "leaders" | "keys";
-type ChartRange = "1h" | "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y";
-type Account = { display_name: string; cash: number; equity: number; starting_cash: number; positions_value: number };
-type Position = { symbol: string; qty: number; avg_entry_price: number; current_price: number; market_value: number; unrealized_pl: number; unrealized_plpc: number };
-type Order = { id: string; symbol: string; qty: number; side: string; type: string; status: string; filled_avg_price?: number };
-type Me = { account: Account | null; positions: Position[]; orders: Order[]; user?: { email?: string } };
-type Quote = {
-  symbol: string;
-  price: number;
-  prevClose?: number | null;
-  updatedAt?: string;
-  name?: string | null;
-  currency?: string | null;
-  exchange?: string | null;
-  marketCap?: number | null;
-  trailingPE?: number | null;
-  forwardPE?: number | null;
-  epsTrailingTwelveMonths?: number | null;
-  volume?: number | null;
-  averageVolume?: number | null;
-  open?: number | null;
-  dayHigh?: number | null;
-  dayLow?: number | null;
-  yearHigh?: number | null;
-  yearLow?: number | null;
-  change?: number | null;
-  changePercent?: number | null;
-};
-type ChartBar = { t: string; o: number; h: number; l: number; c: number; v: number };
-type Leader = { account_id: string; display_name: string; equity: number; starting_cash: number; return_pct: number };
-type ApiKey = { id: string; key_id: string; label?: string; revoked_at?: string | null; created_at: string };
-
-const watchlist = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL", "META", "SPY"];
-const chartRanges: ChartRange[] = ["1h", "1d", "5d", "1mo", "3mo", "6mo", "1y"];
-const refreshMsByTab: Record<Tab, number> = {
-  dashboard: 12_000,
-  market: 6_000,
-  trade: 5_000,
-  leaders: 20_000,
-  keys: 45_000,
-};
-
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12_000) {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -89,122 +38,208 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
 }
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [checking, setChecking] = useState(true);
+  const systemScheme = useColorScheme();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= layoutBreakpoints.regular;
+  const [session, setSession] = useState<Session | null>(APP_STORE_PREVIEW ? PREVIEW_SESSION : null);
+  const [checking, setChecking] = useState(!APP_STORE_PREVIEW);
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [signup, setSignup] = useState(false);
-  const [tab, setTab] = useState<Tab>("dashboard");
-  const [me, setMe] = useState<Me | null>(null);
-  const [leaders, setLeaders] = useState<Leader[]>([]);
-  const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [keysLoaded, setKeysLoaded] = useState(false);
-  const [newSecret, setNewSecret] = useState<string | null>(null);
-  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
-  const [chartBars, setChartBars] = useState<ChartBar[]>([]);
-  const [chartRange, setChartRange] = useState<ChartRange>("1d");
-  const [symbol, setSymbol] = useState("AAPL");
-  const [qty, setQty] = useState("1");
-  const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [tab, setTabState] = useState<Tab>("portfolio");
+  const [discoverView, setDiscoverView] = useState<DiscoverView>("list");
+  const [profileView, setProfileView] = useState<"settings" | "admin">("settings");
+  const [me, setMe] = useState<Me | null>(APP_STORE_PREVIEW ? PREVIEW_ME : null);
+  const [quotes, setQuotes] = useState<Record<string, Quote>>(APP_STORE_PREVIEW ? PREVIEW_QUOTES : {});
+  const [bars, setBars] = useState<Bar[]>(APP_STORE_PREVIEW ? PREVIEW_BARS : []);
+  const [chartRange, setChartRange] = useState("1h");
+  const [selectedSymbol, setSelectedSymbol] = useState(APP_STORE_PREVIEW ? "AAPL" : "NVDA");
+  const [search, setSearch] = useState("");
+  const [searchResult, setSearchResult] = useState<{ symbol: string; quote: Quote } | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [side, setSide] = useState<Side>("buy");
+  const [orderType, setOrderType] = useState<OrderType>("market");
+  const [amountMode, setAmountMode] = useState<AmountMode>("shares");
+  const [amount, setAmount] = useState(APP_STORE_PREVIEW ? "10" : "");
   const [limitPrice, setLimitPrice] = useState("");
+  const [orderStage, setOrderStageState] = useState<OrderStage>("configure");
+  const [reviewQuotePrice, setReviewQuotePrice] = useState<number | null>(null);
+  const [reviewClientOrderId, setReviewClientOrderId] = useState<string | null>(null);
+  const [lastOrder, setLastOrder] = useState<Order | null>(null);
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [orderMessage, setOrderMessage] = useState("");
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(APP_STORE_PREVIEW ? PREVIEW_LEADERBOARD : []);
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(APP_STORE_PREVIEW ? "light" : "system");
+  const [newSecret, setNewSecret] = useState("");
+  const [adminData, setAdminData] = useState<AdminData | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
-  const [trading, setTrading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const refreshInFlight = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const inFlight = useRef(false);
+  const searchGeneration = useRef(0);
+  const marketDataGeneration = useRef(0);
+  const orderSubmitInFlight = useRef(false);
+  const resolvedTheme = resolveTheme(themePreference, systemScheme);
+  applyTheme(resolvedTheme);
+
+  const selectedQuote = quotes[selectedSymbol] ?? null;
+  const selectedPosition = useMemo(() => me?.positions.find((p) => p.symbol === selectedSymbol) ?? null, [me?.positions, selectedSymbol]);
 
   useEffect(() => {
-    restoreSession();
+    if (!APP_STORE_PREVIEW) restoreSession();
   }, []);
 
   useEffect(() => {
-    if (!session) return;
-    refreshForTab(tab, true);
+    if (!session || APP_STORE_PREVIEW) return;
+    refreshAll(true);
   }, [session]);
 
   useEffect(() => {
-    if (!session) return;
-    if (tab === "leaders") void refreshLeaders(true);
-    if (tab === "keys" && !keysLoaded) void refreshKeys(true);
-    if (tab === "trade") void loadTradeSurface(symbol.toUpperCase(), chartRange, true);
-  }, [tab]);
-
-  useEffect(() => {
-    if (!session || tab !== "trade") return;
-    void loadTradeSurface(symbol.toUpperCase(), chartRange, true);
-  }, [symbol, chartRange]);
-
-  useEffect(() => {
-    if (!session) return;
+    if (!session || APP_STORE_PREVIEW) return;
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void refreshForTab(tab, false);
+      if (state === "active") refreshAll(false);
     });
-    return () => sub.remove();
-  }, [session, tab, symbol, chartRange, keysLoaded]);
+    const id = setInterval(() => refreshAll(false), 20000);
+    return () => {
+      sub.remove();
+      clearInterval(id);
+    };
+  }, [session, selectedSymbol]);
 
   useEffect(() => {
-    if (!session) return;
-    const interval = setInterval(() => {
-      void refreshForTab(tab, false);
-    }, refreshMsByTab[tab]);
-    return () => clearInterval(interval);
-  }, [session, tab, symbol, chartRange, keysLoaded]);
+    if (!session || tab !== "discover") return;
+    const symbol = search.trim().toUpperCase();
+    if (!symbol) {
+      searchGeneration.current += 1;
+      setSearchResult(null);
+      setSearchLoading(false);
+      setSearchError("");
+      return;
+    }
+    if (APP_STORE_PREVIEW) {
+      const previewQuote = PREVIEW_QUOTES[symbol];
+      setSearchResult(previewQuote ? { symbol, quote: previewQuote } : null);
+      setSearchLoading(false);
+      setSearchError(previewQuote ? "" : "No preview symbol matches that search.");
+      return;
+    }
+    const generation = ++searchGeneration.current;
+    const id = setTimeout(async () => {
+      setSearchLoading(true);
+      setSearchError("");
+      try {
+        const quote = await api<Quote>(`/api/quote?symbol=${encodeURIComponent(symbol)}`);
+        if (generation !== searchGeneration.current) return;
+        const parsed = normalizeQuote(quote, symbol);
+        setQuotes((prev) => ({ ...prev, [symbol]: parsed }));
+        setSearchResult({ symbol, quote: parsed });
+      } catch (searchFailure) {
+        if (generation !== searchGeneration.current) return;
+        setSearchResult(null);
+        setSearchError(searchFailure instanceof Error ? searchFailure.message : "Market search is unavailable. Try again.");
+      } finally {
+        if (generation === searchGeneration.current) setSearchLoading(false);
+      }
+    }, 320);
+    return () => {
+      clearTimeout(id);
+      if (generation === searchGeneration.current) setSearchLoading(false);
+    };
+  }, [search, session, tab]);
 
-  const currentSymbol = symbol.toUpperCase();
-  const currentQuote = quotes[currentSymbol];
-  const ownedQty = useMemo(() => {
-    return me?.positions.find((p) => p.symbol === currentSymbol)?.qty ?? 0;
-  }, [me, currentSymbol]);
+  useEffect(() => {
+    if (!session || APP_STORE_PREVIEW || tab !== "discover" || discoverView === "list") return;
+    refreshSelectedMarketData();
+  }, [session, selectedSymbol, chartRange, tab, discoverView]);
+
+  useEffect(() => {
+    if (!selectedQuote?.price) return;
+    setLimitPrice((current) => current || selectedQuote.price.toFixed(2));
+  }, [selectedQuote?.price, selectedSymbol]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [tab, discoverView, orderStage]);
 
   async function restoreSession() {
-    const stored = await SecureStore.getItemAsync("paper-trader-session").catch(() => null);
-    if (stored) setSession(JSON.parse(stored));
-    setChecking(false);
+    try {
+      const [stored, storedTheme] = await Promise.all([
+        SecureStore.getItemAsync("paper-trader-session").catch(() => null),
+        SecureStore.getItemAsync("paper-trader-theme").catch(() => null),
+      ]);
+      if (stored) {
+        try {
+          setRefreshing(true);
+          setSession(JSON.parse(stored));
+        } catch {
+          setRefreshing(false);
+          await SecureStore.deleteItemAsync("paper-trader-session").catch(() => {});
+        }
+      }
+      if (storedTheme && ["system", "light", "dark", "midnight"].includes(storedTheme)) {
+        setThemePreferenceState(storedTheme as ThemePreference);
+      }
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  function setThemePreference(next: ThemePreference) {
+    setThemePreferenceState(next);
+    SecureStore.setItemAsync("paper-trader-theme", next).catch(() => {});
   }
 
   async function saveSession(next: Session | null) {
+    if (next && !me) setRefreshing(true);
     setSession(next);
-    if (next) {
-      await SecureStore.setItemAsync("paper-trader-session", JSON.stringify(next));
-      return;
-    }
-    setMe(null);
-    setLeaders([]);
-    setKeys([]);
-    setKeysLoaded(false);
-    setQuotes({});
-    setChartBars([]);
-    setNewSecret(null);
-    await SecureStore.deleteItemAsync("paper-trader-session").catch(() => {});
+    if (next) await SecureStore.setItemAsync("paper-trader-session", JSON.stringify(next));
+    else await SecureStore.deleteItemAsync("paper-trader-session").catch(() => {});
+  }
+
+  async function refreshSession() {
+    if (!session?.refresh_token) throw new Error("No refresh token");
+    const res = await fetchWithTimeout(`${API_URL}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "refresh failed");
+    await saveSession(body);
+    return body as Session;
   }
 
   async function api<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
-    const { body, ...rest } = options;
-    const request = {
-      ...rest,
-      ...(body == null ? {} : { body }),
+    const token = session?.access_token;
+    const res = await fetchWithTimeout(`${API_URL}${path}`, {
+      ...options,
       headers: {
         "Content-Type": "application/json",
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers || {}),
       },
-    };
-    const res = await fetchWithTimeout(`${API_URL}${path}`, request);
+    });
     if (res.status === 401 && retry && session?.refresh_token) {
-      const refreshed = await fetchWithTimeout(`${API_URL}/api/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: session.refresh_token }),
+      const next = await refreshSession();
+      const retryRes = await fetchWithTimeout(`${API_URL}${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${next.access_token}`,
+          ...(options.headers || {}),
+        },
       });
-      if (refreshed.ok) {
-        const next = (await refreshed.json()) as Session;
-        await saveSession(next);
-        return api<T>(path, options, false);
+      if (!retryRes.ok) {
+        const body = await retryRes.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${retryRes.status}`);
       }
-      await saveSession(null);
+      return retryRes.json() as Promise<T>;
     }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -213,18 +248,32 @@ export default function App() {
     return res.json() as Promise<T>;
   }
 
-  async function auth() {
-    setAuthLoading(true);
-    setError(null);
+  async function apiForm<T>(path: string, form: FormData): Promise<T> {
+    const res = await fetchWithTimeout(`${API_URL}${path}`, {
+      method: "POST",
+      headers: {
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: form as unknown as BodyInit,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
+  async function authenticate() {
+    setBusy(true);
+    setError("");
     try {
-      if (signup) {
-        await fetchWithTimeout(`${API_URL}/api/auth/signup`, {
+      if (authMode === "signup") {
+        const signup = await fetchWithTimeout(`${API_URL}/api/auth/signup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password, display_name: displayName }),
-        }).then(async (res) => {
-          if (!res.ok) throw new Error((await res.json()).error || "signup failed");
         });
+        if (!signup.ok) throw new Error((await signup.json()).error || "signup failed");
       }
       const res = await fetchWithTimeout(`${API_URL}/api/auth/login`, {
         method: "POST",
@@ -235,443 +284,482 @@ export default function App() {
       if (!res.ok) throw new Error(body.error || "login failed");
       await saveSession(body);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(e instanceof Error ? e.message : "Could not sign in");
     } finally {
-      setAuthLoading(false);
+      setBusy(false);
     }
   }
 
-  async function runRefresh(task: () => Promise<void>, showSpinner: boolean) {
-    if (refreshInFlight.current) return;
-    refreshInFlight.current = true;
+  async function refreshAll(showSpinner = false) {
+    if (APP_STORE_PREVIEW) {
+      setRefreshing(false);
+      return;
+    }
+    if (!session || inFlight.current) return;
+    inFlight.current = true;
     if (showSpinner) setRefreshing(true);
     try {
-      await task();
-      setLastUpdated(new Date().toISOString());
-      setError(null);
+      const nextMe = await api<Me>("/api/me");
+      const symbols = symbolsFor(nextMe, selectedSymbol);
+      const [nextQuotes, nextKeys, nextLeaderboard] = await Promise.all([
+        api<{ quotes: Quote[] }>(`/api/quotes?symbols=${encodeURIComponent(symbols.join(","))}`),
+        api<{ keys: ApiKey[] }>("/api/keys").catch(() => ({ keys: [] })),
+        api<{ entries: LeaderboardEntry[] }>("/api/leaderboard").catch(() => ({ entries: [] })),
+      ]);
+      setMe(nextMe);
+      setKeys(nextKeys.keys ?? []);
+      setLeaderboard(nextLeaderboard.entries ?? []);
+      setQuotes((prev) => ({
+        ...prev,
+        ...Object.fromEntries((nextQuotes.quotes ?? []).map((q) => [String(q.symbol).toUpperCase(), normalizeQuote(q, String(q.symbol))])),
+      }));
+      setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load data");
+      setError(e instanceof Error ? e.message : "Could not refresh");
     } finally {
-      if (showSpinner) setRefreshing(false);
-      refreshInFlight.current = false;
+      setRefreshing(false);
+      inFlight.current = false;
     }
   }
 
-  async function refreshDashboard(showSpinner = false) {
-    await runRefresh(async () => {
-      const [nextMe, nextQuotes] = await Promise.all([
-        api<Me>("/api/me"),
-        api<{ quotes: Quote[] }>(`/api/quotes?symbols=${encodeURIComponent(watchlist.join(","))}`),
-      ]);
-      setMe(nextMe);
-      setQuotes((prev) => mergeQuotes(prev, nextQuotes.quotes));
-    }, showSpinner);
-  }
-
-  async function refreshMarket(showSpinner = false) {
-    await runRefresh(async () => {
-      const nextQuotes = await api<{ quotes: Quote[] }>(`/api/quotes?symbols=${encodeURIComponent(watchlist.join(","))}`);
-      setQuotes((prev) => mergeQuotes(prev, nextQuotes.quotes));
-    }, showSpinner);
-  }
-
-  async function refreshLeaders(showSpinner = false) {
-    await runRefresh(async () => {
-      const nextLeaders = await api<{ entries: Leader[] }>("/api/leaderboard");
-      setLeaders(nextLeaders.entries);
-    }, showSpinner);
-  }
-
-  async function refreshKeys(showSpinner = false) {
-    await runRefresh(async () => {
-      const nextKeys = await api<{ keys: ApiKey[] }>("/api/keys");
-      setKeys(nextKeys.keys);
-      setKeysLoaded(true);
-    }, showSpinner);
-  }
-
-  async function loadTradeSurface(nextSymbol: string, range: ChartRange, showSpinner = false) {
-    await runRefresh(async () => {
-      const [nextMe, nextQuote, nextChart] = await Promise.all([
-        api<Me>("/api/me"),
-        api<Quote>(`/api/quote?symbol=${encodeURIComponent(nextSymbol)}`),
-        api<{ bars: ChartBar[] }>(`/api/chart?symbol=${encodeURIComponent(nextSymbol)}&range=${range}`),
-      ]);
-      setMe(nextMe);
-      setQuotes((prev) => ({ ...prev, [nextSymbol]: nextQuote }));
-      setChartBars(nextChart.bars);
-      if (!limitPrice) setLimitPrice(String(nextQuote.price.toFixed(2)));
-    }, showSpinner);
-  }
-
-  async function refreshForTab(nextTab: Tab, showSpinner = false) {
-    if (nextTab === "dashboard") return refreshDashboard(showSpinner);
-    if (nextTab === "market") return refreshMarket(showSpinner);
-    if (nextTab === "trade") return loadTradeSurface(currentSymbol, chartRange, showSpinner);
-    if (nextTab === "leaders") return refreshLeaders(showSpinner);
-    return refreshKeys(showSpinner);
-  }
-
-  async function placeTrade() {
-    setTrading(true);
-    setError(null);
+  async function refreshSelectedMarketData() {
+    if (APP_STORE_PREVIEW) {
+      setBars(selectedSymbol === "AAPL" ? PREVIEW_BARS : []);
+      return;
+    }
+    const requestedSymbol = selectedSymbol;
+    const requestedRange = chartRange;
+    const generation = ++marketDataGeneration.current;
     try {
-      const order = await api<Order>("/api/trade", {
-        method: "POST",
-        body: JSON.stringify({
-          symbol: currentSymbol,
-          qty: Number(qty),
-          side,
-          type: orderType,
-          limit_price: orderType === "limit" ? Number(limitPrice) : undefined,
-        }),
-      });
-      Alert.alert("Order submitted", `${order.side.toUpperCase()} ${order.qty} ${order.symbol} is ${order.status}.`);
-      await loadTradeSurface(currentSymbol, chartRange, false);
-      await refreshMarket(false);
-      await refreshLeaders(false);
+      const [quote, chart] = await Promise.all([
+        api<Quote>(`/api/quote?symbol=${encodeURIComponent(requestedSymbol)}`),
+        api<{ bars: Bar[] }>(`/api/chart?symbol=${encodeURIComponent(requestedSymbol)}&range=${encodeURIComponent(requestedRange)}`),
+      ]);
+      if (generation !== marketDataGeneration.current) return;
+      setQuotes((prev) => ({ ...prev, [requestedSymbol]: normalizeQuote(quote, requestedSymbol) }));
+      setBars(chart.bars ?? []);
+      setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Trade failed");
+      if (generation !== marketDataGeneration.current) return;
+      setBars([]);
+      setError(e instanceof Error ? e.message : "Market data unavailable");
+    }
+  }
+
+  function changeOrderStage(next: OrderStage) {
+    if (next === "review") {
+      const nextPrice = orderType === "limit" ? Number(limitPrice) : Number(selectedQuote?.price ?? 0);
+      setReviewQuotePrice(Number.isFinite(nextPrice) && nextPrice > 0 ? nextPrice : null);
+      setReviewClientOrderId(`mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+    } else if (next === "configure") {
+      setReviewQuotePrice(null);
+      setReviewClientOrderId(null);
+    }
+    setOrderStageState(next);
+  }
+
+  function resetOrderDraft() {
+    setSide("buy");
+    setOrderType("market");
+    setAmountMode("shares");
+    setAmount(APP_STORE_PREVIEW ? "10" : "");
+    setLimitPrice("");
+    setReviewQuotePrice(null);
+    setReviewClientOrderId(null);
+    setOrderStageState("configure");
+    setOrderMessage("");
+    setLastOrder(null);
+  }
+
+  async function submitOrder() {
+    if (orderSubmitInFlight.current) return;
+    const quotePrice = Number(selectedQuote?.price ?? 0);
+    if (!Number.isFinite(quotePrice) || quotePrice <= 0) {
+      setOrderMessage("A verified quote is required before confirming this paper order.");
+      setOrderStageState("configure");
+      return;
+    }
+    if (orderType === "market" && reviewQuotePrice != null && Math.abs(quotePrice - reviewQuotePrice) >= 0.005) {
+      setOrderMessage(`The quote changed from ${reviewQuotePrice.toFixed(2)} to ${quotePrice.toFixed(2)}. Review the updated estimate before confirming.`);
+      setOrderStageState("configure");
+      setReviewQuotePrice(null);
+      return;
+    }
+    const price = orderType === "limit" && Number(limitPrice) > 0 ? Number(limitPrice) : reviewQuotePrice ?? quotePrice;
+    const input = Number(amount) || 0;
+    const qty = amountMode === "dollars" ? (price > 0 ? input / price : 0) : input;
+    if (!qty || qty <= 0) {
+      setOrderMessage("Enter an order amount first.");
+      setOrderStageState("configure");
+      return;
+    }
+    const normalizedQty = Math.floor(qty * 10000) / 10000;
+    const notional = normalizedQty * price;
+    const cash = Number(me?.account?.cash ?? 0);
+    const ownedQty = Number(selectedPosition?.qty ?? 0);
+    if (side === "buy" && notional > cash + 0.005) {
+      setOrderMessage("This estimate is above your current simulated buying power. Update the amount and review again.");
+      setOrderStageState("configure");
+      setReviewQuotePrice(null);
+      return;
+    }
+    if (side === "sell" && normalizedQty > ownedQty + 0.00005) {
+      setOrderMessage("This amount is above your current simulated holdings. Update the amount and review again.");
+      setOrderStageState("configure");
+      setReviewQuotePrice(null);
+      return;
+    }
+    orderSubmitInFlight.current = true;
+    setOrderBusy(true);
+    setOrderMessage("");
+    try {
+      const order = APP_STORE_PREVIEW
+        ? {
+            id: "preview-confirmed-order",
+            symbol: selectedSymbol,
+            qty: normalizedQty,
+            side,
+            type: orderType,
+            status: "filled",
+            filled_avg_price: price,
+            created_at: "2026-07-31T20:00:00.000Z",
+          } satisfies Order
+        : await api<Order>("/api/trade", {
+            method: "POST",
+            body: JSON.stringify({
+              symbol: selectedSymbol,
+              qty: normalizedQty,
+              side,
+              type: orderType,
+              limit_price: orderType === "limit" ? Number(limitPrice) : undefined,
+              client_order_id: reviewClientOrderId ?? undefined,
+            }),
+          });
+      setLastOrder(order);
+      setOrderMessage(`${side === "buy" ? "Buy" : "Sell"} paper order ${order.status.replace(/_/g, " ")}. Your simulated portfolio is ready to review.`);
+      setOrderStageState("receipt");
+      setAmount("");
+      if (!APP_STORE_PREVIEW) await refreshAll(false);
+    } catch (e) {
+      setOrderMessage(e instanceof Error ? e.message : "Order failed");
     } finally {
-      setTrading(false);
+      orderSubmitInFlight.current = false;
+      setOrderBusy(false);
+    }
+  }
+
+  async function addWatch() {
+    if (APP_STORE_PREVIEW) {
+      Alert.alert("Watchlist updated", `${selectedSymbol} is already represented in this simulated preview.`);
+      return;
+    }
+    try {
+      await api("/api/watchlists", { method: "POST", body: JSON.stringify({ symbol: selectedSymbol }) });
+      await refreshAll(false);
+      Alert.alert("Watchlist updated", `${selectedSymbol} is now in your watchlist.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Watchlist unavailable");
+    }
+  }
+
+  async function createAlert(direction: "above" | "below") {
+    if (!selectedQuote?.price) return;
+    const target = direction === "above" ? selectedQuote.price * 1.03 : selectedQuote.price * 0.97;
+    if (APP_STORE_PREVIEW) {
+      Alert.alert("Paper alert ready", `${selectedSymbol} ${direction} ${target.toFixed(2)} in this simulated preview.`);
+      return;
+    }
+    try {
+      await api("/api/alerts", { method: "POST", body: JSON.stringify({ symbol: selectedSymbol, direction, target_price: target.toFixed(2) }) });
+      await refreshAll(false);
+      Alert.alert("Alert created", `${selectedSymbol} ${direction} ${target.toFixed(2)}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Alerts unavailable");
     }
   }
 
   async function createKey() {
     try {
-      const key = await api<{ key_id: string; secret: string }>("/api/keys", {
-        method: "POST",
-        body: JSON.stringify({ label: "Expo mobile" }),
-      });
+      const key = await api<{ key_id: string; secret: string }>("/api/keys", { method: "POST", body: JSON.stringify({ label: "Mobile app" }) });
       setNewSecret(`${key.key_id}\n${key.secret}`);
-      await refreshKeys(false);
+      const next = await api<{ keys: ApiKey[] }>("/api/keys");
+      setKeys(next.keys ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not generate key");
+      setError(e instanceof Error ? e.message : "Key creation failed");
     }
   }
 
-  if (checking) return <Shell><ActivityIndicator color={colors.green} /></Shell>;
+  async function pickAvatar() {
+    setError("");
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError("Photo library permission is required to add a profile picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.82,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const form = new FormData();
+    form.append("avatar", {
+      uri: asset.uri,
+      name: asset.fileName || "avatar.jpg",
+      type: asset.mimeType || "image/jpeg",
+    } as unknown as Blob);
+    try {
+      await apiForm<{ avatar_url: string }>("/api/profile/avatar", form);
+      await refreshAll(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not upload profile picture");
+    }
+  }
+
+  async function deleteAccount() {
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your Paper Trader account, profile, positions, orders, messages, watchlist, and alerts.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete account",
+          style: "destructive",
+          onPress: async () => {
+            setBusy(true);
+            setError("");
+            try {
+              await api("/api/account", { method: "DELETE" });
+              await signOut();
+              Alert.alert("Account deleted", "Your Paper Trader account has been deleted.");
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Could not delete account");
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function signOut() {
+    await saveSession(null);
+    setRefreshing(false);
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
+    setSearch("");
+    setSearchResult(null);
+    setSearchError("");
+    setMe(null);
+    setKeys([]);
+    setLeaderboard([]);
+    setAdminData(null);
+    setNewSecret("");
+  }
+
+  async function openAdmin() {
+    setProfileView("admin");
+    await loadAdmin();
+  }
+
+  async function loadAdmin() {
+    setAdminLoading(true);
+    setAdminError("");
+    try {
+      const next = await api<AdminData>("/api/admin");
+      setAdminData(next);
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "Admin unavailable");
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function runAdminAction(action: string, payload: Record<string, unknown>) {
+    setAdminError("");
+    try {
+      await api("/api/admin", { method: "POST", body: JSON.stringify({ action, ...payload }) });
+      await Promise.all([loadAdmin(), refreshAll(false)]);
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : "Admin action failed");
+    }
+  }
+
+  function setTab(next: Tab) {
+    setTabState(next);
+    if (next !== "discover") {
+      setDiscoverView("list");
+      resetOrderDraft();
+    }
+    if (next !== "profile") setProfileView("settings");
+  }
+
+  function openSymbol(symbol: string) {
+    const nextSymbol = symbol.toUpperCase();
+    marketDataGeneration.current += 1;
+    setSelectedSymbol(nextSymbol);
+    setBars(APP_STORE_PREVIEW && nextSymbol === "AAPL" ? PREVIEW_BARS : []);
+    setTabState("discover");
+    setDiscoverView("detail");
+    resetOrderDraft();
+  }
+
+  if (checking) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}>
+        <StatusBar style={resolvedTheme === "light" ? "dark" : "light"} />
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
 
   if (!session) {
     return (
-      <Shell>
-        <Text style={title}>Paper Trader</Text>
-        <Text style={muted}>Shared web + mobile paper trading account.</Text>
-        <Segment value={signup ? "Sign up" : "Log in"} options={["Log in", "Sign up"]} onChange={(v) => setSignup(v === "Sign up")} />
-        {signup && <Input placeholder="Display name" value={displayName} onChangeText={setDisplayName} />}
-        <Input placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-        <Input placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-        {error && <Text style={bad} selectable>{error}</Text>}
-        <Button label={authLoading ? "Working..." : signup ? "Create account" : "Sign in"} onPress={auth} disabled={authLoading} />
-        <Text style={tiny} selectable>API: {API_URL}</Text>
-      </Shell>
+      <>
+        <StatusBar style={resolvedTheme === "light" ? "dark" : "light"} />
+        <AuthScreen
+          mode={authMode}
+          setMode={setAuthMode}
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          displayName={displayName}
+          setDisplayName={setDisplayName}
+          submit={authenticate}
+          busy={busy}
+          error={error}
+        />
+      </>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <StatusBar style="light" />
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar style={resolvedTheme === "light" ? "dark" : "light"} />
       <ScrollView
+        ref={scrollRef}
         contentInsetAdjustmentBehavior="automatic"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => refreshForTab(tab, true)} tintColor={colors.green} />}
-        contentContainerStyle={{ padding: 18, gap: 14, paddingTop: 60, paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={APP_STORE_PREVIEW ? undefined : <RefreshControl refreshing={refreshing} onRefresh={() => refreshAll(true)} tintColor={colors.brand} />}
+        contentContainerStyle={{
+          minHeight: "100%",
+          paddingLeft: isTablet ? tabletNavWidth + space.x8 : space.x4,
+          paddingRight: isTablet ? space.x8 : space.x4,
+          paddingTop: isTablet ? space.x8 : space.x6,
+          paddingBottom: isTablet ? space.x12 : screenBottomPadding,
+          backgroundColor: colors.background,
+        }}
       >
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={title}>Paper Trader</Text>
-            <Text style={tiny}>{lastUpdated ? `Updated ${timeLabel(lastUpdated)}` : "Waiting for first refresh"}</Text>
-          </View>
-          <Pressable onPress={() => saveSession(null)}><Text style={link}>Sign out</Text></Pressable>
-        </View>
-        {error && <Text style={bad} selectable>{error}</Text>}
-        {tab === "dashboard" && <Dashboard me={me} leaders={leaders.slice(0, 3)} />}
-        {tab === "market" && <Market quotes={quotes} open={(s) => { setSymbol(s); setTab("trade"); }} />}
-        {tab === "trade" && (
-          <Trade
-            symbol={symbol}
-            setSymbol={(next) => setSymbol(next.toUpperCase())}
-            qty={qty}
-            setQty={setQty}
-            side={side}
-            setSide={setSide}
-            orderType={orderType}
-            setOrderType={setOrderType}
-            limitPrice={limitPrice}
-            setLimitPrice={setLimitPrice}
-            quote={currentQuote}
-            chartBars={chartBars}
-            chartRange={chartRange}
-            setChartRange={setChartRange}
-            ownedQty={ownedQty}
-            cash={me?.account?.cash ?? 0}
-            loadQuote={() => loadTradeSurface(currentSymbol, chartRange, true)}
-            submit={placeTrade}
-            busy={trading}
-          />
-        )}
-        {tab === "leaders" && <Leaders leaders={leaders} />}
-        {tab === "keys" && <Keys keys={keys} createKey={createKey} newSecret={newSecret} />}
-      </ScrollView>
-      <View style={nav}>
-        {(["dashboard", "market", "trade", "leaders", "keys"] as Tab[]).map((item) => (
-          <Pressable key={item} onPress={() => setTab(item)} style={[navItem, tab === item && { backgroundColor: colors.green }]}>
-            <Text style={{ color: tab === item ? "#000" : colors.text, fontWeight: "800", fontSize: 12 }}>{item}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function Dashboard({ me, leaders }: { me: Me | null; leaders: Leader[] }) {
-  const account = me?.account;
-  if (!account) return <Card><Text style={muted}>No account loaded.</Text></Card>;
-  const ret = account.equity - account.starting_cash;
-  const isUp = ret >= 0;
-  return (
-    <>
-      <Card>
-        <Text style={label}>Portfolio</Text>
-        <Text style={hero}>{usd(account.equity)}</Text>
-        <Text style={{ color: isUp ? colors.green : colors.red, fontWeight: "800" }}>{usd(ret)} all time</Text>
-      </Card>
-      <Grid items={[
-        ["Cash", usd(account.cash)],
-        ["Invested", usd(account.positions_value)],
-        ["Holdings", String(me?.positions.length ?? 0)],
-        ["Trader", account.display_name],
-      ]} />
-      <Section title="Holdings">
-        {me?.positions.length ? me.positions.map((p) => (
-          <Row
-            key={p.symbol}
-            left={p.symbol}
-            sub={`${p.qty} shares`}
-            right={`${usd(p.market_value)}  ${signedPct(p.unrealized_plpc * 100)}`}
-            tone={p.unrealized_pl >= 0 ? colors.green : colors.red}
-          />
-        )) : <Text style={muted}>No positions yet.</Text>}
-      </Section>
-      <Section title="Top movers">
-        {leaders.length ? leaders.map((l, index) => (
-          <Row
-            key={l.account_id}
-            left={`#${index + 1} ${l.display_name}`}
-            sub={usd(l.equity)}
-            right={signedPct(l.return_pct)}
-            tone={l.return_pct >= 0 ? colors.green : colors.red}
-          />
-        )) : <Text style={muted}>Leaderboard loading.</Text>}
-      </Section>
-    </>
-  );
-}
-
-function Market({ quotes, open }: { quotes: Record<string, Quote>; open: (symbol: string) => void }) {
-  return (
-    <Section title="Market">
-      {watchlist.map((symbol) => {
-        const quote = quotes[symbol];
-        const change = quote?.changePercent ?? (quote?.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : null);
-        return (
-          <Pressable key={symbol} onPress={() => open(symbol)}>
-            <Row
-              left={symbol}
-              sub={quote?.name || "Tap to trade"}
-              right={quote ? `${usd(quote.price)}  ${signedPct(change)}` : "..."}
-              tone={change == null ? colors.text : change >= 0 ? colors.green : colors.red}
+        <View style={{ width: "100%", maxWidth: contentMaxWidth, alignSelf: "center", gap: space.x4 }}>
+          {error ? <Text selectable accessibilityRole="alert" style={{ color: colors.error, fontSize: 13, lineHeight: 19 }}>{error}</Text> : null}
+          {tab === "portfolio" ? (
+            <PortfolioScreen me={me} quotes={quotes} openSymbol={openSymbol} goDiscover={() => setTab("discover")} refreshing={refreshing} />
+          ) : tab === "discover" ? (
+            <DiscoverScreen
+              view={discoverView}
+              setView={setDiscoverView}
+              me={me}
+              quotes={quotes}
+              selectedSymbol={selectedSymbol}
+              setSelectedSymbol={(symbol) => {
+                const nextSymbol = symbol.toUpperCase();
+                marketDataGeneration.current += 1;
+                setSelectedSymbol(nextSymbol);
+                setBars(APP_STORE_PREVIEW && nextSymbol === "AAPL" ? PREVIEW_BARS : []);
+                resetOrderDraft();
+              }}
+              bars={bars}
+              chartRange={chartRange}
+              setChartRange={(nextRange) => {
+                marketDataGeneration.current += 1;
+                setBars([]);
+                setChartRange(nextRange);
+              }}
+              quote={selectedQuote}
+              position={selectedPosition}
+              search={search}
+              setSearch={setSearch}
+              searchResult={searchResult}
+              searchLoading={searchLoading}
+              searchError={searchError}
+              side={side}
+              setSide={setSide}
+              orderType={orderType}
+              setOrderType={setOrderType}
+              amountMode={amountMode}
+              setAmountMode={setAmountMode}
+              amount={amount}
+              setAmount={setAmount}
+              limitPrice={limitPrice}
+              setLimitPrice={setLimitPrice}
+              orderStage={orderStage}
+              setOrderStage={changeOrderStage}
+              reviewQuotePrice={reviewQuotePrice}
+              lastOrder={lastOrder}
+              submitOrder={submitOrder}
+              orderBusy={orderBusy}
+              orderMessage={orderMessage}
+              addWatch={addWatch}
+              createAlert={createAlert}
+              goPortfolio={() => setTab("portfolio")}
             />
-          </Pressable>
-        );
-      })}
-    </Section>
-  );
-}
-
-function Trade(props: {
-  symbol: string;
-  setSymbol: (v: string) => void;
-  qty: string;
-  setQty: (v: string) => void;
-  side: "buy" | "sell";
-  setSide: (v: "buy" | "sell") => void;
-  orderType: "market" | "limit";
-  setOrderType: (v: "market" | "limit") => void;
-  limitPrice: string;
-  setLimitPrice: (v: string) => void;
-  quote?: Quote;
-  chartBars: ChartBar[];
-  chartRange: ChartRange;
-  setChartRange: (v: ChartRange) => void;
-  ownedQty: number;
-  cash: number;
-  loadQuote: () => void;
-  submit: () => void;
-  busy: boolean;
-}) {
-  const change = props.quote?.change ?? (props.quote?.prevClose ? props.quote.price - props.quote.prevClose : null);
-  const changePct = props.quote?.changePercent ?? (props.quote?.prevClose ? ((props.quote.price - props.quote.prevClose) / props.quote.prevClose) * 100 : null);
-  const up = (change ?? 0) >= 0;
-
-  return (
-    <>
-      <Card>
-        <Text style={label}>Order ticket</Text>
-        <Input placeholder="Symbol" value={props.symbol} onChangeText={props.setSymbol} autoCapitalize="characters" />
-        <Button label="Refresh quote" onPress={props.loadQuote} variant="ghost" />
-        <Text style={hero}>{props.quote ? usd(props.quote.price) : "--"}</Text>
-        <Text style={{ color: change == null ? colors.muted : up ? colors.green : colors.red, fontWeight: "800", fontSize: 15 }}>
-          {change == null ? "Waiting for live quote" : `${signedUsd(change)} (${signedPct(changePct)})`}
-        </Text>
-        <Text style={tiny}>{props.quote?.exchange || "Live market data"}{props.quote?.updatedAt ? `  •  ${timeLabel(props.quote.updatedAt)}` : ""}</Text>
-        <Segment value={props.side} options={["buy", "sell"]} onChange={(v) => props.setSide(v as "buy" | "sell")} />
-        <Segment value={props.orderType} options={["market", "limit"]} onChange={(v) => props.setOrderType(v as "market" | "limit")} />
-        <Input placeholder="Quantity" value={props.qty} onChangeText={props.setQty} keyboardType="decimal-pad" />
-        {props.orderType === "limit" && <Input placeholder="Limit price" value={props.limitPrice} onChangeText={props.setLimitPrice} keyboardType="decimal-pad" />}
-        <Text style={muted}>Cash {usd(props.cash)} | Owned {props.ownedQty}</Text>
-        <Button label={props.busy ? "Submitting..." : `${props.side.toUpperCase()} ${props.symbol.toUpperCase()}`} onPress={props.submit} variant={props.side === "sell" ? "danger" : "primary"} disabled={props.busy} />
-      </Card>
-
-      <Card>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <Text style={{ color: colors.text, fontSize: 20, fontWeight: "900" }}>Chart</Text>
-          <SegmentCompact value={props.chartRange} options={chartRanges} onChange={(value) => props.setChartRange(value as ChartRange)} />
+          ) : tab === "compete" ? (
+            <CompeteScreen entries={leaderboard} currentAccountId={me?.account?.id} />
+          ) : profileView === "admin" ? (
+            <AdminScreen data={adminData} loading={adminLoading} error={adminError} back={() => setProfileView("settings")} runAction={runAdminAction} />
+          ) : (
+            <ProfileScreen
+              me={me}
+              keys={keys}
+              newSecret={newSecret}
+              createKey={createKey}
+              deleteAccount={deleteAccount}
+              pickAvatar={pickAvatar}
+              signOut={signOut}
+              openAdmin={openAdmin}
+              themePreference={themePreference}
+              setThemePreference={setThemePreference}
+              busy={busy}
+            />
+          )}
         </View>
-        <MiniChart bars={props.chartBars} positive={up} />
-      </Card>
-
-      <Grid items={[
-        ["Market Cap", compactNumber(props.quote?.marketCap)],
-        ["P/E", formatMetric(props.quote?.trailingPE, 2)],
-        ["Forward P/E", formatMetric(props.quote?.forwardPE, 2)],
-        ["EPS", props.quote?.epsTrailingTwelveMonths == null ? "--" : usd(props.quote.epsTrailingTwelveMonths)],
-        ["Open", props.quote?.open == null ? "--" : usd(props.quote.open)],
-        ["Volume", compactNumber(props.quote?.volume)],
-        ["Avg Volume", compactNumber(props.quote?.averageVolume)],
-        ["52W Range", rangeLabel(props.quote?.yearLow, props.quote?.yearHigh)],
-      ]} />
-    </>
-  );
-}
-
-function Leaders({ leaders }: { leaders: Leader[] }) {
-  return (
-    <Section title="Leaderboard">
-      {leaders.map((l, index) => (
-        <Row
-          key={l.account_id}
-          left={`#${index + 1} ${l.display_name}`}
-          sub={usd(l.equity)}
-          right={signedPct(l.return_pct)}
-          tone={l.return_pct >= 0 ? colors.green : colors.red}
-        />
-      ))}
-    </Section>
-  );
-}
-
-function Keys({ keys, createKey, newSecret }: { keys: ApiKey[]; createKey: () => void; newSecret: string | null }) {
-  return (
-    <Section title="API keys">
-      <Button label="Generate bot key" onPress={createKey} />
-      {newSecret && <Text style={good} selectable>{newSecret}</Text>}
-      {keys.map((k) => <Row key={k.id} left={k.label || "Trading bot"} sub={k.key_id} right={k.revoked_at ? "Revoked" : "Active"} />)}
-    </Section>
-  );
-}
-
-function Shell({ children }: { children: ReactNode }) {
-  return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 22, gap: 14, backgroundColor: colors.bg }}><StatusBar style="light" />{children}</ScrollView>;
-}
-
-function Card({ children }: { children: ReactNode }) {
-  return <View style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 16, gap: 12 }}>{children}</View>;
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return <Card><Text style={{ color: colors.text, fontSize: 20, fontWeight: "900" }}>{title}</Text>{children}</Card>;
-}
-
-function Grid({ items }: { items: string[][] }) {
-  return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>{items.map(([k, v]) => <View key={k} style={{ width: "48%", backgroundColor: colors.elevated, borderRadius: 12, padding: 12, gap: 6 }}><Text style={label}>{k}</Text><Text style={value} selectable>{v}</Text></View>)}</View>;
-}
-
-function Row({ left, sub, right, tone = colors.text }: { left: string; sub?: string; right?: string; tone?: string }) {
-  return <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 8 }}><View style={{ flex: 1 }}><Text style={value} selectable>{left}</Text>{sub && <Text style={muted} selectable>{sub}</Text>}</View>{right && <Text style={[value, { color: tone, textAlign: "right" }]} selectable>{right}</Text>}</View>;
-}
-
-function Input(props: ComponentProps<typeof TextInput>) {
-  return <TextInput {...props} placeholderTextColor={colors.muted} style={{ color: colors.text, backgroundColor: colors.elevated, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 }} />;
-}
-
-function Button({ label, onPress, disabled, variant = "primary" }: { label: string; onPress: () => void; disabled?: boolean; variant?: "primary" | "ghost" | "danger" }) {
-  const bg = variant === "ghost" ? colors.elevated : variant === "danger" ? colors.red : colors.green;
-  return <Pressable disabled={disabled} onPress={onPress} style={{ backgroundColor: bg, opacity: disabled ? 0.5 : 1, borderRadius: 12, padding: 14, alignItems: "center" }}><Text style={{ color: variant === "primary" ? "#000" : colors.text, fontWeight: "900" }}>{label}</Text></Pressable>;
-}
-
-function Segment({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
-  return <View style={{ flexDirection: "row", backgroundColor: colors.elevated, borderRadius: 12, padding: 4, gap: 4 }}>{options.map((o) => <Pressable key={o} onPress={() => onChange(o)} style={{ flex: 1, padding: 10, borderRadius: 9, backgroundColor: value === o ? colors.text : "transparent" }}><Text style={{ color: value === o ? "#000" : colors.text, textAlign: "center", fontWeight: "800" }}>{o}</Text></Pressable>)}</View>;
-}
-
-function SegmentCompact({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
-  return <View style={{ flexDirection: "row", backgroundColor: colors.elevated, borderRadius: 12, padding: 4, gap: 4 }}>{options.map((o) => <Pressable key={o} onPress={() => onChange(o)} style={{ paddingHorizontal: 9, paddingVertical: 8, borderRadius: 8, backgroundColor: value === o ? colors.blue : "transparent" }}><Text style={{ color: colors.text, textAlign: "center", fontWeight: "800", fontSize: 11 }}>{o}</Text></Pressable>)}</View>;
-}
-
-function MiniChart({ bars, positive }: { bars: ChartBar[]; positive: boolean }) {
-  if (!bars.length) {
-    return <View style={{ height: 160, alignItems: "center", justifyContent: "center" }}><Text style={muted}>Chart loading.</Text></View>;
-  }
-
-  const sampled = bars.length > 36 ? bars.filter((_, index) => index % Math.ceil(bars.length / 36) === 0) : bars;
-  const closes = sampled.map((bar) => bar.c);
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const span = Math.max(max - min, 0.0001);
-  const tone = positive ? colors.green : colors.red;
-
-  return (
-    <View style={{ gap: 10 }}>
-      <View style={{ height: 160, justifyContent: "flex-end", flexDirection: "row", gap: 2, alignItems: "flex-end" }}>
-        {sampled.map((bar, index) => {
-          const height = 14 + ((bar.c - min) / span) * 120;
-          return <View key={`${bar.t}-${index}`} style={{ flex: 1, height, backgroundColor: tone, borderRadius: 999, opacity: 0.85 }} />;
-        })}
-      </View>
-      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Text style={tiny}>{usd(min)}</Text>
-        <Text style={tiny}>{usd(max)}</Text>
-      </View>
+      </ScrollView>
+      <BottomNav tab={tab} setTab={setTab} />
     </View>
   );
 }
 
-function mergeQuotes(prev: Record<string, Quote>, next: Quote[]) {
-  const merged = { ...prev };
-  for (const quote of next) {
-    merged[quote.symbol.toUpperCase()] = {
-      ...(merged[quote.symbol.toUpperCase()] || {}),
-      ...quote,
-    };
-  }
-  return merged;
+function symbolsFor(me: Me, selectedSymbol: string) {
+  return Array.from(new Set([
+    selectedSymbol,
+    ...starterSymbols,
+    ...(me.positions ?? []).map((p) => p.symbol),
+    ...(me.watchlist ?? []).map((w) => w.symbol),
+  ].filter(Boolean).map((symbol) => symbol.toUpperCase()))).slice(0, 25);
 }
 
-const usd = (n: number) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const signedUsd = (n: number | null | undefined) => n == null ? "--" : `${n >= 0 ? "+" : "-"}${usd(Math.abs(n))}`;
-const signedPct = (n: number | null | undefined) => n == null ? "--" : `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
-const compactNumber = (n: number | null | undefined) => n == null ? "--" : Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 2 }).format(n);
-const formatMetric = (n: number | null | undefined, digits = 2) => n == null ? "--" : n.toFixed(digits);
-const rangeLabel = (low: number | null | undefined, high: number | null | undefined) => low == null || high == null ? "--" : `${usd(low)} - ${usd(high)}`;
-const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
-
-const title = { color: colors.text, fontSize: 32, fontWeight: "900" as const };
-const hero: TextStyle = { color: colors.text, fontSize: 40, fontWeight: "900", fontVariant: ["tabular-nums"] };
-const label = { color: colors.muted, fontSize: 11, fontWeight: "800" as const, textTransform: "uppercase" as const };
-const value: TextStyle = { color: colors.text, fontSize: 15, fontWeight: "800", fontVariant: ["tabular-nums"] };
-const muted = { color: colors.muted, fontSize: 14 };
-const tiny = { color: colors.muted, fontSize: 11 };
-const link = { color: colors.green, fontSize: 14, fontWeight: "900" as const };
-const bad = { color: colors.red, backgroundColor: "#2b1113", borderRadius: 12, padding: 12, fontWeight: "700" as const };
-const good = { color: colors.green, backgroundColor: "#0b2416", borderRadius: 12, padding: 12, fontWeight: "700" as const };
-const nav = { position: "absolute" as const, left: 12, right: 12, bottom: 24, flexDirection: "row" as const, gap: 6, backgroundColor: "#090b0dcc", borderRadius: 18, padding: 8, borderColor: colors.border, borderWidth: 1 };
-const navItem = { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center" as const };
+function normalizeQuote(raw: Quote, fallbackSymbol: string): Quote {
+  return {
+    ...raw,
+    symbol: (raw.symbol ?? fallbackSymbol).toUpperCase(),
+    price: Number(raw.price),
+    prevClose: raw.prevClose == null ? null : Number(raw.prevClose),
+    change: raw.change == null ? null : Number(raw.change),
+    changePercent: raw.changePercent == null ? null : Number(raw.changePercent),
+    marketCap: raw.marketCap == null ? null : Number(raw.marketCap),
+    trailingPE: raw.trailingPE == null ? null : Number(raw.trailingPE),
+    forwardPE: raw.forwardPE == null ? null : Number(raw.forwardPE),
+    volume: raw.volume == null ? null : Number(raw.volume),
+    averageVolume: raw.averageVolume == null ? null : Number(raw.averageVolume),
+    open: raw.open == null ? null : Number(raw.open),
+    dayHigh: raw.dayHigh == null ? null : Number(raw.dayHigh),
+    dayLow: raw.dayLow == null ? null : Number(raw.dayLow),
+    yearHigh: raw.yearHigh == null ? null : Number(raw.yearHigh),
+    yearLow: raw.yearLow == null ? null : Number(raw.yearLow),
+  };
+}

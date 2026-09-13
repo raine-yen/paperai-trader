@@ -1,28 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fetchYahooPrices } from "@/lib/prices";
+import { getSessionUser } from "@/lib/session-user";
+import { calculateInvestedPerformance } from "@/lib/performance";
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const competitionId = url.searchParams.get("competition_id");
-
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const db = supabaseAdmin();
-
-  // Fetch all active accounts (optionally filtered by competition)
-  let accountQuery = db
+  const { data: viewerAccount } = await db
     .from("accounts")
-    .select("id, user_id, display_name, cash, starting_cash, competition_id, equity")
-    .eq("status", "active")
-    .limit(100);
+    .select("competition_id")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!viewerAccount) return NextResponse.json({ entries: [] });
 
-  if (competitionId) accountQuery = accountQuery.eq("competition_id", competitionId);
+  const accountQuery = db
+    .from("accounts")
+    .select("id, display_name, cash, starting_cash, competition_id, equity")
+    .eq("status", "active")
+    .eq("competition_id", viewerAccount.competition_id)
+    .limit(100);
 
   const { data: accounts, error: acctErr } = await accountQuery;
   if (acctErr) return NextResponse.json({ error: acctErr.message }, { status: 500 });
   if (!accounts || accounts.length === 0) return NextResponse.json({ entries: [] });
-
-  const { data: { users } } = await db.auth.admin.listUsers({ perPage: 1000 });
-  const userEmailMap = new Map(users.map((u) => [u.id, u.email ?? "unknown"]));
 
   // Fetch all positions for these accounts (include avg_entry_price as price fallback)
   const accountIds = (accounts as { id: string }[]).map((a) => a.id);
@@ -48,16 +52,18 @@ export async function GET(req: NextRequest) {
 
   // Build account_id -> positions market value map
   // Falls back to avg_entry_price when live price is unavailable so equity never shows as just cash
-  const posValueByAccount = new Map<string, number>();
+  const positionsByAccount = new Map<string, Array<{ qty: number; avg_entry_price: number; current_price: number }>>();
   for (const p of posRows) {
     const priceData = priceMap.get(p.symbol) as { price: number } | undefined;
     const price = priceData ? priceData.price : Number(p.avg_entry_price);
-    posValueByAccount.set(p.account_id, (posValueByAccount.get(p.account_id) ?? 0) + Number(p.qty) * price);
+    positionsByAccount.set(p.account_id, [
+      ...(positionsByAccount.get(p.account_id) ?? []),
+      { qty: Number(p.qty), avg_entry_price: Number(p.avg_entry_price), current_price: price },
+    ]);
   }
 
   type AccountRow = {
     id: string;
-    user_id?: string;
     display_name: string;
     cash: number;
     starting_cash: number;
@@ -73,22 +79,21 @@ export async function GET(req: NextRequest) {
   // Compute live equity and return_pct, then sort
   const entries = (accounts as AccountRow[])
     .map((a) => {
-      const posValue = posValueByAccount.get(a.id) ?? 0;
+      const performance = calculateInvestedPerformance(positionsByAccount.get(a.id) ?? []);
+      const posValue = performance.market_value;
       const liveEquity = Number(a.cash) + posValue;
-      const startingCash = Number(a.starting_cash);
-      const returnPct = startingCash > 0 ? ((liveEquity - startingCash) / startingCash) * 100 : 0;
-      const email = userEmailMap.get(a.user_id ?? "") ?? "unknown";
       const duplicateName = (duplicateNameCounts.get(a.display_name.trim().toLowerCase()) ?? 0) > 1;
-      const emailLabel = email.includes("@") ? email.split("@")[0] : email;
+      const safeSuffix = a.id.replace(/-/g, "").slice(0, 4).toUpperCase();
       return {
         account_id: a.id,
         competition_id: a.competition_id,
-        display_name: duplicateName ? `${a.display_name} (${emailLabel})` : a.display_name,
+        display_name: duplicateName ? `${a.display_name} #${safeSuffix}` : a.display_name,
         raw_display_name: a.display_name,
-        email,
         equity: liveEquity,
-        starting_cash: startingCash,
-        return_pct: returnPct,
+        starting_cash: Number(a.starting_cash),
+        cost_basis: performance.cost_basis,
+        gain_amount: performance.gain_amount,
+        return_pct: performance.growth_pct,
       };
     })
     .sort((a, b) => b.return_pct - a.return_pct);

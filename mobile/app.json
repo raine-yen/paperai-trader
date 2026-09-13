@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Paper Trader",
+    "name": "PaperAI Trader",
     "slug": "paper-trader-mobile",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon-v2.png",
+    "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash-icon-v2.png",
       "resizeMode": "contain",
       "backgroundColor": "#050607"
     },
@@ -15,12 +15,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.papertrader.mobile",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "PaperAI Trader uses your photo library so you can choose a profile picture."
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon-v2.png",
         "backgroundColor": "#050607"
       },
       "predictiveBackGestureEnabled": false
@@ -29,7 +30,9 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-image-picker",
+      "expo-font"
     ],
     "extra": {
       "apiUrl": "https://paper-trader-lac.vercel.app",

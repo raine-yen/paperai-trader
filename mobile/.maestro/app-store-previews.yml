@@ -1,0 +1,70 @@
+appId: com.papertrader.mobile
+---
+- launchApp:
+    clearState: true
+
+- extendedWaitUntil:
+    visible:
+      id: screen-portfolio-ready
+    timeout: 30000
+- takeScreenshot: "01-portfolio"
+
+- tapOn:
+    id: nav-discover
+- extendedWaitUntil:
+    visible:
+      id: screen-discover-ready
+    timeout: 30000
+- tapOn:
+    id: ticker-AAPL
+- extendedWaitUntil:
+    visible:
+      id: quote-AAPL-ready
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: trade-buy-AAPL
+    direction: DOWN
+    timeout: 20000
+    speed: 60
+- tapOn:
+    id: trade-buy-AAPL
+- extendedWaitUntil:
+    visible:
+      id: screen-order-configure
+    timeout: 30000
+- assertVisible:
+    id: order-amount
+- scrollUntilVisible:
+    element:
+      id: order-review
+    direction: DOWN
+    timeout: 20000
+    speed: 60
+- tapOn:
+    id: order-review
+- extendedWaitUntil:
+    visible:
+      id: screen-order-review-ready
+    timeout: 30000
+- assertVisible:
+    id: order-confirm
+- takeScreenshot: "02-research-and-review"
+
+- tapOn:
+    id: nav-portfolio
+- extendedWaitUntil:
+    visible:
+      id: screen-portfolio-ready
+    timeout: 30000
+- tapOn:
+    id: nav-compete
+- extendedWaitUntil:
+    visible:
+      id: screen-competition-ready
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: leaderboard-ready
+    timeout: 30000
+- takeScreenshot: "03-club-rankings"
