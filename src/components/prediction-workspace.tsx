@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowLeft, Loader2, Search, TrendingDown, TrendingUp, X } from "lucide-react";
+import { ArrowLeft, Filter, Loader2, Search, TrendingDown, TrendingUp, X } from "lucide-react";
 import { FaceIdSuccessMark } from "@/components/order-flow";
 import { cn, formatUSD } from "@/lib/utils";
 import { formatPredictionHistoryLabel, predictionCategory, predictionCountdown, predictionOutcomeLabels, predictionSportCategory } from "@/lib/prediction-presentation";
 
 type Outcome = "yes" | "no";
 type TradeMode = "buy" | "sell";
+type SportsSort = "soonest" | "latest" | "popular";
 
 type PredictionMarket = {
   id: string;
@@ -66,6 +67,11 @@ const RANGE_DAYS = [
 ] as const;
 
 const SPORT_FILTERS = ["All sports", "Basketball", "Football", "Baseball", "Soccer", "Hockey", "Tennis", "Combat", "Motorsports"];
+const SPORTS_SORT_OPTIONS: Array<{ value: SportsSort; label: string; description: string }> = [
+  { value: "soonest", label: "Closing soon", description: "Closest upcoming resolution first" },
+  { value: "latest", label: "Closing later", description: "Farthest resolution first" },
+  { value: "popular", label: "Most popular", description: "Highest 24-hour volume first" },
+];
 
 const fallbackHistory = (price: number) => [
   { t: "Open", p: Math.max(0.01, price - 0.025) },
@@ -118,6 +124,26 @@ function endLabel(endDate: string | null) {
   return Number.isNaN(date.getTime()) ? endDate : date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/** Pending sports events should lead with the next real opportunity. Catalog
+ * rows whose dates have passed or are unavailable stay below dated events, so
+ * a stale row cannot displace an upcoming game at the top of discovery. */
+function sortSportsMarkets(markets: PredictionMarket[], sort: SportsSort): PredictionMarket[] {
+  if (sort === "popular") return [...markets].sort((a, b) => Number(b.volume24hr ?? 0) - Number(a.volume24hr ?? 0));
+  const now = Date.now();
+  const pendingEndTime = (market: PredictionMarket) => {
+    const time = market.endDate ? new Date(market.endDate).getTime() : NaN;
+    return Number.isFinite(time) && time > now ? time : null;
+  };
+  return [...markets].sort((a, b) => {
+    const aTime = pendingEndTime(a);
+    const bTime = pendingEndTime(b);
+    if (aTime == null && bTime == null) return Number(b.volume24hr ?? 0) - Number(a.volume24hr ?? 0);
+    if (aTime == null) return 1;
+    if (bTime == null) return -1;
+    return sort === "soonest" ? aTime - bTime : bTime - aTime;
+  });
+}
+
 export function PredictionWorkspace() {
   const pageSize = 50;
   const searchParams = useSearchParams();
@@ -133,6 +159,8 @@ export function PredictionWorkspace() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sportFilter, setSportFilter] = useState("All sports");
+  const [sportsSort, setSportsSort] = useState<SportsSort>("soonest");
+  const [showSportsSort, setShowSportsSort] = useState(false);
   const [settlementNote, setSettlementNote] = useState("");
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
@@ -225,9 +253,11 @@ export function PredictionWorkspace() {
   const orderedMarkets = useMemo(() => [...markets].sort((a, b) => Number(b.volume24hr ?? 0) - Number(a.volume24hr ?? 0)), [markets]);
   const categories = useMemo(() => ["All", ...categoryOrder.filter((item) => orderedMarkets.some((market) => displayCategory(market) === item)), ...Array.from(new Set(orderedMarkets.map(displayCategory))).filter((item) => !categoryOrder.includes(item))], [orderedMarkets]);
   const categoryMarkets = category === "All" ? orderedMarkets : orderedMarkets.filter((market) => displayCategory(market) === category);
-  const visibleMarkets = category === "Sports" && sportFilter !== "All sports"
+  const filteredSportsMarkets = category === "Sports" && sportFilter !== "All sports"
     ? categoryMarkets.filter((market) => predictionSportCategory(market.question, market.tags) === sportFilter)
     : categoryMarkets;
+  const visibleMarkets = category === "Sports" ? sortSportsMarkets(filteredSportsMarkets, sportsSort) : filteredSportsMarkets;
+  const sportsSortLabel = SPORTS_SORT_OPTIONS.find((option) => option.value === sportsSort)?.label ?? "Closing soon";
   const selected = markets.find((market) => market.id === selectedId) ?? null;
 
   if (selected) {
@@ -249,7 +279,7 @@ export function PredictionWorkspace() {
       {settlementNote ? <p role="status" className="mt-4 border border-accent-green/40 bg-accent-green/10 p-3 text-sm text-accent-green">{settlementNote}</p> : null}
 
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Prediction category">
-        {categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} onClick={() => { setCategory(item); if (item !== "Sports") setSportFilter("All sports"); }} className={cn("shrink-0 min-h-11 rounded-full px-3.5 py-1.5 text-xs font-bold transition", category === item ? "bg-accent-green text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}
+        {categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} onClick={() => { setCategory(item); if (item !== "Sports") { setSportFilter("All sports"); setShowSportsSort(false); } }} className={cn("shrink-0 min-h-11 rounded-full px-3.5 py-1.5 text-xs font-bold transition", category === item ? "bg-accent-green text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -257,7 +287,17 @@ export function PredictionWorkspace() {
         {searchQuery ? <span className="text-xs text-gray-500">Search results</span> : null}
       </div>
 
-      {category === "Sports" ? <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Sports filters">{SPORT_FILTERS.map((item) => <button key={item} type="button" aria-pressed={sportFilter === item} onClick={() => setSportFilter(item)} className={cn("shrink-0 min-h-9 rounded-full px-3 py-1 text-xs font-bold transition", sportFilter === item ? "bg-white text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}</div> : null}
+      {category === "Sports" ? <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Sports filters">
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1" role="group" aria-label="Sport type">{SPORT_FILTERS.map((item) => <button key={item} type="button" aria-pressed={sportFilter === item} onClick={() => setSportFilter(item)} className={cn("shrink-0 min-h-9 rounded-full px-3 py-1 text-xs font-bold transition", sportFilter === item ? "bg-white text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}</div>
+        <div className="relative shrink-0">
+          <button type="button" aria-label={`Sort sports markets: ${sportsSortLabel}`} aria-expanded={showSportsSort} aria-controls="sports-sort-menu" onClick={() => setShowSportsSort((open) => !open)} className="flex min-h-11 items-center gap-2 rounded-full border border-bg-border bg-bg-soft px-3 text-xs font-bold text-gray-200 transition hover:border-gray-500 hover:text-white">
+            <Filter aria-hidden className="h-4 w-4" /><span className="hidden sm:inline">{sportsSortLabel}</span>
+          </button>
+          {showSportsSort ? <div id="sports-sort-menu" role="menu" aria-label="Sort sports markets" className="absolute right-0 z-20 mt-2 w-64 overflow-hidden border border-bg-border bg-bg-elevated p-1 shadow-xl">
+            {SPORTS_SORT_OPTIONS.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={sportsSort === option.value} onClick={() => { setSportsSort(option.value); setShowSportsSort(false); }} className={cn("flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:bg-bg-soft", sportsSort === option.value && "bg-accent-green/10")}> <span><strong className="block text-xs text-white">{option.label}</strong><small className="block text-[11px] font-normal text-gray-500">{option.description}</small></span><span aria-hidden className={cn("h-2 w-2 rounded-full", sportsSort === option.value ? "bg-accent-green" : "border border-gray-500")} /></button>)}
+          </div> : null}
+        </div>
+      </div> : null}
 
       {account?.prediction_positions?.length ? (
         <section className="mt-6" aria-labelledby="your-prediction-positions">
