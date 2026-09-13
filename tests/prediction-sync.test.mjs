@@ -9,6 +9,7 @@ import {
   persistCatalogRows,
   hydratePredictionMarketPrices,
   catalogNeedsQuoteRepair,
+  fetchUpstreamPredictionMarketState,
   liveMidpoint,
 } from "../src/lib/prediction-sync.ts";
 
@@ -62,6 +63,14 @@ test("parseGammaMarket keeps named binary outcomes for head-to-head markets", ()
   });
   assert.equal(row?.yes_label, "Aryna Sabalenka");
   assert.equal(row?.no_label, "Elena Rybakina");
+});
+
+test("upstream status closes a stale catalog market as soon as Polymarket resolves it", async () => {
+  const state = await fetchUpstreamPredictionMarketState(
+    { event_slug: "wta-sabalen-rybakin-2026-09-12", url: null },
+    async () => new Response(JSON.stringify({ active: true, closed: true, acceptingOrders: false, umaResolutionStatus: "resolved", outcomePrices: '["0", "1"]' })),
+  );
+  assert.deepEqual(state, { tradable: false, closed: true, resolved: true, resolvedOutcome: "no" });
 });
 
 test("parseGammaMarket retains valid upstream outcome-price fallbacks", () => {

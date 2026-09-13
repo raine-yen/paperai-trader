@@ -42,6 +42,15 @@ interface GammaMarket {
   outcomePrices?: string | Array<string | number>;
   outcomes?: string | Array<string | number>;
   tags?: string[] | string;
+  acceptingOrders?: boolean;
+  umaResolutionStatus?: string;
+}
+
+export interface UpstreamPredictionMarketState {
+  tradable: boolean;
+  closed: boolean;
+  resolved: boolean;
+  resolvedOutcome: "yes" | "no" | null;
 }
 
 export function price01(value: unknown): number | null {
@@ -64,6 +73,41 @@ function parseJsonArray(value: unknown): string[] {
     return Array.isArray(parsed) ? parseJsonArray(parsed) : [];
   } catch {
     return [];
+  }
+}
+
+function marketSlug(row: Pick<PredictionMarketRow, "event_slug" | "url">): string | null {
+  if (row.event_slug) return row.event_slug;
+  if (!row.url) return null;
+  const match = row.url.match(/\/event\/([^/?#]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+/** Read one market directly from Gamma before accepting an order. Catalog rows
+ * can lag after a sports result, so a stored `active` flag is not sufficient. */
+export async function fetchUpstreamPredictionMarketState(
+  row: Pick<PredictionMarketRow, "event_slug" | "url">,
+  fetchImpl: FetchLike = fetch,
+): Promise<UpstreamPredictionMarketState | null> {
+  const slug = marketSlug(row);
+  if (!slug) return null;
+  try {
+    const response = await fetchImpl(`https://gamma-api.polymarket.com/markets/slug/${encodeURIComponent(slug)}`, { headers: POLYMARKET_HEADERS });
+    if (!response.ok) return null;
+    const raw = (await response.json()) as GammaMarket;
+    const prices = parseJsonArray(raw.outcomePrices);
+    const resolvedOutcome = raw.umaResolutionStatus === "resolved"
+      ? Number(prices[0]) === 1 ? "yes" : Number(prices[1]) === 1 ? "no" : null
+      : null;
+    const closed = raw.closed === true || raw.acceptingOrders === false || raw.umaResolutionStatus === "resolved";
+    return {
+      tradable: raw.active !== false && !closed,
+      closed,
+      resolved: raw.umaResolutionStatus === "resolved",
+      resolvedOutcome,
+    };
+  } catch {
+    return null;
   }
 }
 

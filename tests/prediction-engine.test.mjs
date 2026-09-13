@@ -79,7 +79,9 @@ function makeDb(state) {
   return { from: (t) => new FakeQ(t, state) };
 }
 
-const fetchNoClob = async () => new Response("nope", { status: 500 });
+const fetchNoClob = async (url) => url.includes("gamma-api.polymarket.com/markets/slug/")
+  ? new Response(JSON.stringify({ active: true, closed: false, acceptingOrders: true }))
+  : new Response("nope", { status: 500 });
 
 function baseState() {
   return {
@@ -123,6 +125,21 @@ test("buy rejects over-stake", async () => {
   assert.equal(state.accounts[0].cash, 5);
 });
 
+test("buy rejects a market that Polymarket has closed even when the catalog is stale", async () => {
+  const state = baseState();
+  const closedUpstream = async (url) => url.includes("gamma-api.polymarket.com/markets/slug/")
+    ? new Response(JSON.stringify({ active: true, closed: true, acceptingOrders: false, umaResolutionStatus: "resolved", outcomePrices: '["0", "1"]' }))
+    : new Response("nope", { status: 500 });
+  const r = await buyPredictionShares(
+    { accountId: "acct-1", marketId: "m1", outcome: "no", stakeUsd: 10 },
+    { db: makeDb(state), fetchImpl: closedUpstream },
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.error ?? "", /resolved/);
+  assert.equal(state.accounts[0].cash, 1000);
+  assert.equal(state.prediction_markets[0].status, "resolved");
+});
+
 test("repeat buy merges at weighted avg cost", async () => {
   const state = baseState();
   await buyPredictionShares({ accountId: "acct-1", marketId: "m1", outcome: "yes", stakeUsd: 10 }, { db: makeDb(state), fetchImpl: fetchNoClob });
@@ -152,7 +169,9 @@ test("idempotent replay returns original without double debit", async () => {
 test("partial sell credits proceeds and computes realized pnl", async () => {
   const state = baseState();
   await buyPredictionShares({ accountId: "acct-1", marketId: "m1", outcome: "yes", stakeUsd: 10 }, { db: makeDb(state), fetchImpl: fetchNoClob });
-  const clob = async () => new Response(JSON.stringify({ midpoint: "0.6" }));
+  const clob = async (url) => url.includes("gamma-api.polymarket.com/markets/slug/")
+    ? new Response(JSON.stringify({ active: true, closed: false, acceptingOrders: true }))
+    : new Response(JSON.stringify({ midpoint: "0.6" }));
   const r = await sellPredictionShares(
     { accountId: "acct-1", marketId: "m1", outcome: "yes", shares: 10, clientOrderId: "s1" },
     { db: makeDb(state), fetchImpl: clob },

@@ -1,7 +1,7 @@
 // Paper prediction trading engine. Follows src/lib/engine.ts conventions:
 // service-role db handle, explicit cash checks, idempotency via client_order_id.
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { liveMidpoint, type PredictionMarketRow } from "@/lib/prediction-sync";
+import { fetchUpstreamPredictionMarketState, liveMidpoint, type PredictionMarketRow } from "@/lib/prediction-sync";
 import {
   isOutcome,
   quoteBuy,
@@ -77,6 +77,16 @@ export async function buyPredictionShares(input: PredictionBuyInput, deps: Engin
   if (market.status !== "active") return { ok: false, error: "market is not active" };
 
   const row = market as PredictionMarketRow;
+  const upstream = await fetchUpstreamPredictionMarketState(row, fetchImpl);
+  if (!upstream) return { ok: false, error: "market status could not be verified; try again shortly" };
+  if (!upstream.tradable) {
+    await db.from("prediction_markets").update({
+      status: upstream.resolved ? "resolved" : "closed",
+      resolved_outcome: upstream.resolvedOutcome,
+      updated_at: new Date().toISOString(),
+    }).eq("id", input.marketId);
+    return { ok: false, error: upstream.resolved ? "market resolved; trading is closed" : "market closed; trading is unavailable" };
+  }
   const tokenId = outcome === "yes" ? row.yes_token_id : row.no_token_id;
   const fallback = outcome === "yes" ? row.yes_price : row.no_price;
   const price = await liveMidpoint(tokenId, fetchImpl, fallback);
@@ -242,6 +252,16 @@ export async function sellPredictionShares(input: PredictionSellInput, deps: Eng
   if (market.status === "resolved") return { ok: false, error: "market already resolved; awaiting settlement" };
 
   const row = market as PredictionMarketRow;
+  const upstream = await fetchUpstreamPredictionMarketState(row, fetchImpl);
+  if (!upstream) return { ok: false, error: "market status could not be verified; try again shortly" };
+  if (!upstream.tradable) {
+    await db.from("prediction_markets").update({
+      status: upstream.resolved ? "resolved" : "closed",
+      resolved_outcome: upstream.resolvedOutcome,
+      updated_at: new Date().toISOString(),
+    }).eq("id", input.marketId);
+    return { ok: false, error: upstream.resolved ? "market resolved; awaiting settlement" : "market closed; trading is unavailable" };
+  }
   const tokenId = outcome === "yes" ? row.yes_token_id : row.no_token_id;
   const fallback = outcome === "yes" ? row.yes_price : row.no_price;
   const price = await liveMidpoint(tokenId, fetchImpl, fallback);

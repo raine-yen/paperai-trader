@@ -52,6 +52,13 @@ type Receipt = {
   action: "buy" | "sell";
 };
 
+type OfficialMarketState = {
+  tradable: boolean;
+  closed: boolean;
+  resolved: boolean;
+  winnerLabel: string | null;
+};
+
 const RANGE_DAYS = [
   { label: "1D", days: 1 },
   { label: "1W", days: 7 },
@@ -296,6 +303,7 @@ function PredictionDetail({ market, account, onBack, onChanged }: { market: Pred
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [officialState, setOfficialState] = useState<OfficialMarketState | null>(null);
   const currentPrice = outcome === "yes" ? market.yesPrice : market.noPrice;
   const selectedLabel = outcomeLabel(market, outcome);
   const position = account?.prediction_positions.find((item) => item.market_id === market.id && item.outcome === outcome) ?? null;
@@ -316,10 +324,20 @@ function PredictionDetail({ market, account, onBack, onChanged }: { market: Pred
     return () => { alive = false; };
   }, [market.id, outcome, range]);
 
+  useEffect(() => {
+    setOfficialState(null);
+    let alive = true;
+    fetch(`/api/prediction-markets/${encodeURIComponent(market.id)}`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload: OfficialMarketState | null) => { if (alive) setOfficialState(payload); })
+      .catch(() => { if (alive) setOfficialState({ tradable: false, closed: false, resolved: false, winnerLabel: null }); });
+    return () => { alive = false; };
+  }, [market.id]);
+
   useEffect(() => { setAmount(isBuy ? "25" : ""); setReviewing(false); setError(""); }, [isBuy, outcome, market.id]);
 
   const chartData = history.length > 1 ? history : fallbackHistory(Number(currentPrice ?? 0.5));
-  const canReview = isBuy ? Boolean(currentPrice && parsedAmount > 0 && parsedAmount <= cash) : Boolean(currentPrice && estimatedShares > 0 && estimatedShares <= maxShares);
+  const canReview = officialState?.tradable === true && (isBuy ? Boolean(currentPrice && parsedAmount > 0 && parsedAmount <= cash) : Boolean(currentPrice && estimatedShares > 0 && estimatedShares <= maxShares));
 
   function chooseBuy(nextOutcome: Outcome) { setOutcome(nextOutcome); setMode("buy"); }
   function useMax() { setAmount(maxShares > 0 ? String(maxShares) : ""); }
@@ -372,6 +390,7 @@ function PredictionDetail({ market, account, onBack, onChanged }: { market: Pred
           <header className="border-b border-bg-border pb-6"><div className="flex gap-3"><span className="flex h-12 w-12 shrink-0 items-center justify-center bg-bg-elevated text-xs font-black text-accent-green">{categoryMark(displayCategory(market))}</span><div><p className="text-xs text-gray-500">{displayCategory(market)} · Resolves {endLabel(market.endDate)}</p><h1 className="mt-1 max-w-3xl text-3xl font-black leading-tight tracking-tight sm:text-4xl">{market.question}</h1></div></div><div className="mt-5 flex flex-wrap items-end gap-x-5 gap-y-2"><strong className="text-3xl font-black tabular-nums">{cents(market.yesPrice)} {outcomeLabel(market, "yes")}</strong><span className="inline-flex items-center gap-1 text-sm font-semibold text-accent-green"><TrendingUp className="h-4 w-4" /> {probability(market.yesPrice)} implied probability</span></div></header>
 
           <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500"><span>Vol {compactMoney(market.volume24hr)} 24h</span><span aria-hidden>·</span><span>{predictionCountdown(market.endDate)}</span></div>
+          {officialState?.tradable === false ? <div role="status" className="mt-4 border border-accent-yellow/50 bg-accent-yellow/10 p-3 text-sm text-accent-yellow">{officialState.resolved ? <>Official result: <strong>{officialState.winnerLabel ?? "resolved"}</strong>. This market is closed; eligible paper positions will settle from the official result.</> : "Trading is unavailable while Vanta verifies this market’s official status."}</div> : officialState === null ? <div role="status" className="mt-4 border border-bg-border bg-bg-soft p-3 text-sm text-gray-400">Checking the official market status before enabling trades.</div> : null}
 
           <section className="mt-8 border-y border-bg-border py-6" aria-label="Prediction probability history"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-bold tracking-[0.16em] text-gray-500">{selectedLabel.toUpperCase()} ODDS HISTORY</p><h2 className="mt-1 text-xl font-black">{cents(currentPrice)} · {probability(currentPrice)} implied probability</h2></div><div className="flex gap-1" role="tablist" aria-label="Prediction chart period">{RANGE_DAYS.map((item) => <button key={item.days} role="tab" aria-selected={range === item.days} type="button" onClick={() => setRange(item.days)} className={cn("min-h-9 px-3 text-xs font-bold", range === item.days ? "bg-accent-green text-black" : "border border-bg-border text-gray-400")}>{item.label}</button>)}</div></div><div className="vanta-pencil-chart mt-5 h-52" aria-label="Interactive outcome probability chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="predictionOdds" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="rgb(var(--color-accent))" stopOpacity={0.28} /><stop offset="100%" stopColor="rgb(var(--color-accent))" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="label" tick={{ fill: "rgb(var(--color-gray-500))", fontSize: 10 }} tickLine={false} axisLine={false} /><YAxis domain={[0, 1]} tickFormatter={(value) => `${Math.round(value * 100)}¢`} tick={{ fill: "rgb(var(--color-gray-500))", fontSize: 10 }} tickLine={false} axisLine={false} width={34} /><Tooltip formatter={(value) => [cents(Number(value)), `${selectedLabel} odds`]} contentStyle={{ background: "#101010", border: "1px solid #262626", borderRadius: 0 }} /><Area key={`${market.id}:${outcome}:${range}:${chartData.length}:${chartData.at(-1)?.t ?? ""}`} type="linear" dataKey="p" stroke="rgb(var(--color-accent))" strokeWidth={2} fill="url(#predictionOdds)" isAnimationActive={false} /></AreaChart></ResponsiveContainer></div></section>
 
