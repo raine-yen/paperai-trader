@@ -336,12 +336,12 @@ function MarketRow({ market, onOpen }: { market: PredictionMarket; onOpen: (id: 
         </span>
       </button>
       <span className="flex shrink-0 gap-2">
-        <button type="button" onClick={() => onOpen(market.id)} className="min-w-[84px] rounded-full border border-accent-green/60 bg-accent-green/10 px-3 py-2 text-center transition hover:bg-accent-green hover:text-black" aria-label={`Buy ${yesLabel} at ${cents(yes)} for ${market.question}`}>
-          <span className="block max-w-24 truncate text-[10px] font-bold leading-none text-accent-green">{yesLabel}</span>
+        <button type="button" onClick={() => onOpen(market.id)} className="w-24 rounded-full border border-accent-green/60 bg-accent-green/10 px-3 py-2 text-center transition hover:bg-accent-green hover:text-black" aria-label={`Buy ${yesLabel} at ${cents(yes)} for ${market.question}`} title={yesLabel}>
+          <span className="block w-full truncate text-[10px] font-bold leading-none text-accent-green">{yesLabel}</span>
           <strong className="mt-0.5 block text-sm leading-none tabular-nums">{cents(yes)}</strong>
         </button>
-        <button type="button" onClick={() => onOpen(market.id)} className="min-w-[84px] rounded-full border border-bg-border px-3 py-2 text-center transition hover:border-gray-400" aria-label={`Buy ${noLabel} at ${cents(no)} for ${market.question}`}>
-          <span className="block max-w-24 truncate text-[10px] font-bold leading-none text-gray-400">{noLabel}</span>
+        <button type="button" onClick={() => onOpen(market.id)} className="w-24 rounded-full border border-bg-border px-3 py-2 text-center transition hover:border-gray-400" aria-label={`Buy ${noLabel} at ${cents(no)} for ${market.question}`} title={noLabel}>
+          <span className="block w-full truncate text-[10px] font-bold leading-none text-gray-400">{noLabel}</span>
           <strong className="mt-0.5 block text-sm leading-none tabular-nums">{cents(no)}</strong>
         </button>
       </span>
