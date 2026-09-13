@@ -163,6 +163,7 @@ export function PredictionWorkspace() {
   const [showSportsSort, setShowSportsSort] = useState(false);
   const [settlementNote, setSettlementNote] = useState("");
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const sportsSortRef = useRef<HTMLDivElement | null>(null);
 
   const refresh = useCallback(async (forceQuotes = false, query = "") => {
     const meResponse = await fetch("/api/me", { cache: "no-store" });
@@ -245,6 +246,17 @@ export function PredictionWorkspace() {
   }, [hasMore, loading, loadingMore, loadMore]);
 
   useEffect(() => {
+    if (!showSportsSort) return;
+    const dismissOnOutsidePress = (event: PointerEvent) => {
+      if (event.target instanceof Node && !sportsSortRef.current?.contains(event.target)) setShowSportsSort(false);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setShowSportsSort(false); };
+    document.addEventListener("pointerdown", dismissOnOutsidePress);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => { document.removeEventListener("pointerdown", dismissOnOutsidePress); document.removeEventListener("keydown", dismissOnEscape); };
+  }, [showSportsSort]);
+
+  useEffect(() => {
     const marketId = searchParams.get("marketId");
     if (marketId && markets.some((market) => market.id === marketId)) setSelectedId(marketId);
   }, [markets, searchParams]);
@@ -289,7 +301,7 @@ export function PredictionWorkspace() {
 
       {category === "Sports" ? <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Sports filters">
         <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1" role="group" aria-label="Sport type">{SPORT_FILTERS.map((item) => <button key={item} type="button" aria-pressed={sportFilter === item} onClick={() => setSportFilter(item)} className={cn("shrink-0 min-h-9 rounded-full px-3 py-1 text-xs font-bold transition", sportFilter === item ? "bg-white text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}</div>
-        <div className="relative shrink-0">
+        <div ref={sportsSortRef} className="relative shrink-0">
           <button type="button" aria-label={`Sort sports markets: ${sportsSortLabel}`} aria-expanded={showSportsSort} aria-controls="sports-sort-menu" onClick={() => setShowSportsSort((open) => !open)} className="flex min-h-11 items-center gap-2 rounded-full border border-bg-border bg-bg-soft px-3 text-xs font-bold text-gray-200 transition hover:border-gray-500 hover:text-white">
             <Filter aria-hidden className="h-4 w-4" /><span className="hidden sm:inline">{sportsSortLabel}</span>
           </button>

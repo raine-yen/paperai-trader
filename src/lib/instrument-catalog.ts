@@ -14,7 +14,9 @@
 //    500 query is a substring of the name
 //    400 subsequence fuzzy match (chars of query appear in order in name/symbol)
 //    <400 live-provider hits, ranked by provider score (never above local hits)
-// Within a tier, popularity weight is the tiebreaker.
+// Within a tier, popularity weight is the tiebreaker. For a general company
+// query, stocks and ETFs are shown before crypto; an explicit known crypto
+// ticker or name keeps the user in crypto-first intent.
 
 export type AssetClass = "stock" | "etf" | "crypto" | "prediction";
 
@@ -75,6 +77,7 @@ const SEED: SeedEntry[] = [
   { symbol: "COIN", name: "Coinbase Global Inc.", aliases: ["coinbase"], assetClass: "stock", exchange: "NASDAQ", weight: 64 },
   { symbol: "MSTR", name: "MicroStrategy Inc.", aliases: ["microstrategy", "strategy"], assetClass: "stock", exchange: "NASDAQ", weight: 66 },
   { symbol: "SMCI", name: "Super Micro Computer", aliases: ["super micro"], assetClass: "stock", exchange: "NASDAQ", weight: 60 },
+  { symbol: "MU", name: "Micron Technology", aliases: ["micron", "micron technology"], assetClass: "stock", exchange: "NASDAQ", weight: 76 },
   { symbol: "ARM", name: "Arm Holdings", aliases: ["arm holdings"], assetClass: "stock", exchange: "NASDAQ", weight: 64 },
   { symbol: "AVGO", name: "Broadcom Inc.", aliases: ["broadcom"], assetClass: "stock", exchange: "NASDAQ", weight: 66 },
   { symbol: "T", name: "AT&T Inc.", aliases: ["at&t", "at and t"], assetClass: "stock", exchange: "NYSE", weight: 55 },
@@ -243,6 +246,8 @@ async function yahooSearch(query: string): Promise<Instrument[]> {
 export interface SearchOptions {
   limit?: number;
   offset?: number;
+  /** Test hook for deterministic provider-result ranking. */
+  providerResults?: Instrument[];
   /** Injectable for tests; defaults to the real Supabase admin client. */
   predictionDb?: PredictionCatalogDb;
 }
@@ -327,6 +332,15 @@ function assetSearchPriority(assetClass: AssetClass): number {
   return 1;
 }
 
+function isExplicitCryptoQuery(query: string): boolean {
+  const compactQuery = query.replace(/\s/g, "");
+  return CATALOG.some((instrument) => instrument.assetClass === "crypto" && (
+    norm(instrument.displaySymbol).replace(/\s/g, "") === compactQuery ||
+    instrument.name === query ||
+    instrument.aliases.some((alias) => alias === query)
+  ));
+}
+
 async function searchPredictionMarkets(db: PredictionCatalogDb, query: string): Promise<ScoredInstrument[]> {
   const { data, error } = await db.from("prediction_markets").select("*").eq("status", "active");
   if (error || !data) return [];
@@ -353,9 +367,8 @@ export async function searchInstruments(rawQuery: string, options: SearchOptions
     if (score > 0) local.push({ instrument, score });
   }
 
-  // Prediction markets score in the SAME tier space as the local catalog
-  // (600/500/400 etc.) so "fed" and "apple" compete fairly by relevance,
-  // not by asset class.
+  // Prediction markets score in the same tier space as tradable instruments,
+  // so every result can be ordered by relevance and asset type together.
   let predictionDb = options.predictionDb;
   if (!predictionDb) {
     try {
@@ -367,33 +380,31 @@ export async function searchInstruments(rawQuery: string, options: SearchOptions
   }
   const predictionMatches = predictionDb ? await searchPredictionMarkets(predictionDb, query) : [];
 
-  const merged0 = [...local, ...predictionMatches];
-  merged0.sort((a, b) =>
+  const localMatches = [...local, ...predictionMatches];
+
+  const provider = options.providerResults ?? await yahooSearch(query);
+  const seen = new Set(localMatches.map((l) => l.instrument.symbol));
+  const providerScored: ScoredInstrument[] = provider
+    .filter((p) => !seen.has(p.symbol))
+    .map((instrument) => ({ instrument, score: scoreCatalog(instrument, query) }))
+    // Yahoo fuzzy matches can include unrelated, long-tail coins. Keep only
+    // results that independently match the typed ticker or company query.
+    .filter(({ score }) => score > 0);
+  const providerSymbols = new Set(providerScored.map(({ instrument }) => instrument.symbol));
+  const preferStocks = !isExplicitCryptoQuery(query);
+  const ranked = [...localMatches, ...providerScored].sort((a, b) =>
+    (preferStocks ? assetSearchPriority(b.instrument.assetClass) - assetSearchPriority(a.instrument.assetClass) : 0) ||
     Math.floor(b.score) - Math.floor(a.score) ||
-    assetSearchPriority(b.instrument.assetClass) - assetSearchPriority(a.instrument.assetClass) ||
+    (!preferStocks ? assetSearchPriority(b.instrument.assetClass) - assetSearchPriority(a.instrument.assetClass) : 0) ||
     b.score - a.score,
   );
 
-  const provider = await yahooSearch(query);
-  const seen = new Set(merged0.map((l) => l.instrument.symbol));
-  const providerScored: ScoredInstrument[] = provider
-    .filter((p) => !seen.has(p.symbol))
-    .map((instrument, idx) => ({
-      instrument,
-      // Provider hits always rank below any local hit (< 400); preserve provider order.
-      score: 399.9 - idx * 0.1,
-    }))
-    .sort((a, b) => assetSearchPriority(b.instrument.assetClass) - assetSearchPriority(a.instrument.assetClass) || b.score - a.score);
-
-  const merged: InstrumentSearchResult[] = [
-    ...merged0.map(({ instrument, score }) => ({
-      ...instrument,
-      score,
-      matchTier: tierFor(score),
-      ...(instrument.assetClass === "prediction" ? { marketId: instrument.symbol } : {}),
-    })),
-    ...providerScored.map(({ instrument, score }) => ({ ...instrument, score, matchTier: "provider" as const })),
-  ];
+  const merged: InstrumentSearchResult[] = ranked.map(({ instrument, score }) => ({
+    ...instrument,
+    score,
+    matchTier: providerSymbols.has(instrument.symbol) ? "provider" : tierFor(score),
+    ...(instrument.assetClass === "prediction" ? { marketId: instrument.symbol } : {}),
+  }));
 
   const limit = Math.min(Math.max(options.limit ?? 10, 1), 50);
   const offset = Math.max(options.offset ?? 0, 0);
