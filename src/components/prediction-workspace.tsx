@@ -133,6 +133,7 @@ export function PredictionWorkspace() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sportFilter, setSportFilter] = useState("All sports");
+  const [settlementNote, setSettlementNote] = useState("");
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const refresh = useCallback(async (forceQuotes = false, query = "") => {
@@ -167,6 +168,20 @@ export function PredictionWorkspace() {
     void refresh(false, searchQuery).catch((error: Error) => { if (alive) setLoadError(error.message); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [refresh, searchQuery]);
+
+  useEffect(() => {
+    let alive = true;
+    void fetch("/api/predictions/settle", { method: "POST" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (!alive || !payload?.settled?.marketsResolved) return;
+        const payout = Number(payload.settled.payouts ?? 0);
+        setSettlementNote(payout > 0 ? `Settled predictions added ${formatUSD(payout)} to your paper cash.` : "Your resolved prediction positions have been settled.");
+        void refresh(true);
+      })
+      .catch(() => { /* Daily cron settlement remains the fallback. */ });
+    return () => { alive = false; };
+  }, [refresh]);
 
   const loadMore = useCallback(async () => {
     if (loading || loadingMore || nextOffset == null) return;
@@ -231,6 +246,7 @@ export function PredictionWorkspace() {
           <strong className="text-lg tabular-nums">{formatUSD(account?.account?.cash ?? 0)}</strong>
         </div>
       </header>
+      {settlementNote ? <p role="status" className="mt-4 border border-accent-green/40 bg-accent-green/10 p-3 text-sm text-accent-green">{settlementNote}</p> : null}
 
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Prediction category">
         {categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} onClick={() => { setCategory(item); if (item !== "Sports") setSportFilter("All sports"); }} className={cn("shrink-0 min-h-11 rounded-full px-3.5 py-1.5 text-xs font-bold transition", category === item ? "bg-accent-green text-black" : "border border-bg-border text-gray-400 hover:border-gray-500 hover:text-white")}>{item}</button>)}

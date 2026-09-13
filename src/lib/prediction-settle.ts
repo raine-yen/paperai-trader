@@ -32,16 +32,18 @@ export function gammaWinner(row: { closed?: boolean; umaResolutionStatus?: strin
 }
 
 export async function settlePredictionMarkets(
-  deps: { db?: SettleDb; fetchImpl?: FetchLike } = {},
+  deps: { db?: SettleDb; fetchImpl?: FetchLike; accountId?: string } = {},
 ): Promise<SettleResult> {
   const db = deps.db ?? (supabaseAdmin() as unknown as SettleDb);
   const fetchImpl = deps.fetchImpl ?? fetch;
 
   // Only markets someone actually holds can need settlement.
-  const { data: openPositions, error: posErr } = await db
+  let positionsQuery = db
     .from("prediction_positions")
     .select("*")
     .gt("shares", 0);
+  if (deps.accountId) positionsQuery = positionsQuery.eq("account_id", deps.accountId);
+  const { data: openPositions, error: posErr } = await positionsQuery;
   if (posErr) throw new Error(`positions lookup failed: ${posErr.message ?? "unknown"}`);
 
   const marketIds: string[] = [...new Set(((openPositions ?? []) as Array<{ market_id: string }>).map((p) => p.market_id))];

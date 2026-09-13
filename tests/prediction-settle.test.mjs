@@ -121,3 +121,25 @@ test("settlePredictionMarkets: leaves unresolved markets untouched", async () =>
   assert.equal(state.accounts[0].cash, 100);
   assert.equal(state.prediction_positions[0].shares, 10);
 });
+
+test("settlePredictionMarkets: only settles the requesting account when scoped", async () => {
+  const state = {
+    prediction_positions: [
+      { id: "p1", account_id: "acct-1", market_id: "0xabc", outcome: "yes", shares: 10, avg_cost: 0.4 },
+      { id: "p2", account_id: "acct-2", market_id: "0xabc", outcome: "yes", shares: 5, avg_cost: 0.4 },
+    ],
+    accounts: [{ id: "acct-1", cash: 100 }, { id: "acct-2", cash: 50 }],
+    prediction_markets: [{ id: "0xabc", status: "active" }],
+    prediction_fills: [],
+  };
+  const result = await settlePredictionMarkets({
+    db: makeDb(state),
+    accountId: "acct-1",
+    fetchImpl: async () => json([{ conditionId: "0xabc", closed: true, umaResolutionStatus: "resolved", outcomePrices: '["1", "0"]' }]),
+  });
+  assert.equal(result.payouts, 10);
+  assert.equal(state.accounts[0].cash, 110);
+  assert.equal(state.accounts[1].cash, 50);
+  assert.equal(state.prediction_positions[0].shares, 0);
+  assert.equal(state.prediction_positions[1].shares, 5);
+});
